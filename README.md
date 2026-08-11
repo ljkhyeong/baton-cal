@@ -3,8 +3,8 @@
 BATON CAL은 BATON이 확정한 시즌 일정, 운영 회차와 마감을 읽기 전용 iCalendar feed로
 투영하는 독립 서비스다.
 
-> 현재 상태: 로컬 프로젝트 스캐폴드다. 원격 저장소, production code, API와 기술 스택은
-> 아직 없다.
+> 현재 상태: 문서 중심 프로젝트 스캐폴드다. production code, API와 기술 스택은 아직
+> 없다. 공개 저장소는 [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
 ## 서비스 경계
 

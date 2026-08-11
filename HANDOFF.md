@@ -12,5 +12,8 @@
 ## 현재 제한
 
 - production code, runtime과 배포 구성은 없다.
-- 원격 Git 저장소가 없다.
 - BATON과 채택된 실행 계약은 없다.
+
+## 저장소
+
+- 공개 원격 저장소: <https://github.com/ljkhyeong/baton-cal>
