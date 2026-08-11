@@ -1,0 +1,18 @@
+{
+  "eventId": "a862ae31-69ea-43c7-8851-9c0995314430",
+  "occurredAt": "2026-08-12T03:10:15Z",
+  "sourceItemId": "b8ca471a-b228-42fa-8d41-28f05ee90d40",
+  "seasonId": "f5316f93-d49e-4230-b1d0-9e9c2d079819",
+  "revision": 3,
+  "status": "CANCELLED",
+  "summary": "최종 제출 마감",
+  "description": "일정 철회로 취소되었습니다.\n새 일정은 BATON에서 확인합니다.",
+  "location": "온라인",
+  "sourceUpdatedAt": "2026-08-12T03:10:10Z",
+  "time": {
+    "type": "ZONED_LOCAL",
+    "zoneId": "Asia/Seoul",
+    "startLocal": "2026-08-31T23:30:00",
+    "endLocal": "2026-09-01T00:30:00"
+  }
+}

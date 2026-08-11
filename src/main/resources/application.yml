@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: baton-cal
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/baton_cal}
+    username: ${DATABASE_USERNAME:baton_cal}
+    password: ${DATABASE_PASSWORD:baton_cal}
+    hikari:
+      maximum-pool-size: ${DATABASE_MAXIMUM_POOL_SIZE:10}
+  flyway:
+    enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+baton:
+  cal:
+    internal-token: ${BATON_CAL_INTERNAL_TOKEN}
+    public-base-url: ${BATON_CAL_PUBLIC_BASE_URL:http://localhost:8080}

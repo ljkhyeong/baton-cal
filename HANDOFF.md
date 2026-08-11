@@ -2,17 +2,30 @@
 
 진행 중 작업 없음.
 
-## 다음 결정
+## 현재 구현
 
-1. BATON schedule snapshot event와 source revision 계약을 채택한다.
-2. feed scope, subscription 발급·폐기 권한과 token entropy를 정한다.
-3. `UID`, `SEQUENCE`, 취소, timezone과 retention 정책을 정한다.
-4. compatibility fixture를 만든 뒤 기술 스택과 모듈 구조를 선택한다.
+- PRD-0002와 ADR-0002가 season-only MVP 계약과 기술 스택의 기준이다.
+- schedule snapshot ingest, duplicate/stale/conflict 분류와 원자적 projection rebuild가 구현되어 있다.
+- digest-only subscription create/rotate/revoke와 public conditional `.ics` GET이 구현되어 있다.
+- iCal4j model/serializer, PostgreSQL/Flyway와 Testcontainers integration test를 사용한다.
+
+## 검증
+
+- `./gradlew --no-daemon test`: 21개 테스트 성공 (2026-08-12)
+- `./gradlew --no-daemon bootJar`: executable jar 생성 성공 (2026-08-12)
+
+## 다음 작업
+
+1. BATON producer가 PRD-0002 JSON/revision/cancellation 계약을 지키는 consumer-driven fixture를 연결한다.
+2. internal bearer 발급·회전, TLS, reverse-proxy token path redaction과 request size limit을 정한다.
+3. zoned local, midnight, cancellation과 empty feed golden fixture를 보강한다.
+4. backup/restore와 배포 runbook을 실제 환경에서 검증한다.
 
 ## 현재 제한
 
-- production code, runtime과 배포 구성은 없다.
-- BATON과 채택된 실행 계약은 없다.
+- BATON producer와 아직 연결하지 않았다.
+- public deployment, production secret 운영과 rate limit은 준비되지 않았다.
+- 현재 구현은 MVP이며 production readiness 완료를 뜻하지 않는다.
 
 ## 저장소
 

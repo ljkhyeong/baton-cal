@@ -1,0 +1,17 @@
+{
+  "eventId": "0f91d4f6-9ab6-4d53-b84b-a23a7ed0a101",
+  "occurredAt": "2026-08-11T01:00:05Z",
+  "sourceItemId": "22f38fc4-806d-4fd1-8af2-526c5bb11d63",
+  "seasonId": "f5316f93-d49e-4230-b1d0-9e9c2d079819",
+  "revision": 0,
+  "status": "ACTIVE",
+  "summary": "ROUND 1 운영",
+  "description": "참여자는 시작 10분 전까지 준비합니다.",
+  "location": null,
+  "sourceUpdatedAt": "2026-08-11T01:00:00Z",
+  "time": {
+    "type": "UTC_INSTANT",
+    "startInstant": "2026-08-16T09:00:00Z",
+    "endInstant": "2026-08-16T10:30:00Z"
+  }
+}
