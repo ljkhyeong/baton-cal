@@ -1,0 +1,14 @@
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+.gradle/
+build/
+out/
+node_modules/
+dist/
+coverage/
+*.log
+*.tmp
