@@ -4,10 +4,13 @@ import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
-import io.baton.cal.projection.SeasonProjectionService
+import io.baton.cal.calendar.events
+import io.baton.cal.calendar.parseIcalendar
+import io.baton.cal.calendar.requiredPropertyValue
+import io.baton.cal.persistence.SeasonFeedProjectionRepository
+import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.doThrow
@@ -18,10 +21,10 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+import org.springframework.test.context.jdbc.Sql
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
-import java.nio.charset.StandardCharsets.UTF_8
 import java.time.Instant
 import java.util.UUID
 
@@ -31,27 +34,14 @@ import java.util.UUID
         "baton.cal.internal-token=transaction-recovery-test-token-0001",
     ],
 )
+@Sql("/reset-database.sql")
 class SnapshotTransactionRecoveryTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
-    private val projectionService: SeasonProjectionService,
+    private val projectionRepository: SeasonFeedProjectionRepository,
     private val jdbcClient: JdbcClient,
 ) {
     @MockitoSpyBean
     lateinit var renderer: IcsCalendarRenderer
-
-    @BeforeEach
-    fun resetDatabase() {
-        jdbcClient.sql(
-            """
-            TRUNCATE TABLE
-                calendar_subscription,
-                season_feed_projection,
-                calendar_item,
-                source_event_inbox,
-                season_projection_lock
-            """.trimIndent(),
-        ).update()
-    }
 
     @Test
     fun `render failure rolls back ingest and the same delivery succeeds when retried`() {
@@ -68,17 +58,13 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThat(ingestionService.ingest(SNAPSHOT)).isEqualTo(SnapshotIngestionResult.APPLIED)
         assertDurableRowCounts(expected = 1L)
 
-        val projection = projectionService.findProjection(SEASON_ID)
+        val projection = projectionRepository.findBySeasonId(SEASON_ID)
         assertThat(projection).isNotNull
         assertThat(projection!!.itemCount).isEqualTo(1)
         assertThat(projection.etag).matches("\"[0-9a-f]{64}\"")
-        assertThat(projection.representation.toString(UTF_8).replace("\r\n ", ""))
-            .contains(
-                "BEGIN:VCALENDAR",
-                "BEGIN:VEVENT",
-                "UID:$SOURCE_ITEM_ID@cal.baton",
-                "SUMMARY:Recovery fixture",
-            )
+        val event = projection.representation.parseIcalendar().events().single()
+        assertThat(event.requiredPropertyValue(Property.UID)).isEqualTo("$SOURCE_ITEM_ID@cal.baton")
+        assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
         verify(renderer, times(2)).render(eqArg(SEASON_ID), anyListArg<CalendarItem>())
     }
 

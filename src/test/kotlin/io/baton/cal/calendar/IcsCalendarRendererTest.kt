@@ -3,6 +3,7 @@ package io.baton.cal.calendar
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import net.fortuna.ical4j.model.Property
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -18,12 +19,13 @@ class IcsCalendarRendererTest {
     @Test
     fun `empty feed matches canonical golden without timezone or event components`() {
         val rendered = renderer.render(seasonId, emptyList())
-        val text = rendered.bytes.toString(StandardCharsets.UTF_8)
+        val calendar = rendered.bytes.parseIcalendar()
 
         assertThat(rendered.bytes).isEqualTo(goldenFixture("season-empty.ics.b64"))
         assertThat(rendered.itemCount).isZero()
         assertThat(rendered.lastModified).isEqualTo(Instant.EPOCH)
-        assertThat(text).doesNotContain("BEGIN:VEVENT", "BEGIN:VTIMEZONE")
+        assertThat(calendar.events()).isEmpty()
+        assertThat(calendar.timeZones()).isEmpty()
         assertCanonicalCrLf(rendered.bytes)
     }
 
@@ -42,23 +44,24 @@ class IcsCalendarRendererTest {
                 end = Instant.parse("2026-08-12T02:30:00Z"),
             ),
             sourceUpdatedAt = Instant.parse("2026-08-11T12:34:56.987Z"),
+            acceptedAt = Instant.parse("2026-08-11T12:34:56.987Z"),
         )
 
         val first = renderer.render(seasonId, listOf(item))
         val rebuilt = renderer.render(seasonId, listOf(item))
-        val text = first.bytes.toString(StandardCharsets.UTF_8).unfolded()
+        val event = first.bytes.parseIcalendar().events().single()
 
         assertThat(first.bytes).isEqualTo(goldenFixture("season-utc.ics.b64"))
         assertThat(first.bytes).isEqualTo(rebuilt.bytes)
         assertThat(first.etag).isEqualTo(rebuilt.etag)
         assertThat(first.lastModified).isEqualTo(Instant.parse("2026-08-11T12:34:56Z"))
-        assertThat(text).contains("UID:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@cal.baton\r\n")
-        assertThat(text).contains("SEQUENCE:7\r\n")
-        assertThat(text).contains("DTSTART:20260812T010000Z\r\n")
-        assertThat(text).contains("SUMMARY:개막전\\, A팀\\; B팀\r\n")
-        assertThat(text).contains("DESCRIPTION:첫 줄\\n둘째 줄\r\n")
-        assertThat(text).contains("LOCATION:서울\\\\주경기장\r\n")
-        assertThat(text).endsWith("END:VCALENDAR\r\n")
+        assertThat(event.requiredPropertyValue(Property.UID))
+            .isEqualTo("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@cal.baton")
+        assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("7")
+        assertThat(event.requiredPropertyValue(Property.DTSTART)).isEqualTo("20260812T010000Z")
+        assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("개막전, A팀; B팀")
+        assertThat(event.requiredPropertyValue(Property.DESCRIPTION)).isEqualTo("첫 줄\n둘째 줄")
+        assertThat(event.requiredPropertyValue(Property.LOCATION)).isEqualTo("서울\\주경기장")
     }
 
     @Test
@@ -77,28 +80,30 @@ class IcsCalendarRendererTest {
                 zoneId = "America/New_York",
             ),
             sourceUpdatedAt = Instant.parse("2026-10-31T12:34:56.987Z"),
+            acceptedAt = Instant.parse("2026-10-31T12:34:56.987Z"),
         )
 
         val rendered = renderer.render(seasonId, listOf(item))
-        val text = rendered.bytes.toString(StandardCharsets.UTF_8).unfolded()
+        val calendar = rendered.bytes.parseIcalendar()
+        val event = calendar.events().single()
+        val timeZone = calendar.timeZones().single()
+        val start = event.requiredProperty(Property.DTSTART)
+        val end = event.requiredProperty(Property.DTEND)
 
         assertThat(rendered.bytes)
             .isEqualTo(goldenFixture("season-zoned-midnight-cancellation.ics.b64"))
         assertThat(rendered.itemCount).isOne()
         assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-10-31T12:34:56Z"))
-        assertThat(text).contains("BEGIN:VTIMEZONE\r\n")
-        assertThat(text).contains("TZID:America/New_York\r\n")
-        assertThat(text).contains("BEGIN:DAYLIGHT\r\n")
-        assertThat(text).contains("BEGIN:STANDARD\r\n")
-        assertThat(text).contains("UID:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@cal.baton\r\n")
-        assertThat(text).contains("SEQUENCE:9\r\n")
-        assertThat(text).contains("STATUS:CANCELLED\r\n")
-        assertThat(text).contains("DTSTART;TZID=America/New_York:20261031T233000\r\n")
-        assertThat(text).contains("DTEND;TZID=America/New_York:20261101T023000\r\n")
-        assertThat(text).doesNotContain(
-            "DTSTART;TZID=America/New_York:20261031T233000Z",
-            "DTEND;TZID=America/New_York:20261101T023000Z",
-        )
+        assertThat(timeZone.timeZoneId.value).isEqualTo("America/New_York")
+        assertThat(timeZone.observances.map { it.name }).contains("DAYLIGHT", "STANDARD")
+        assertThat(event.requiredPropertyValue(Property.UID))
+            .isEqualTo("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@cal.baton")
+        assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("9")
+        assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CANCELLED")
+        assertThat(start.requiredTimeZoneId()).isEqualTo("America/New_York")
+        assertThat(end.requiredTimeZoneId()).isEqualTo("America/New_York")
+        assertThat(start.value).isEqualTo("20261031T233000")
+        assertThat(end.value).isEqualTo("20261101T023000")
         assertCanonicalCrLf(rendered.bytes)
     }
 
@@ -165,6 +170,7 @@ class IcsCalendarRendererTest {
             end = Instant.parse("2026-01-01T01:00:00Z"),
         ),
         sourceUpdatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+        acceptedAt = Instant.parse("2026-01-01T00:00:00Z"),
     )
 
     private fun goldenFixture(name: String): ByteArray = Base64.getMimeDecoder().decode(
@@ -177,6 +183,4 @@ class IcsCalendarRendererTest {
         assertThat(text).endsWith("\r\n")
         assertThat(text.replace("\r\n", "")).doesNotContain("\r", "\n")
     }
-
-    private fun String.unfolded(): String = replace("\r\n ", "")
 }

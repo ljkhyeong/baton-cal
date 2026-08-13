@@ -6,7 +6,6 @@ import net.fortuna.ical4j.model.ComponentList
 import net.fortuna.ical4j.model.ParameterList
 import net.fortuna.ical4j.model.Property
 import net.fortuna.ical4j.model.PropertyList
-import net.fortuna.ical4j.model.TimeZoneRegistryImpl
 import net.fortuna.ical4j.model.component.CalendarComponent
 import net.fortuna.ical4j.model.component.VEvent
 import net.fortuna.ical4j.model.parameter.TzId
@@ -41,8 +40,6 @@ data class RenderedCalendar(
 
 @Component
 class IcsCalendarRenderer {
-    private val timeZoneRegistry = TimeZoneRegistryImpl()
-
     fun render(
         seasonId: UUID,
         items: List<CalendarItem>,
@@ -77,28 +74,23 @@ class IcsCalendarRenderer {
     }
 
     private fun timeZones(items: List<CalendarItem>): List<CalendarComponent> = items
-        .mapNotNull { (it.schedule as? ScheduleWindow.ZonedLocal)?.zoneId }
-        .distinct()
-        .sorted()
-        .map { zoneId ->
-            requireNotNull(timeZoneRegistry.getTimeZone(zoneId)) {
-                "unsupported timezone: $zoneId"
-            }.vTimeZone
-        }
+        .mapNotNull { it.schedule as? ScheduleWindow.ZonedLocal }
+        .distinctBy(ScheduleWindow.ZonedLocal::zoneId)
+        .sortedBy(ScheduleWindow.ZonedLocal::zoneId)
+        .map { it.calendarTimeZone.vTimeZone }
 
     private fun event(item: CalendarItem): VEvent {
-        val updatedAt = item.sourceUpdatedAt.truncatedTo(ChronoUnit.SECONDS)
         val timeProperties: List<Property> = when (val schedule = item.schedule) {
             is ScheduleWindow.UtcInstant -> listOf(
-                DtStart(schedule.start.truncatedTo(ChronoUnit.SECONDS)),
-                DtEnd(schedule.end.truncatedTo(ChronoUnit.SECONDS)),
+                DtStart(schedule.start),
+                DtEnd(schedule.end),
             )
 
             is ScheduleWindow.ZonedLocal -> {
                 val parameters = ParameterList(listOf(TzId(schedule.zoneId)))
                 listOf(
-                    DtStart(parameters, schedule.start.truncatedTo(ChronoUnit.SECONDS)),
-                    DtEnd(parameters, schedule.end.truncatedTo(ChronoUnit.SECONDS)),
+                    DtStart(parameters, schedule.start),
+                    DtEnd(parameters, schedule.end),
                 )
             }
         }
@@ -107,8 +99,8 @@ class IcsCalendarRenderer {
             PropertyList(
                 listOf<Property>(
                     Uid("${item.sourceItemId}@$UID_DOMAIN"),
-                    DtStamp(updatedAt),
-                    LastModified(updatedAt),
+                    DtStamp(item.sourceUpdatedAt),
+                    LastModified(item.sourceUpdatedAt),
                     Sequence(item.revision),
                     if (item.status == CalendarItemStatus.CANCELLED) {
                         ImmutableStatus.VEVENT_CANCELLED
@@ -128,8 +120,8 @@ class IcsCalendarRenderer {
         const val PRODUCT_ID = "-//BATON//BATON CAL//EN"
         const val UID_DOMAIN = "cal.baton"
 
-        // iCal4j counts UTF-16 characters, so 25 keeps even three-byte BMP text
-        // and the continuation space within RFC 5545's 75-octet recommendation.
+        // iCal4j는 UTF-16 문자 수를 세므로 25로 설정해야 3바이트 BMP 문자와
+        // 연속 줄의 공백을 포함해 RFC 5545의 75 옥텟 권고를 지킬 수 있다.
         const val UTF8_SAFE_FOLD_LENGTH = 25
     }
 }

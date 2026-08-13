@@ -32,8 +32,8 @@ class PublicCalendarController(
         response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
         response.setHeader(HttpHeaders.CACHE_CONTROL, FEED_CACHE_CONTROL.headerValue)
         if (request.checkNotModified(projection.etag, projection.lastModified.toEpochMilli())) {
-            // Spring intentionally omits Last-Modified when its value is the
-            // Unix epoch, which is CAL's canonical validator for an empty feed.
+            // Spring은 빈 피드의 기준 검증 값인 Unix epoch를 Last-Modified에서
+            // 생략하므로 이 경우에만 헤더를 직접 설정한다.
             response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
             return
         }

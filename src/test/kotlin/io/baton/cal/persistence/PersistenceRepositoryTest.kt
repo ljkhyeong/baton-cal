@@ -9,12 +9,11 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.junit.jupiter.Container
@@ -27,30 +26,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer
         "baton.cal.internal-token=persistence-test-internal-token-0001",
     ],
 )
+@Sql("/reset-database.sql")
 class PersistenceRepositoryTest @Autowired constructor(
     private val inboxRepository: SourceEventInboxRepository,
     private val seasonLockRepository: SeasonProjectionLockRepository,
     private val itemRepository: CalendarItemRepository,
     private val feedRepository: SeasonFeedProjectionRepository,
     private val subscriptionRepository: CalendarSubscriptionRepository,
-    private val jdbcClient: JdbcClient,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transaction = TransactionTemplate(transactionManager)
-
-    @BeforeEach
-    fun resetDatabase() {
-        jdbcClient.sql(
-            """
-            TRUNCATE TABLE
-                calendar_subscription,
-                season_feed_projection,
-                calendar_item,
-                source_event_inbox,
-                season_projection_lock
-            """.trimIndent(),
-        ).update()
-    }
 
     @Test
     fun `inbox preserves every envelope while event id remains idempotent`() {
@@ -63,73 +48,66 @@ class PersistenceRepositoryTest @Autowired constructor(
         assertThat(inboxRepository.insert(row)).isTrue()
         assertThat(inboxRepository.insert(row.copy(payloadHash = HASH_B))).isFalse()
         assertThat(inboxRepository.insert(replay)).isTrue()
-        assertThat(inboxRepository.findByEventId(row.eventId)).isEqualTo(row)
-        assertThat(inboxRepository.findByEventId(replay.eventId)).isEqualTo(replay)
-        assertThat(inboxRepository.findBySourceItemIdAndRevision(row.sourceItemId, row.sourceRevision))
-            .isEqualTo(row)
+        assertThat(inboxRepository.findPayloadHashByEventId(row.eventId)).isEqualTo(row.payloadHash)
+        assertThat(inboxRepository.findPayloadHashByEventId(replay.eventId)).isEqualTo(replay.payloadHash)
+        assertThat(
+            inboxRepository.findPayloadHashBySourceItemIdAndRevision(row.sourceItemId, row.sourceRevision),
+        ).isEqualTo(row.payloadHash)
     }
 
     @Test
-    fun `calendar item apply classifies duplicate stale conflict and forward update`() {
-        val original = utcItem(revision = 1, payloadHash = HASH_A)
+    fun `calendar item apply classifies stale conflict and forward update`() {
+        val original = utcItem(revision = 1)
 
-        assertThat(applyWithSeasonLock(original).outcome).isEqualTo(CalendarItemApplyOutcome.APPLIED)
-        assertThat(applyWithSeasonLock(original).outcome).isEqualTo(CalendarItemApplyOutcome.DUPLICATE)
-        assertThat(
-            applyWithSeasonLock(original.copy(payloadHash = HASH_B, summary = "conflicting payload")).outcome,
-        ).isEqualTo(CalendarItemApplyOutcome.CONFLICT)
+        assertThat(applyWithSeasonLock(original)).isEqualTo(CalendarItemApplyOutcome.APPLIED)
+        assertThat(applyWithSeasonLock(original)).isEqualTo(CalendarItemApplyOutcome.REVISION_CONFLICT)
         assertThat(
             applyWithSeasonLock(
                 original.copy(
                     revision = 2,
-                    payloadHash = HASH_B,
                     sourceUpdatedAt = original.sourceUpdatedAt,
                 ),
-            ).outcome,
-        ).isEqualTo(CalendarItemApplyOutcome.CONFLICT)
+            ),
+        ).isEqualTo(CalendarItemApplyOutcome.REVISION_CONFLICT)
 
         val forward = original.copy(
             revision = 3,
-            payloadHash = HASH_C,
             status = CalendarItemStatus.CANCELLED,
             sourceUpdatedAt = Instant.parse("2026-08-11T02:00:00Z"),
             acceptedAt = Instant.parse("2026-08-11T03:00:00Z"),
         )
-        assertThat(applyWithSeasonLock(forward).outcome).isEqualTo(CalendarItemApplyOutcome.APPLIED)
-        assertThat(applyWithSeasonLock(original.copy(revision = 2, payloadHash = HASH_D)).outcome)
+        assertThat(applyWithSeasonLock(forward)).isEqualTo(CalendarItemApplyOutcome.APPLIED)
+        assertThat(applyWithSeasonLock(original.copy(revision = 2)))
             .isEqualTo(CalendarItemApplyOutcome.STALE)
-        assertThat(itemRepository.findBySourceItemId(original.sourceItemId)).isEqualTo(forward)
+        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactly(forward)
     }
 
     @Test
     fun `source item cannot move to another season even at a newer revision`() {
-        val original = utcItem(revision = 1, payloadHash = HASH_A)
-        assertThat(applyWithSeasonLock(original).outcome).isEqualTo(CalendarItemApplyOutcome.APPLIED)
+        val original = utcItem(revision = 1)
+        assertThat(applyWithSeasonLock(original)).isEqualTo(CalendarItemApplyOutcome.APPLIED)
 
         val moved = original.copy(
             seasonId = OTHER_SEASON_ID,
             revision = 2,
-            payloadHash = HASH_B,
         )
-        assertThat(applyWithSeasonLock(moved).outcome).isEqualTo(CalendarItemApplyOutcome.CONFLICT)
-        assertThat(itemRepository.findBySourceItemId(original.sourceItemId)).isEqualTo(original)
+        assertThat(applyWithSeasonLock(moved)).isEqualTo(CalendarItemApplyOutcome.SCOPE_CONFLICT)
+        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactly(original)
     }
 
     @Test
-    fun `zoned local rows round trip and season listing has stable source id order`() {
+    fun `zoned local rows round trip through persistence`() {
         val later = zonedItem(
             sourceItemId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
-            payloadHash = HASH_A,
         )
         val earlier = zonedItem(
             sourceItemId = UUID.fromString("00000000-0000-0000-0000-000000000001"),
-            payloadHash = HASH_B,
         )
 
         applyWithSeasonLock(later)
         applyWithSeasonLock(earlier)
 
-        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactly(earlier, later)
+        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactlyInAnyOrder(earlier, later)
     }
 
     @Test
@@ -140,60 +118,59 @@ class PersistenceRepositoryTest @Autowired constructor(
             etag = "\"$HASH_A\"",
             lastModified = Instant.parse("2026-08-11T01:00:00Z"),
             itemCount = 1,
-            rebuiltAt = Instant.parse("2026-08-11T01:01:00Z"),
         )
         val rebuilt = initial.copy(
             representation = "second".toByteArray(),
             etag = "\"$HASH_B\"",
             itemCount = 2,
-            rebuiltAt = Instant.parse("2026-08-11T02:00:00Z"),
         )
 
-        assertThat(feedRepository.upsert(initial)).usingRecursiveComparison().isEqualTo(initial)
-        assertThat(feedRepository.upsert(rebuilt)).usingRecursiveComparison().isEqualTo(rebuilt)
+        feedRepository.upsert(initial)
+        feedRepository.upsert(rebuilt)
         assertThat(feedRepository.findBySeasonId(SEASON_ID)).usingRecursiveComparison().isEqualTo(rebuilt)
     }
 
     @Test
     fun `token rotation invalidates the old hash and revocation invalidates the replacement`() {
+        feedRepository.upsert(
+            SeasonFeedProjectionRow(
+                seasonId = SEASON_ID,
+                representation = "feed".toByteArray(),
+                etag = "\"$HASH_A\"",
+                lastModified = Instant.EPOCH,
+                itemCount = 0,
+            ),
+        )
         val subscription = CalendarSubscriptionRow(
             id = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
             seasonId = SEASON_ID,
             tokenHash = HASH_A,
             status = CalendarSubscriptionStatus.ACTIVE,
-            createdAt = Instant.parse("2026-08-11T01:00:00Z"),
-            rotatedAt = null,
-            revokedAt = null,
         )
 
-        assertThat(subscriptionRepository.insert(subscription)).isTrue()
-        assertThat(subscriptionRepository.findActiveByTokenHash(HASH_A)).isEqualTo(subscription)
+        subscriptionRepository.insert(subscription)
+        assertThat(subscriptionRepository.findById(subscription.id)).isEqualTo(subscription)
         assertThat(
             subscriptionRepository.rotate(
                 id = subscription.id,
                 expectedTokenHash = HASH_A,
                 replacementTokenHash = HASH_B,
-                rotatedAt = Instant.parse("2026-08-11T02:00:00Z"),
             ),
         ).isTrue()
-        assertThat(subscriptionRepository.findActiveByTokenHash(HASH_A)).isNull()
-        assertThat(subscriptionRepository.findActiveByTokenHash(HASH_B)).isNotNull()
+        assertThat(subscriptionRepository.findById(subscription.id)?.tokenHash).isEqualTo(HASH_B)
 
         assertThat(
             subscriptionRepository.revoke(
                 subscription.id,
                 HASH_B,
-                Instant.parse("2026-08-11T03:00:00Z"),
             ),
         ).isTrue()
-        assertThat(subscriptionRepository.findActiveByTokenHash(HASH_B)).isNull()
         assertThat(subscriptionRepository.findById(subscription.id)?.status)
             .isEqualTo(CalendarSubscriptionStatus.REVOKED)
         assertThat(
             subscriptionRepository.revoke(
                 subscription.id,
                 HASH_B,
-                Instant.parse("2026-08-11T04:00:00Z"),
             ),
         )
             .isFalse()
@@ -237,7 +214,7 @@ class PersistenceRepositoryTest @Autowired constructor(
         }
     }
 
-    private fun applyWithSeasonLock(candidate: CalendarItemRow): CalendarItemApplyResult =
+    private fun applyWithSeasonLock(candidate: CalendarItemRow): CalendarItemApplyOutcome =
         checkNotNull(
             transaction.execute {
                 seasonLockRepository.acquire(candidate.seasonId)
@@ -257,12 +234,10 @@ class PersistenceRepositoryTest @Autowired constructor(
 
     private fun utcItem(
         revision: Int,
-        payloadHash: String,
     ) = CalendarItemRow(
         sourceItemId = SOURCE_ITEM_ID,
         seasonId = SEASON_ID,
         revision = revision,
-        payloadHash = payloadHash,
         status = CalendarItemStatus.ACTIVE,
         summary = "Opening",
         description = "First game",
@@ -279,12 +254,10 @@ class PersistenceRepositoryTest @Autowired constructor(
 
     private fun zonedItem(
         sourceItemId: UUID,
-        payloadHash: String,
     ) = CalendarItemRow(
         sourceItemId = sourceItemId,
         seasonId = SEASON_ID,
         revision = 0,
-        payloadHash = payloadHash,
         status = CalendarItemStatus.ACTIVE,
         summary = "DST game",
         description = null,

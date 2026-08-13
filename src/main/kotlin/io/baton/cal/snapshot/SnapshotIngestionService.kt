@@ -29,15 +29,15 @@ class SnapshotIngestionService(
         val receivedAt = clock.instant().truncatedTo(ChronoUnit.MICROS)
         lockRepository.acquire(snapshot.seasonId)
 
-        inboxRepository.findByEventId(snapshot.eventId)?.let { existing ->
-            return existing.classifyEventReplay(payloadHash)
+        inboxRepository.findPayloadHashByEventId(snapshot.eventId)?.let { existingHash ->
+            return classifyEventReplay(existingHash, payloadHash)
         }
 
-        val existingRevision = inboxRepository.findBySourceItemIdAndRevision(
+        val existingRevisionHash = inboxRepository.findPayloadHashBySourceItemIdAndRevision(
             snapshot.sourceItemId,
             snapshot.revision,
         )
-        if (existingRevision != null && existingRevision.payloadHash != payloadHash) {
+        if (existingRevisionHash != null && existingRevisionHash != payloadHash) {
             throw SnapshotConflictException(
                 code = "SOURCE_REVISION_CONFLICT",
                 message = "source revision already represents different content",
@@ -57,39 +57,36 @@ class SnapshotIngestionService(
         )
 
         if (!inserted) {
-            return checkNotNull(inboxRepository.findByEventId(snapshot.eventId)) {
+            val existingHash = checkNotNull(inboxRepository.findPayloadHashByEventId(snapshot.eventId)) {
                 "eventId conflict could not be classified"
-            }.classifyEventReplay(payloadHash)
+            }
+            return classifyEventReplay(existingHash, payloadHash)
         }
-        if (existingRevision != null) return SnapshotIngestionResult.DUPLICATE
+        if (existingRevisionHash != null) return SnapshotIngestionResult.DUPLICATE
 
         val acceptedAt = projectionService.nextAcceptedAtWhileLocked(snapshot.seasonId, receivedAt)
-        val applied = itemRepository.applyIfNewer(snapshot.toRow(payloadHash, acceptedAt))
-        return when (applied.outcome) {
+        return when (itemRepository.applyIfNewer(snapshot.toRow(acceptedAt))) {
             CalendarItemApplyOutcome.APPLIED -> {
                 projectionService.rebuildWhileLocked(snapshot.seasonId)
                 SnapshotIngestionResult.APPLIED
             }
 
-            CalendarItemApplyOutcome.DUPLICATE -> SnapshotIngestionResult.DUPLICATE
             CalendarItemApplyOutcome.STALE -> SnapshotIngestionResult.STALE
-            CalendarItemApplyOutcome.CONFLICT -> {
-                val scopeChanged = applied.current.seasonId != snapshot.seasonId
-                throw SnapshotConflictException(
-                    code = if (scopeChanged) "SOURCE_ITEM_SCOPE_CONFLICT" else "SOURCE_REVISION_CONFLICT",
-                    message = if (scopeChanged) {
-                        "sourceItemId cannot move to another season"
-                    } else {
-                        "source revision already represents different content"
-                    },
-                )
-            }
+            CalendarItemApplyOutcome.SCOPE_CONFLICT -> throw SnapshotConflictException(
+                code = "SOURCE_ITEM_SCOPE_CONFLICT",
+                message = "sourceItemId cannot move to another season",
+            )
+
+            CalendarItemApplyOutcome.REVISION_CONFLICT -> throw SnapshotConflictException(
+                code = "SOURCE_REVISION_CONFLICT",
+                message = "source revision already represents different content",
+            )
         }
     }
 }
 
-private fun SourceEventInboxRow.classifyEventReplay(payloadHash: String): SnapshotIngestionResult {
-    if (this.payloadHash == payloadHash) return SnapshotIngestionResult.DUPLICATE
+private fun classifyEventReplay(existingHash: String, payloadHash: String): SnapshotIngestionResult {
+    if (existingHash == payloadHash) return SnapshotIngestionResult.DUPLICATE
     throw SnapshotConflictException(
         code = "EVENT_ID_CONFLICT",
         message = "eventId was already used for another snapshot",
@@ -97,7 +94,6 @@ private fun SourceEventInboxRow.classifyEventReplay(payloadHash: String): Snapsh
 }
 
 private fun ScheduleSnapshot.toRow(
-    payloadHash: String,
     acceptedAt: java.time.Instant,
 ): CalendarItemRow {
     val schedule = schedule
@@ -105,7 +101,6 @@ private fun ScheduleSnapshot.toRow(
         sourceItemId = sourceItemId,
         seasonId = seasonId,
         revision = revision,
-        payloadHash = payloadHash,
         status = status,
         summary = summary,
         description = description,

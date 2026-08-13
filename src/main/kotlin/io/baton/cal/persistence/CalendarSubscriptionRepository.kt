@@ -1,10 +1,5 @@
 package io.baton.cal.persistence
 
-import java.sql.ResultSet
-import java.sql.Types
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
@@ -13,45 +8,28 @@ import org.springframework.stereotype.Repository
 class CalendarSubscriptionRepository(
     private val jdbcClient: JdbcClient,
 ) {
-    fun insert(row: CalendarSubscriptionRow): Boolean =
+    fun insert(row: CalendarSubscriptionRow) {
         jdbcClient.sql(
             """
             INSERT INTO calendar_subscription (
                 id,
                 season_id,
                 token_hash,
-                status,
-                created_at,
-                rotated_at,
-                revoked_at
+                status
             ) VALUES (
                 :id,
                 :seasonId,
                 :tokenHash,
-                :status,
-                :createdAt,
-                :rotatedAt,
-                :revokedAt
+                :status
             )
-            ON CONFLICT DO NOTHING
             """.trimIndent(),
         )
             .param("id", row.id)
             .param("seasonId", row.seasonId)
             .param("tokenHash", row.tokenHash)
             .param("status", row.status.name)
-            .param("createdAt", OffsetDateTime.ofInstant(row.createdAt, ZoneOffset.UTC))
-            .param(
-                "rotatedAt",
-                row.rotatedAt?.let { OffsetDateTime.ofInstant(it, ZoneOffset.UTC) },
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .param(
-                "revokedAt",
-                row.revokedAt?.let { OffsetDateTime.ofInstant(it, ZoneOffset.UTC) },
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .update() == 1
+            .update()
+    }
 
     fun findById(id: UUID): CalendarSubscriptionRow? =
         jdbcClient.sql(
@@ -62,36 +40,41 @@ class CalendarSubscriptionRepository(
             """.trimIndent(),
         )
             .param("id", id)
-            .query(::mapRow)
+            .query(CalendarSubscriptionRow::class.java)
             .optional()
             .orElse(null)
 
-    fun findActiveByTokenHash(tokenHash: String): CalendarSubscriptionRow? =
+    fun findProjectionByActiveTokenHash(tokenHash: String): SeasonFeedProjectionRow? =
         jdbcClient.sql(
             """
-            SELECT $COLUMNS
-            FROM calendar_subscription
-            WHERE token_hash = :tokenHash
-              AND status = 'ACTIVE'
+            SELECT
+                projection.season_id,
+                projection.representation,
+                projection.etag,
+                projection.last_modified,
+                projection.item_count
+            FROM calendar_subscription subscription
+            JOIN season_feed_projection projection
+              ON projection.season_id = subscription.season_id
+            WHERE subscription.token_hash = :tokenHash
+              AND subscription.status = 'ACTIVE'
             """.trimIndent(),
         )
             .param("tokenHash", tokenHash)
-            .query(::mapRow)
+            .query { resultSet, _ -> resultSet.seasonFeedProjectionRow() }
             .optional()
             .orElse(null)
 
-    /** Rotates only the still-active credential the caller observed. */
+    /** 호출자가 읽은 자격 증명이 아직 활성 상태일 때만 회전한다. */
     fun rotate(
         id: UUID,
         expectedTokenHash: String,
         replacementTokenHash: String,
-        rotatedAt: Instant,
     ): Boolean =
         jdbcClient.sql(
             """
             UPDATE calendar_subscription
-            SET token_hash = :replacementTokenHash,
-                rotated_at = :rotatedAt
+            SET token_hash = :replacementTokenHash
             WHERE id = :id
               AND status = 'ACTIVE'
               AND token_hash = :expectedTokenHash
@@ -100,19 +83,16 @@ class CalendarSubscriptionRepository(
             .param("id", id)
             .param("expectedTokenHash", expectedTokenHash)
             .param("replacementTokenHash", replacementTokenHash)
-            .param("rotatedAt", OffsetDateTime.ofInstant(rotatedAt, ZoneOffset.UTC))
             .update() == 1
 
     fun revoke(
         id: UUID,
         expectedTokenHash: String,
-        revokedAt: Instant,
     ): Boolean =
         jdbcClient.sql(
             """
             UPDATE calendar_subscription
-            SET status = 'REVOKED',
-                revoked_at = :revokedAt
+            SET status = 'REVOKED'
             WHERE id = :id
               AND status = 'ACTIVE'
               AND token_hash = :expectedTokenHash
@@ -120,29 +100,14 @@ class CalendarSubscriptionRepository(
         )
             .param("id", id)
             .param("expectedTokenHash", expectedTokenHash)
-            .param("revokedAt", OffsetDateTime.ofInstant(revokedAt, ZoneOffset.UTC))
             .update() == 1
-
-    private fun mapRow(resultSet: ResultSet, @Suppress("UNUSED_PARAMETER") rowNumber: Int) =
-        CalendarSubscriptionRow(
-            id = resultSet.getObject("id", UUID::class.java),
-            seasonId = resultSet.getObject("season_id", UUID::class.java),
-            tokenHash = resultSet.getString("token_hash"),
-            status = CalendarSubscriptionStatus.valueOf(resultSet.getString("status")),
-            createdAt = resultSet.requiredInstant("created_at"),
-            rotatedAt = resultSet.nullableInstant("rotated_at"),
-            revokedAt = resultSet.nullableInstant("revoked_at"),
-        )
 
     private companion object {
         const val COLUMNS = """
             id,
             season_id,
             token_hash,
-            status,
-            created_at,
-            rotated_at,
-            revoked_at
+            status
         """
     }
 }

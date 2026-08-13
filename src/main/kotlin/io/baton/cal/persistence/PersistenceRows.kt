@@ -20,7 +20,6 @@ data class CalendarItemRow(
     val sourceItemId: UUID,
     val seasonId: UUID,
     val revision: Int,
-    val payloadHash: String,
     val status: CalendarItemStatus,
     val summary: String,
     val description: String?,
@@ -37,15 +36,10 @@ data class CalendarItemRow(
 
 enum class CalendarItemApplyOutcome {
     APPLIED,
-    DUPLICATE,
     STALE,
-    CONFLICT,
+    SCOPE_CONFLICT,
+    REVISION_CONFLICT,
 }
-
-data class CalendarItemApplyResult(
-    val outcome: CalendarItemApplyOutcome,
-    val current: CalendarItemRow,
-)
 
 data class SeasonFeedProjectionRow(
     val seasonId: UUID,
@@ -53,7 +47,6 @@ data class SeasonFeedProjectionRow(
     val etag: String,
     val lastModified: Instant,
     val itemCount: Int,
-    val rebuiltAt: Instant,
 )
 
 enum class CalendarSubscriptionStatus {
@@ -66,7 +59,4 @@ data class CalendarSubscriptionRow(
     val seasonId: UUID,
     val tokenHash: String,
     val status: CalendarSubscriptionStatus,
-    val createdAt: Instant,
-    val rotatedAt: Instant?,
-    val revokedAt: Instant?,
 )

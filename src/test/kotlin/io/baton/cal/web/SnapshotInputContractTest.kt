@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
+import java.text.Normalizer
 import java.util.UUID
 
 @Testcontainers
@@ -57,9 +58,43 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
+    fun `timestamp lexical forms are parsed strictly by the JDK formatter`() {
+        listOf(
+            utcSnapshot(occurredAt = quoted("+02026-08-11T01:00:05Z")),
+            utcSnapshot(occurredAt = quoted("2026-08-11T01:00:05.Z")),
+            zonedSnapshot(startLocal = "2026-08-31t23:30:00"),
+            zonedSnapshot(startLocal = "2026-08-31T23:30:00."),
+        ).forEach(::assertInvalid)
+    }
+
+    @Test
     fun `calendar-invalid timestamps return a contract error`() {
         assertInvalid(utcSnapshot(occurredAt = quoted("2026-13-11T01:00:05Z")))
         assertInvalid(zonedSnapshot(startLocal = "2026-02-30T10:00:00"))
+    }
+
+    @Test
+    fun `timestamp errors do not reflect the rejected value`() {
+        val sensitiveValue = "https://calendar.example.test/calendars/v1/secret.ics"
+        mockMvc.perform(
+            post(SNAPSHOT_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(utcSnapshot(occurredAt = quoted(sensitiveValue))),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value("snapshot contains an invalid timestamp"))
+            .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(sensitiveValue))))
+    }
+
+    @Test
+    fun `text constraints count Unicode code points and reject CR and non-NFC`() {
+        val emoji = "😀"
+        assertApplied(utcSnapshot(summary = emoji.repeat(512)))
+        assertInvalid(utcSnapshot(summary = emoji.repeat(513)))
+        assertApplied(utcSnapshot(summary = "첫 줄\\n둘째 줄"))
+        assertInvalid(utcSnapshot(summary = "첫 줄\\r둘째 줄"))
+        assertInvalid(utcSnapshot(summary = Normalizer.normalize("é", Normalizer.Form.NFD)))
     }
 
     @Test
@@ -83,6 +118,7 @@ class SnapshotInputContractTest @Autowired constructor(
     @Test
     fun `zone must be supported by both Java and the calendar renderer`() {
         assertInvalid(zonedSnapshot(zoneId = "America/Coyhaique"))
+        assertInvalid(zonedSnapshot(zoneId = "US/Eastern"))
         assertInvalid(zonedSnapshot(zoneId = "+09:00"))
     }
 
@@ -114,6 +150,7 @@ class SnapshotInputContractTest @Autowired constructor(
         sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
         startInstant: String = quoted("2026-08-16T09:00:00Z"),
         endInstant: String = quoted("2026-08-16T10:30:00Z"),
+        summary: String = "ROUND 1",
     ): String =
         """
         {
@@ -123,7 +160,7 @@ class SnapshotInputContractTest @Autowired constructor(
           "seasonId": "$SEASON_ID",
           "revision": 0,
           "status": "ACTIVE",
-          "summary": "ROUND 1",
+          "summary": "$summary",
           "description": null,
           "location": null,
           "sourceUpdatedAt": $sourceUpdatedAt,

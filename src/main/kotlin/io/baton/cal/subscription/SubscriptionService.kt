@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.util.UriComponentsBuilder
 import java.net.URI
-import java.time.Clock
 import java.util.UUID
 
 @Service
@@ -22,14 +21,21 @@ class SubscriptionService(
     private val projectionService: SeasonProjectionService,
     private val tokenCodec: SubscriptionTokenCodec,
     private val properties: CalProperties,
-    private val clock: Clock,
 ) {
     @Transactional
     fun create(seasonId: UUID): SubscriptionCredential {
         projectionService.ensureProjection(seasonId)
-        val issued = newSubscription(seasonId)
-        check(repository.insert(issued.row)) { "subscription credential collision" }
-        return issued.subscription
+        val token = tokenCodec.generate()
+        val subscriptionId = UUID.randomUUID()
+        repository.insert(
+            CalendarSubscriptionRow(
+                id = subscriptionId,
+                seasonId = seasonId,
+                tokenHash = tokenCodec.hash(token),
+                status = CalendarSubscriptionStatus.ACTIVE,
+            ),
+        )
+        return SubscriptionCredential(subscriptionId, token, feedUri(token))
     }
 
     @Transactional
@@ -41,7 +47,7 @@ class SubscriptionService(
         val token = tokenCodec.generate()
         val replacementHash = tokenCodec.hash(token)
 
-        if (repository.rotate(subscriptionId, current.tokenHash, replacementHash, clock.instant())) {
+        if (repository.rotate(subscriptionId, current.tokenHash, replacementHash)) {
             return SubscriptionCredential(subscriptionId, token, feedUri(token))
         }
 
@@ -59,7 +65,7 @@ class SubscriptionService(
         val current = repository.findById(subscriptionId)
             ?: throw InternalResourceNotFoundException("subscription was not found")
         if (current.status == CalendarSubscriptionStatus.REVOKED) return
-        if (!repository.revoke(subscriptionId, current.tokenHash, clock.instant())) {
+        if (!repository.revoke(subscriptionId, current.tokenHash)) {
             val latest = repository.findById(subscriptionId)
                 ?: throw InternalResourceNotFoundException("subscription was not found")
             if (latest.status == CalendarSubscriptionStatus.REVOKED &&
@@ -75,39 +81,12 @@ class SubscriptionService(
     }
 
     @Transactional(readOnly = true)
-    fun findFeed(token: String): SeasonFeedProjectionRow? {
-        val subscription = repository.findActiveByTokenHash(tokenCodec.hash(token)) ?: return null
-        return checkNotNull(projectionService.findProjection(subscription.seasonId)) {
-            "active subscription has no season projection"
-        }
-    }
-
-    private fun newSubscription(seasonId: UUID): PendingSubscription {
-        val token = tokenCodec.generate()
-        val subscriptionId = UUID.randomUUID()
-        val now = clock.instant()
-        return PendingSubscription(
-            row = CalendarSubscriptionRow(
-                id = subscriptionId,
-                seasonId = seasonId,
-                tokenHash = tokenCodec.hash(token),
-                status = CalendarSubscriptionStatus.ACTIVE,
-                createdAt = now,
-                rotatedAt = null,
-                revokedAt = null,
-            ),
-            subscription = SubscriptionCredential(subscriptionId, token, feedUri(token)),
-        )
-    }
+    fun findFeed(token: String): SeasonFeedProjectionRow? =
+        repository.findProjectionByActiveTokenHash(tokenCodec.hash(token))
 
     private fun feedUri(token: String): URI = UriComponentsBuilder
         .fromUri(properties.publicBaseUrl)
         .pathSegment("calendars", "v1", "$token.ics")
         .build()
         .toUri()
-
-    private data class PendingSubscription(
-        val row: CalendarSubscriptionRow,
-        val subscription: SubscriptionCredential,
-    )
 }

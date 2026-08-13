@@ -1,5 +1,6 @@
 package io.baton.cal.calendar
 
+import net.fortuna.ical4j.model.TimeZone
 import net.fortuna.ical4j.model.TimeZoneRegistryImpl
 import java.time.Instant
 import java.time.LocalDateTime
@@ -34,12 +35,16 @@ sealed interface ScheduleWindow {
         val end: LocalDateTime,
         val zoneId: String,
     ) : ScheduleWindow {
+        internal val calendarTimeZone: TimeZone
+
         init {
             require(end.truncatedTo(ChronoUnit.SECONDS).isAfter(start.truncatedTo(ChronoUnit.SECONDS))) {
                 "end must be after start at iCalendar second precision"
             }
             require(zoneId in ZoneId.getAvailableZoneIds()) { "zoneId must be an IANA timezone" }
-            require(TimeZoneSupport.contains(zoneId)) { "zoneId is not supported by the calendar renderer" }
+            calendarTimeZone = requireNotNull(CalendarTimeZones.findExact(zoneId)) {
+                "zoneId must be preserved exactly by the calendar renderer"
+            }
             val zone = ZoneId.of(zoneId)
             require(zone.rules.getValidOffsets(start).isNotEmpty()) { "start must not be in a DST gap" }
             require(zone.rules.getValidOffsets(end).isNotEmpty()) { "end must not be in a DST gap" }
@@ -47,10 +52,12 @@ sealed interface ScheduleWindow {
     }
 }
 
-private object TimeZoneSupport {
+private object CalendarTimeZones {
     private val registry = TimeZoneRegistryImpl()
 
-    fun contains(zoneId: String): Boolean = registry.getTimeZone(zoneId) != null
+    fun findExact(zoneId: String): TimeZone? = registry
+        .getTimeZone(zoneId)
+        ?.takeIf { it.id == zoneId }
 }
 
 data class CalendarItem(
@@ -63,5 +70,5 @@ data class CalendarItem(
     val location: String?,
     val schedule: ScheduleWindow,
     val sourceUpdatedAt: Instant,
-    val acceptedAt: Instant = sourceUpdatedAt,
+    val acceptedAt: Instant,
 )

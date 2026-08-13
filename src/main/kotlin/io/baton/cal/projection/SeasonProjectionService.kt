@@ -10,8 +10,8 @@ import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
-import java.time.Clock
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -28,7 +28,6 @@ class SeasonProjectionService(
     private val itemRepository: CalendarItemRepository,
     private val projectionRepository: SeasonFeedProjectionRepository,
     private val renderer: IcsCalendarRenderer,
-    private val clock: Clock,
 ) {
     @Transactional
     fun rebuild(seasonId: UUID): ProjectionResult {
@@ -37,28 +36,29 @@ class SeasonProjectionService(
     }
 
     @Transactional
-    fun ensureProjection(seasonId: UUID): ProjectionResult {
+    fun ensureProjection(seasonId: UUID) {
         lockRepository.acquire(seasonId)
-        return (projectionRepository.findBySeasonId(seasonId) ?: rebuildWhileLocked(seasonId)).toResult()
+        if (projectionRepository.findBySeasonId(seasonId) == null) rebuildWhileLocked(seasonId)
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     fun rebuildWhileLocked(seasonId: UUID): SeasonFeedProjectionRow {
         val rendered = renderer.render(
             seasonId = seasonId,
             items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain),
         )
-        return projectionRepository.upsert(
-            SeasonFeedProjectionRow(
-                seasonId = seasonId,
-                representation = rendered.bytes,
-                etag = rendered.etag,
-                lastModified = rendered.lastModified,
-                itemCount = rendered.itemCount,
-                rebuiltAt = clock.instant(),
-            ),
+        val projection = SeasonFeedProjectionRow(
+            seasonId = seasonId,
+            representation = rendered.bytes,
+            etag = rendered.etag,
+            lastModified = rendered.lastModified,
+            itemCount = rendered.itemCount,
         )
+        projectionRepository.upsert(projection)
+        return projection
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     fun nextAcceptedAtWhileLocked(
         seasonId: UUID,
         observedAt: Instant,
@@ -72,15 +72,11 @@ class SeasonProjectionService(
         }
     }
 
-    fun findProjection(seasonId: UUID): SeasonFeedProjectionRow? =
-        projectionRepository.findBySeasonId(seasonId)
-
     private fun SeasonFeedProjectionRow.toResult(): ProjectionResult = ProjectionResult(
         seasonId = seasonId,
         etag = etag,
         itemCount = itemCount,
     )
-
 }
 
 private fun CalendarItemRow.toDomain(): CalendarItem = CalendarItem(

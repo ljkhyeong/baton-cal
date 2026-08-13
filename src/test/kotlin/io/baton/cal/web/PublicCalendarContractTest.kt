@@ -2,7 +2,6 @@ package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
 import org.hamcrest.Matchers.containsString
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -10,7 +9,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -36,23 +35,10 @@ import java.util.HexFormat
         "baton.cal.public-base-url=https://calendar.example.test",
     ],
 )
+@Sql("/reset-database.sql")
 class PublicCalendarContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
-    private val jdbcClient: JdbcClient,
 ) {
-    @BeforeEach
-    fun resetDatabase() {
-        jdbcClient.sql(
-            """
-            TRUNCATE TABLE
-                calendar_subscription,
-                season_feed_projection,
-                calendar_item,
-                source_event_inbox,
-                season_projection_lock
-            """.trimIndent(),
-        ).update()
-    }
 
     @Test
     fun `empty season feed preserves canonical bytes validators and conditional responses across rebuild`() {

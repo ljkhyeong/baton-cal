@@ -1,6 +1,5 @@
 package io.baton.cal.persistence
 
-import java.sql.ResultSet
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -31,7 +30,7 @@ class SourceEventInboxRepository(
                 :occurredAt,
                 :receivedAt
             )
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (event_id) DO NOTHING
             """.trimIndent(),
         )
             .param("eventId", row.eventId)
@@ -43,61 +42,35 @@ class SourceEventInboxRepository(
             .param("receivedAt", OffsetDateTime.ofInstant(row.receivedAt, ZoneOffset.UTC))
             .update() == 1
 
-    fun findByEventId(eventId: UUID): SourceEventInboxRow? =
+    fun findPayloadHashByEventId(eventId: UUID): String? =
         jdbcClient.sql(
             """
-            SELECT
-                event_id,
-                payload_hash,
-                source_item_id,
-                season_id,
-                source_revision,
-                occurred_at,
-                received_at
+            SELECT payload_hash
             FROM source_event_inbox
             WHERE event_id = :eventId
             """.trimIndent(),
         )
             .param("eventId", eventId)
-            .query(::mapRow)
+            .query(String::class.java)
             .optional()
             .orElse(null)
 
-    fun findBySourceItemIdAndRevision(
+    fun findPayloadHashBySourceItemIdAndRevision(
         sourceItemId: UUID,
         sourceRevision: Int,
-    ): SourceEventInboxRow? =
+    ): String? =
         jdbcClient.sql(
             """
-            SELECT
-                event_id,
-                payload_hash,
-                source_item_id,
-                season_id,
-                source_revision,
-                occurred_at,
-                received_at
+            SELECT payload_hash
             FROM source_event_inbox
             WHERE source_item_id = :sourceItemId
               AND source_revision = :sourceRevision
-            ORDER BY received_at, event_id
             LIMIT 1
             """.trimIndent(),
         )
             .param("sourceItemId", sourceItemId)
             .param("sourceRevision", sourceRevision)
-            .query(::mapRow)
+            .query(String::class.java)
             .optional()
             .orElse(null)
-
-    private fun mapRow(resultSet: ResultSet, @Suppress("UNUSED_PARAMETER") rowNumber: Int) =
-        SourceEventInboxRow(
-            eventId = resultSet.getObject("event_id", UUID::class.java),
-            payloadHash = resultSet.getString("payload_hash"),
-            sourceItemId = resultSet.getObject("source_item_id", UUID::class.java),
-            seasonId = resultSet.getObject("season_id", UUID::class.java),
-            sourceRevision = resultSet.getInt("source_revision"),
-            occurredAt = resultSet.requiredInstant("occurred_at"),
-            receivedAt = resultSet.requiredInstant("received_at"),
-        )
 }

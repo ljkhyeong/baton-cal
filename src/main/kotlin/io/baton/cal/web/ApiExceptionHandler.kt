@@ -1,14 +1,14 @@
 package io.baton.cal.web
 
-import org.springframework.http.HttpStatus
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
-import org.slf4j.LoggerFactory
 
 @RestControllerAdvice
 class ApiExceptionHandler : ResponseEntityExceptionHandler() {
@@ -37,8 +37,8 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     fun handleUnexpectedException(
         exception: Exception,
     ): ResponseEntity<ApiErrorResponse> {
-        // Exception messages may contain a request path. Public calendar paths
-        // contain credentials, so the generic log deliberately records only type.
+        // 예외 메시지에는 자격 증명이 포함된 공개 캘린더 경로가 들어갈 수 있으므로
+        // 일반 오류 로그에는 예외 형식만 남긴다.
         applicationLogger.error("Unhandled API request failure of type {}", exception.javaClass.name)
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)

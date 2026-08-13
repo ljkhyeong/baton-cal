@@ -13,15 +13,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.catchThrowable
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doAnswer
-import org.mockito.Mockito.reset
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
-import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+import org.springframework.test.context.jdbc.Sql
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -33,28 +31,13 @@ import org.testcontainers.postgresql.PostgreSQLContainer
         "baton.cal.public-base-url=https://calendar.example.test",
     ],
 )
+@Sql("/reset-database.sql")
 class SubscriptionConcurrencyTest @Autowired constructor(
     private val service: SubscriptionService,
     private val tokenCodec: SubscriptionTokenCodec,
-    private val jdbcClient: JdbcClient,
 ) {
     @MockitoSpyBean
     private lateinit var repository: CalendarSubscriptionRepository
-
-    @BeforeEach
-    fun resetDatabase() {
-        reset(repository)
-        jdbcClient.sql(
-            """
-            TRUNCATE TABLE
-                calendar_subscription,
-                season_feed_projection,
-                calendar_item,
-                source_event_inbox,
-                season_projection_lock
-            """.trimIndent(),
-        ).update()
-    }
 
     @Test
     fun `concurrent rotations commit exactly one credential and report one conflict`() {

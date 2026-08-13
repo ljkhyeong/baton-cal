@@ -4,6 +4,7 @@ import io.baton.cal.config.CalProperties
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.boot.web.servlet.FilterRegistration
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
@@ -13,17 +14,12 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 @Component
+@FilterRegistration(urlPatterns = ["/internal/*"])
 class InternalApiAuthenticationFilter(
     properties: CalProperties,
     private val objectMapper: ObjectMapper,
 ) : OncePerRequestFilter() {
     private val expectedToken = properties.internalToken.toByteArray(StandardCharsets.UTF_8)
-
-    override fun shouldNotFilter(request: HttpServletRequest): Boolean {
-        val requestPath = request.requestURI.removePrefix(request.contextPath)
-        return !request.servletPath.startsWith(INTERNAL_PATH_PREFIX) &&
-            !requestPath.startsWith(INTERNAL_PATH_PREFIX)
-    }
 
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -53,7 +49,6 @@ class InternalApiAuthenticationFilter(
     }
 
     private companion object {
-        const val INTERNAL_PATH_PREFIX = "/internal"
         const val BEARER_PREFIX = "Bearer "
     }
 }

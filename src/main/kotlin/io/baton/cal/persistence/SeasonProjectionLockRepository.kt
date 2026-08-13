@@ -3,16 +3,18 @@ package io.baton.cal.persistence
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 
 @Repository
 class SeasonProjectionLockRepository(
     private val jdbcClient: JdbcClient,
 ) {
     /**
-     * Creates the lock row if needed and takes a PostgreSQL row lock.
-     * The caller must invoke this inside the transaction that updates calendar
-     * items and the materialized season feed.
+     * 잠금 행이 없으면 만들고 PostgreSQL 행 잠금을 건다.
+     * 호출자는 캘린더 항목과 시즌 피드를 갱신하는 트랜잭션 안에서 실행해야 한다.
      */
+    @Transactional(propagation = Propagation.MANDATORY)
     fun acquire(seasonId: UUID) {
         jdbcClient.sql(
             """

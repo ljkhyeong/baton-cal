@@ -9,49 +9,33 @@ import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 
 @Repository
 class CalendarItemRepository(
     private val jdbcClient: JdbcClient,
 ) {
     /**
-     * Inserts a new item or replaces it only when the source revision advances.
-     * The caller is expected to hold the affected season projection lock in the
-     * surrounding transaction.
+     * 새 항목을 추가하거나 원본 개정 번호가 증가했을 때만 기존 항목을 교체한다.
+     * 호출자는 외부 트랜잭션에서 해당 시즌의 투영 잠금을 보유해야 한다.
      */
-    fun applyIfNewer(candidate: CalendarItemRow): CalendarItemApplyResult {
-        val applied = upsert(candidate)
-        if (applied != null) {
-            return CalendarItemApplyResult(CalendarItemApplyOutcome.APPLIED, applied)
-        }
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun applyIfNewer(candidate: CalendarItemRow): CalendarItemApplyOutcome {
+        if (upsert(candidate)) return CalendarItemApplyOutcome.APPLIED
 
-        val current = checkNotNull(findBySourceItemId(candidate.sourceItemId)) {
+        val current = checkNotNull(findRevisionState(candidate.sourceItemId)) {
             "calendar item disappeared while classifying conditional apply"
         }
-        val outcome = when {
-            candidate.seasonId != current.seasonId -> CalendarItemApplyOutcome.CONFLICT
+        return when {
+            candidate.seasonId != current.seasonId -> CalendarItemApplyOutcome.SCOPE_CONFLICT
             candidate.revision < current.revision -> CalendarItemApplyOutcome.STALE
-            candidate.revision == current.revision && candidate.payloadHash == current.payloadHash ->
-                CalendarItemApplyOutcome.DUPLICATE
-            candidate.revision == current.revision -> CalendarItemApplyOutcome.CONFLICT
-            !candidate.sourceUpdatedAt.isAfter(current.sourceUpdatedAt) -> CalendarItemApplyOutcome.CONFLICT
+            candidate.revision == current.revision -> CalendarItemApplyOutcome.REVISION_CONFLICT
+            !candidate.sourceUpdatedAt.isAfter(current.sourceUpdatedAt) ->
+                CalendarItemApplyOutcome.REVISION_CONFLICT
             else -> error("newer calendar item revision was not applied")
         }
-        return CalendarItemApplyResult(outcome, current)
     }
-
-    fun findBySourceItemId(sourceItemId: UUID): CalendarItemRow? =
-        jdbcClient.sql(
-            """
-            SELECT $COLUMNS
-            FROM calendar_item
-            WHERE source_item_id = :sourceItemId
-            """.trimIndent(),
-        )
-            .param("sourceItemId", sourceItemId)
-            .query(::mapRow)
-            .optional()
-            .orElse(null)
 
     fun listBySeasonId(seasonId: UUID): List<CalendarItemRow> =
         jdbcClient.sql(
@@ -59,14 +43,13 @@ class CalendarItemRepository(
             SELECT $COLUMNS
             FROM calendar_item
             WHERE season_id = :seasonId
-            ORDER BY source_item_id
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
             .query(::mapRow)
             .list()
 
-    private fun upsert(candidate: CalendarItemRow): CalendarItemRow? =
+    private fun upsert(candidate: CalendarItemRow): Boolean =
         bindCandidate(
             jdbcClient.sql(
                 """
@@ -74,7 +57,6 @@ class CalendarItemRepository(
                     source_item_id,
                     season_id,
                     revision,
-                    payload_hash,
                     status,
                     summary,
                     description,
@@ -91,7 +73,6 @@ class CalendarItemRepository(
                     :sourceItemId,
                     :seasonId,
                     :revision,
-                    :payloadHash,
                     :status,
                     :summary,
                     :description,
@@ -106,9 +87,7 @@ class CalendarItemRepository(
                     :acceptedAt
                 )
                 ON CONFLICT (source_item_id) DO UPDATE SET
-                    season_id = EXCLUDED.season_id,
                     revision = EXCLUDED.revision,
-                    payload_hash = EXCLUDED.payload_hash,
                     status = EXCLUDED.status,
                     summary = EXCLUDED.summary,
                     description = EXCLUDED.description,
@@ -124,12 +103,28 @@ class CalendarItemRepository(
                 WHERE calendar_item.season_id = EXCLUDED.season_id
                   AND calendar_item.revision < EXCLUDED.revision
                   AND calendar_item.source_updated_at < EXCLUDED.source_updated_at
-                RETURNING $COLUMNS
                 """.trimIndent(),
             ),
             candidate,
         )
-            .query(::mapRow)
+            .update() == 1
+
+    private fun findRevisionState(sourceItemId: UUID): RevisionState? =
+        jdbcClient.sql(
+            """
+            SELECT season_id, revision, source_updated_at
+            FROM calendar_item
+            WHERE source_item_id = :sourceItemId
+            """.trimIndent(),
+        )
+            .param("sourceItemId", sourceItemId)
+            .query { resultSet, _ ->
+                RevisionState(
+                    seasonId = resultSet.getObject("season_id", UUID::class.java),
+                    revision = resultSet.getInt("revision"),
+                    sourceUpdatedAt = resultSet.requiredInstant("source_updated_at"),
+                )
+            }
             .optional()
             .orElse(null)
 
@@ -141,7 +136,6 @@ class CalendarItemRepository(
             .param("sourceItemId", row.sourceItemId)
             .param("seasonId", row.seasonId)
             .param("revision", row.revision)
-            .param("payloadHash", row.payloadHash)
             .param("status", row.status.name)
             .param("summary", row.summary)
             .param("description", row.description, Types.VARCHAR)
@@ -168,7 +162,6 @@ class CalendarItemRepository(
             sourceItemId = resultSet.getObject("source_item_id", UUID::class.java),
             seasonId = resultSet.getObject("season_id", UUID::class.java),
             revision = resultSet.getInt("revision"),
-            payloadHash = resultSet.getString("payload_hash"),
             status = CalendarItemStatus.valueOf(resultSet.getString("status")),
             summary = resultSet.getString("summary"),
             description = resultSet.getString("description"),
@@ -188,7 +181,6 @@ class CalendarItemRepository(
             source_item_id,
             season_id,
             revision,
-            payload_hash,
             status,
             summary,
             description,
@@ -202,5 +194,11 @@ class CalendarItemRepository(
             source_updated_at,
             accepted_at
         """
+
+        data class RevisionState(
+            val seasonId: UUID,
+            val revision: Int,
+            val sourceUpdatedAt: java.time.Instant,
+        )
     }
 }

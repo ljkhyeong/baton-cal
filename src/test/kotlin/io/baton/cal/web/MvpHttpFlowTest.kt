@@ -1,10 +1,14 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
+import io.baton.cal.calendar.events
+import io.baton.cal.calendar.parseIcalendar
+import io.baton.cal.calendar.requiredPropertyValue
+import io.baton.cal.calendar.timeZones
+import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.matchesPattern
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -13,6 +17,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -35,23 +40,11 @@ import java.nio.file.Path
         "baton.cal.public-base-url=https://calendar.example.test",
     ],
 )
+@Sql("/reset-database.sql")
 class MvpHttpFlowTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,
 ) {
-    @BeforeEach
-    fun resetDatabase() {
-        jdbcClient.sql(
-            """
-            TRUNCATE TABLE
-                calendar_subscription,
-                season_feed_projection,
-                calendar_item,
-                source_event_inbox,
-                season_projection_lock
-            """.trimIndent(),
-        ).update()
-    }
 
     @Test
     fun `MVP supports idempotent snapshots conditional feeds rebuild and token lifecycle`() {
@@ -118,13 +111,14 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(header().exists(HttpHeaders.ETAG))
             .andExpect(header().exists(HttpHeaders.LAST_MODIFIED))
             .andReturn()
-        val unfoldedFeed = firstFeed.response.contentAsString.replace("\r\n ", "")
-        assertThat(unfoldedFeed).contains(
-            "UID:$SOURCE_ITEM_ID@cal.baton",
-            "SEQUENCE:2",
-            "STATUS:CANCELLED",
-            "TZID:America/New_York",
-        )
+        val firstCalendar = firstFeed.response.contentAsByteArray.parseIcalendar()
+        val sourceEvent = firstCalendar.events().single {
+            it.requiredPropertyValue(Property.UID) == "$SOURCE_ITEM_ID@cal.baton"
+        }
+        assertThat(sourceEvent.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("2")
+        assertThat(sourceEvent.requiredPropertyValue(Property.STATUS)).isEqualTo("CANCELLED")
+        assertThat(firstCalendar.timeZones().map { it.timeZoneId.value })
+            .contains("America/New_York")
 
         val originalEtag = checkNotNull(firstFeed.response.getHeader(HttpHeaders.ETAG))
         val originalLastModified = checkNotNull(firstFeed.response.getHeader(HttpHeaders.LAST_MODIFIED))
@@ -152,8 +146,8 @@ class MvpHttpFlowTest @Autowired constructor(
         )
             .andExpect(status().isOk)
 
-        // This item is not the maximum sourceUpdatedAt in the season. The feed's
-        // HTTP Last-Modified must still advance when its representation changes.
+        // 이 항목은 시즌에서 sourceUpdatedAt이 가장 크지 않더라도 표현이 바뀌면
+        // 피드의 HTTP Last-Modified가 반드시 증가해야 한다.
         ingest(
             utcSnapshot(
                 eventId = EVENT_7,
@@ -168,9 +162,12 @@ class MvpHttpFlowTest @Autowired constructor(
                 .header(HttpHeaders.IF_MODIFIED_SINCE, originalLastModified),
         )
             .andExpect(status().isOk)
-            .andExpect(content().string(containsString("SEQUENCE:3")))
             .andReturn()
         val refreshedBytes = refreshedFeed.response.contentAsByteArray
+        val refreshedSourceEvent = refreshedBytes.parseIcalendar().events().single {
+            it.requiredPropertyValue(Property.UID) == "$SOURCE_ITEM_ID@cal.baton"
+        }
+        assertThat(refreshedSourceEvent.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("3")
         val refreshedEtag = checkNotNull(refreshedFeed.response.getHeader(HttpHeaders.ETAG))
         val refreshedLastModified = checkNotNull(refreshedFeed.response.getHeader(HttpHeaders.LAST_MODIFIED))
         assertThat(refreshedEtag).isNotEqualTo(originalEtag)
@@ -220,13 +217,18 @@ class MvpHttpFlowTest @Autowired constructor(
 
     @Test
     fun `matrix-parameter variants of internal routes still require authentication`() {
-        mockMvc.perform(
-            post("/internal/api/v1;ignored/subscriptions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"seasonId":"$SEASON_ID"}"""),
-        )
-            .andExpect(status().isUnauthorized)
-            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        listOf(
+            "/internal/api/v1;ignored/subscriptions",
+            "/internal;ignored/api/v1/subscriptions",
+        ).forEach { path ->
+            mockMvc.perform(
+                post(path)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"seasonId":"$SEASON_ID"}"""),
+            )
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        }
     }
 
     @Test

@@ -2,9 +2,10 @@ package io.baton.cal.snapshot
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
-import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
+import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.security.DigestOutputStream
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.HexFormat
@@ -32,39 +33,35 @@ enum class SnapshotIngestionResult {
 
 object SnapshotFingerprint {
     fun sha256(snapshot: ScheduleSnapshot): String {
-        val encoded = ByteArrayOutputStream().use { buffer ->
-            DataOutputStream(buffer).use { output ->
-                output.writeString("baton-cal-snapshot-v1")
-                output.writeString(snapshot.sourceItemId.toString())
-                output.writeString(snapshot.seasonId.toString())
-                output.writeInt(snapshot.revision)
-                output.writeString(snapshot.status.name)
-                output.writeString(snapshot.summary)
-                output.writeNullableString(snapshot.description)
-                output.writeNullableString(snapshot.location)
-                output.writeString(snapshot.sourceUpdatedAt.toString())
+        val digest = MessageDigest.getInstance("SHA-256")
+        DataOutputStream(DigestOutputStream(OutputStream.nullOutputStream(), digest)).use { output ->
+            output.writeString("baton-cal-snapshot-v1")
+            output.writeString(snapshot.sourceItemId.toString())
+            output.writeString(snapshot.seasonId.toString())
+            output.writeInt(snapshot.revision)
+            output.writeString(snapshot.status.name)
+            output.writeString(snapshot.summary)
+            output.writeNullableString(snapshot.description)
+            output.writeNullableString(snapshot.location)
+            output.writeString(snapshot.sourceUpdatedAt.toString())
 
-                when (val schedule = snapshot.schedule) {
-                    is ScheduleWindow.UtcInstant -> {
-                        output.writeString("UTC_INSTANT")
-                        output.writeString(schedule.start.toString())
-                        output.writeString(schedule.end.toString())
-                    }
+            when (val schedule = snapshot.schedule) {
+                is ScheduleWindow.UtcInstant -> {
+                    output.writeString("UTC_INSTANT")
+                    output.writeString(schedule.start.toString())
+                    output.writeString(schedule.end.toString())
+                }
 
-                    is ScheduleWindow.ZonedLocal -> {
-                        output.writeString("ZONED_LOCAL")
-                        output.writeString(schedule.start.toString())
-                        output.writeString(schedule.end.toString())
-                        output.writeString(schedule.zoneId)
-                    }
+                is ScheduleWindow.ZonedLocal -> {
+                    output.writeString("ZONED_LOCAL")
+                    output.writeString(schedule.start.toString())
+                    output.writeString(schedule.end.toString())
+                    output.writeString(schedule.zoneId)
                 }
             }
-            buffer.toByteArray()
         }
 
-        return HexFormat.of().formatHex(
-            MessageDigest.getInstance("SHA-256").digest(encoded),
-        )
+        return HexFormat.of().formatHex(digest.digest())
     }
 
     private fun DataOutputStream.writeString(value: String) {
