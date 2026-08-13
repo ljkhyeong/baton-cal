@@ -1,11 +1,11 @@
 package io.baton.cal.web
 
 import io.baton.cal.subscription.SubscriptionService
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.CacheControl
 import org.springframework.http.ContentDisposition
-import org.springframework.http.HttpStatus
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
@@ -20,23 +20,32 @@ class PublicCalendarController(
     fun getCalendar(
         @PathVariable token: String,
         request: WebRequest,
-    ): ResponseEntity<ByteArray> {
+        response: HttpServletResponse,
+    ) {
         val projection = subscriptionService.findFeed(token)
-            ?: return ResponseEntity.notFound().build()
+            ?: run {
+                response.status = HttpServletResponse.SC_NOT_FOUND
+                return
+            }
 
+        response.setHeader(HttpHeaders.ETAG, projection.etag)
+        response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
+        response.setHeader(HttpHeaders.CACHE_CONTROL, FEED_CACHE_CONTROL.headerValue)
         if (request.checkNotModified(projection.etag, projection.lastModified.toEpochMilli())) {
-            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
-                .cacheControl(FEED_CACHE_CONTROL)
-                .build()
+            // Spring intentionally omits Last-Modified when its value is the
+            // Unix epoch, which is CAL's canonical validator for an empty feed.
+            response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
+            return
         }
 
-        return ResponseEntity.ok()
-            .eTag(projection.etag)
-            .lastModified(projection.lastModified)
-            .cacheControl(FEED_CACHE_CONTROL)
-            .contentType(CALENDAR_MEDIA_TYPE)
-            .headers { it.contentDisposition = CALENDAR_CONTENT_DISPOSITION }
-            .body(projection.representation)
+        response.contentType = CALENDAR_MEDIA_TYPE.toString()
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, CALENDAR_CONTENT_DISPOSITION.toString())
+        response.outputStream.write(projection.representation)
+    }
+
+    @GetMapping("/calendars/v1/**")
+    fun rejectMalformedCalendarPath(response: HttpServletResponse) {
+        response.status = HttpServletResponse.SC_NOT_FOUND
     }
 
     private companion object {

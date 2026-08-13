@@ -4,6 +4,7 @@ import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.snapshot.SnapshotIngestionService
 import io.baton.cal.subscription.SubscriptionService
 import jakarta.validation.Valid
+import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -30,15 +31,19 @@ class InternalCalendarController(
 
     @PostMapping("/subscriptions")
     fun createSubscription(
-        @Valid @RequestBody request: CreateSubscriptionRequest,
+        @RequestBody request: CreateSubscriptionRequest,
     ): ResponseEntity<SubscriptionCredential> = ResponseEntity
         .status(HttpStatus.CREATED)
+        .cacheControl(CacheControl.noStore())
         .body(subscriptionService.create(request.seasonId))
 
     @PostMapping("/subscriptions/{subscriptionId}/rotate")
     fun rotateSubscription(
         @PathVariable subscriptionId: UUID,
-    ): SubscriptionCredential = subscriptionService.rotate(subscriptionId)
+    ): ResponseEntity<SubscriptionCredential> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(subscriptionService.rotate(subscriptionId))
 
     @DeleteMapping("/subscriptions/{subscriptionId}")
     fun revokeSubscription(

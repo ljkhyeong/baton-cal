@@ -2,11 +2,12 @@ package io.baton.cal.snapshot
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
-import org.apache.commons.codec.digest.DigestUtils
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.HexFormat
 import java.util.UUID
 
 data class ScheduleSnapshot(
@@ -61,7 +62,9 @@ object SnapshotFingerprint {
             buffer.toByteArray()
         }
 
-        return DigestUtils.sha256Hex(encoded)
+        return HexFormat.of().formatHex(
+            MessageDigest.getInstance("SHA-256").digest(encoded),
+        )
     }
 
     private fun DataOutputStream.writeString(value: String) {

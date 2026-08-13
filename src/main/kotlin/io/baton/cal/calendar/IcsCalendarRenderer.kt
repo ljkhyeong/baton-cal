@@ -24,11 +24,12 @@ import net.fortuna.ical4j.model.property.XProperty
 import net.fortuna.ical4j.model.property.immutable.ImmutableCalScale
 import net.fortuna.ical4j.model.property.immutable.ImmutableStatus
 import net.fortuna.ical4j.model.property.immutable.ImmutableVersion
-import org.apache.commons.codec.digest.DigestUtils
 import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.HexFormat
 import java.util.UUID
 
 data class RenderedCalendar(
@@ -61,7 +62,9 @@ class IcsCalendarRenderer {
         val bytes = ByteArrayOutputStream().also { output ->
             CalendarOutputter(false, UTF8_SAFE_FOLD_LENGTH).output(calendar, output)
         }.toByteArray()
-        val digest = DigestUtils.sha256Hex(bytes)
+        val digest = HexFormat.of().formatHex(
+            MessageDigest.getInstance("SHA-256").digest(bytes),
+        )
 
         return RenderedCalendar(
             bytes = bytes,

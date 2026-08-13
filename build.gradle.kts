@@ -33,7 +33,6 @@ dependencyLocking {
 }
 
 dependencies {
-    implementation("commons-codec:commons-codec")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

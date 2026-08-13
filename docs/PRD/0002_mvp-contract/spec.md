@@ -291,13 +291,15 @@ BATON integration 또는 public deployment 전에 닫아야 하는 Deferred 항�
 
 - BATON producer가 이 JSON Schema, global `sourceItemId`, revision과 explicit cancellation을
   준수한다는 consumer-driven contract fixture.
-- 현재 UTC golden 외에 zoned local, DST, midnight, cancellation, 추가 escaping/folding와
-  empty feed의 canonical `.ics` golden bytes.
+- 추가 escaping/folding edge case의 canonical `.ics` golden bytes. UTC, zoned local DST와
+  midnight cancellation, empty feed fixture는 구현되어 있다.
 - 생성된 Gradle dependency lock과 pin된 Spring Boot/Kotlin/iCal4j zone data를 올릴 때
   golden fixture를 검토하는 update 절차.
 - internal bearer secret 발급·회전 절차, public base URL, TLS와 reverse-proxy path redaction 설정.
-- Flyway schema, unique/index/transaction 경계, rebuild 동시성 lock과 backup/restore 절차.
+- backup/restore 절차와 실제 환경의 restore drill. Flyway schema, inbox/item/projection
+  transaction rollback, rebuild lock과 subscription CAS는 Testcontainers로 검증한다.
 - snapshot request body 상한과 `413` mapping, public rate limit 수치와 access audit retention.
   token path 또는 token digest를 access log, rate-limit key, metric label이나 audit payload로
   남기지 않는 redaction 방법.
-- 현재 scaffold에서 실제로 실행한 build/test 명령과 운영 runbook.
+- 실제 배포 환경의 운영 runbook. 로컬 PostgreSQL 실행, health 확인과 build/test 명령은
+  README에 기록되어 있다.

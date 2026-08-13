@@ -246,8 +246,8 @@ class MvpHttpFlowTest @Autowired constructor(
             utcSnapshot(EVENT_2, revision = 1, summary = "Too fine"),
             "2026-08-11T00:20:00.000000200Z",
         )
-        val nextMicrosecond = withSourceUpdatedAt(
-            utcSnapshot(EVENT_3, revision = 1, summary = "Valid precision"),
+        val correctedRetry = withSourceUpdatedAt(
+            utcSnapshot(EVENT_2, revision = 1, summary = "Valid precision"),
             "2026-08-11T00:20:00.000001100Z",
         )
 
@@ -259,7 +259,17 @@ class MvpHttpFlowTest @Autowired constructor(
         )
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("SOURCE_REVISION_CONFLICT"))
-        ingest(nextMicrosecond, "APPLIED")
+
+        mockMvc.perform(
+            authorizedPost("/internal/api/v1/schedule-snapshots")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(sameMicrosecond),
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("SOURCE_REVISION_CONFLICT"))
+
+        ingest(correctedRetry, "APPLIED")
+        ingest(correctedRetry, "DUPLICATE")
     }
 
     @Test

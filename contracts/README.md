@@ -42,6 +42,15 @@ MVP scaffold에 구현되어 있지만 BATON producer 연동이나 production re
 
 ## Golden calendar
 
-`golden/season-utc.ics.b64`는 iCal4j가 만든 UTC active item의 canonical bytes를 Base64로
-보관한다. test가 decode한 뒤 CRLF와 마지막 CRLF까지 byte 단위로 비교한다. zoned local/DST,
-cancellation, empty feed와 추가 escaping/folding fixture는 PRD-0002의 release gate에 남아 있다.
+아래 파일은 pin된 iCal4j writer가 한 번 생성한 canonical bytes를 Base64로 고정해 보관한다.
+test는 fixture를 다시 만들거나 덮어쓰지 않고 decode한 뒤 CRLF와 마지막 CRLF까지 byte 단위로
+비교한다.
+
+- `golden/season-utc.ics.b64`: UTC active item, TEXT escaping과 stable identity
+- `golden/season-empty.ics.b64`: `VEVENT`와 `VTIMEZONE`이 없는 empty season feed
+- `golden/season-zoned-midnight-cancellation.ics.b64`: `America/New_York` DST 종료와 자정을
+  통과하는 zoned local cancellation tombstone
+
+iCal4j 또는 timezone data를 올려 fixture bytes가 바뀌면 자동 갱신하지 않고 diff와 calendar
+호환성 영향을 먼저 검토한다. 추가 escaping/folding fixture는 PRD-0002의 release gate에 남아
+있다.

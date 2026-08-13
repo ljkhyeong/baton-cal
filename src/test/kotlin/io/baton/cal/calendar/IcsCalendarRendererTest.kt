@@ -16,6 +16,18 @@ class IcsCalendarRendererTest {
     private val seasonId = UUID.fromString("11111111-1111-1111-1111-111111111111")
 
     @Test
+    fun `empty feed matches canonical golden without timezone or event components`() {
+        val rendered = renderer.render(seasonId, emptyList())
+        val text = rendered.bytes.toString(StandardCharsets.UTF_8)
+
+        assertThat(rendered.bytes).isEqualTo(goldenFixture("season-empty.ics.b64"))
+        assertThat(rendered.itemCount).isZero()
+        assertThat(rendered.lastModified).isEqualTo(Instant.EPOCH)
+        assertThat(text).doesNotContain("BEGIN:VEVENT", "BEGIN:VTIMEZONE")
+        assertCanonicalCrLf(rendered.bytes)
+    }
+
+    @Test
     fun `UTC snapshot is rendered deterministically with stable identity and revision`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -35,11 +47,8 @@ class IcsCalendarRendererTest {
         val first = renderer.render(seasonId, listOf(item))
         val rebuilt = renderer.render(seasonId, listOf(item))
         val text = first.bytes.toString(StandardCharsets.UTF_8).unfolded()
-        val golden = Base64.getMimeDecoder().decode(
-            Files.readString(Path.of("contracts/golden/season-utc.ics.b64")),
-        )
 
-        assertThat(first.bytes).isEqualTo(golden)
+        assertThat(first.bytes).isEqualTo(goldenFixture("season-utc.ics.b64"))
         assertThat(first.bytes).isEqualTo(rebuilt.bytes)
         assertThat(first.etag).isEqualTo(rebuilt.etag)
         assertThat(first.lastModified).isEqualTo(Instant.parse("2026-08-11T12:34:56Z"))
@@ -53,32 +62,44 @@ class IcsCalendarRendererTest {
     }
 
     @Test
-    fun `zoned local snapshot preserves wall time and emits timezone transitions`() {
+    fun `zoned local cancellation across DST and midnight matches canonical golden`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             seasonId = seasonId,
-            revision = 2,
+            revision = 9,
             status = CalendarItemStatus.CANCELLED,
-            summary = "DST boundary game",
+            summary = "DST midnight cancellation",
             description = null,
             location = null,
             schedule = ScheduleWindow.ZonedLocal(
-                start = LocalDateTime.parse("2026-11-01T01:30:00"),
+                start = LocalDateTime.parse("2026-10-31T23:30:00"),
                 end = LocalDateTime.parse("2026-11-01T02:30:00"),
                 zoneId = "America/New_York",
             ),
-            sourceUpdatedAt = Instant.parse("2026-10-01T00:00:00Z"),
+            sourceUpdatedAt = Instant.parse("2026-10-31T12:34:56.987Z"),
         )
 
         val rendered = renderer.render(seasonId, listOf(item))
         val text = rendered.bytes.toString(StandardCharsets.UTF_8).unfolded()
 
+        assertThat(rendered.bytes)
+            .isEqualTo(goldenFixture("season-zoned-midnight-cancellation.ics.b64"))
+        assertThat(rendered.itemCount).isOne()
+        assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-10-31T12:34:56Z"))
         assertThat(text).contains("BEGIN:VTIMEZONE\r\n")
         assertThat(text).contains("TZID:America/New_York\r\n")
         assertThat(text).contains("BEGIN:DAYLIGHT\r\n")
         assertThat(text).contains("BEGIN:STANDARD\r\n")
-        assertThat(text).contains("DTSTART;TZID=America/New_York:20261101T013000\r\n")
+        assertThat(text).contains("UID:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@cal.baton\r\n")
+        assertThat(text).contains("SEQUENCE:9\r\n")
         assertThat(text).contains("STATUS:CANCELLED\r\n")
+        assertThat(text).contains("DTSTART;TZID=America/New_York:20261031T233000\r\n")
+        assertThat(text).contains("DTEND;TZID=America/New_York:20261101T023000\r\n")
+        assertThat(text).doesNotContain(
+            "DTSTART;TZID=America/New_York:20261031T233000Z",
+            "DTEND;TZID=America/New_York:20261101T023000Z",
+        )
+        assertCanonicalCrLf(rendered.bytes)
     }
 
     @Test
@@ -145,6 +166,17 @@ class IcsCalendarRendererTest {
         ),
         sourceUpdatedAt = Instant.parse("2026-01-01T00:00:00Z"),
     )
+
+    private fun goldenFixture(name: String): ByteArray = Base64.getMimeDecoder().decode(
+        Files.readString(Path.of("contracts/golden", name)),
+    )
+
+    private fun assertCanonicalCrLf(bytes: ByteArray) {
+        val text = bytes.toString(StandardCharsets.UTF_8)
+
+        assertThat(text).endsWith("\r\n")
+        assertThat(text.replace("\r\n", "")).doesNotContain("\r", "\n")
+    }
 
     private fun String.unfolded(): String = replace("\r\n ", "")
 }

@@ -55,7 +55,28 @@ CAL이 소유하지 않는다.
 - Kotlin 2.3.21, Java 25, Gradle 9.6.1
 - Spring Boot 4.1.0, Spring MVC, `JdbcClient`, Bean Validation
 - PostgreSQL 18.4, Flyway, Testcontainers
-- iCal4j 4.2.5, Apache Commons Codec
+- iCal4j 4.2.5
+
+## 로컬 실행
+
+Java 25와 Docker가 필요하다. 저장소 루트에서 PostgreSQL을 먼저 시작한다.
+
+```shell
+docker compose up -d postgres
+```
+
+그다음 로컬 전용 internal bearer를 환경 변수로 주입해 애플리케이션을 실행한다.
+
+```shell
+BATON_CAL_INTERNAL_TOKEN=local-development-internal-token-change-me ./gradlew --no-daemon bootRun
+```
+
+기본 health endpoint는 `http://localhost:8080/actuator/health`이며 PostgreSQL은 로컬
+loopback의 `5432` 포트에만 바인딩된다. 종료할 때는 다음 명령을 사용한다.
+
+```shell
+docker compose down
+```
 
 Docker daemon이 실행 중인 환경에서 전체 검증은 다음 명령으로 실행한다.
 

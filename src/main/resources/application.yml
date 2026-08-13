@@ -4,6 +4,8 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+    mapper:
+      allow-coercion-of-scalars: false
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/baton_cal}
     username: ${DATABASE_USERNAME:baton_cal}
@@ -20,12 +22,16 @@ server:
 management:
   endpoint:
     health:
+      show-details: never
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
 
 baton:
   cal:

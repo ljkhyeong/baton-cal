@@ -67,8 +67,8 @@ conditional GET은 canonical bytes와 PostgreSQL projection state만으로 처�
   space를 포함한 모든 물리 줄이 75 octet 이하가 되게 한다.
 - `TimeZoneRegistryImpl`이 pin된 iCal4j zone definition으로 사용하는 TZID의 전체 `VTIMEZONE`을
   만든다. JVM `ZoneRules`를 복제해 transition component를 직접 만들지 않는다.
-- SHA-256 lowercase hex는 Apache Commons Codec `DigestUtils`를 쓴다.
-- iCal4j direct version, Commons Codec, Java 25 toolchain과 transitive dependency는 build와
+- SHA-256 lowercase hex는 Java `MessageDigest`와 `HexFormat`을 쓴다.
+- iCal4j direct version, Java 25 toolchain과 transitive dependency는 build와
   `gradle.lockfile`에서 pin한다. TZDB update/golden fixture 절차는 production release 전
   Deferred 항목이다.
 - source `ZONED_LOCAL` field는 Java `ZoneId.getAvailableZoneIds()`의 named TZDB id로 검증하고
