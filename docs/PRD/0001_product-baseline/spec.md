@@ -1,61 +1,61 @@
 # PRD-0001: BATON CAL 제품 기준
 
-- 상태: Draft
-- 범위: pull-only iCalendar projection MVP
+- 상태: 초안
+- 범위: 가져오기 전용 iCalendar 투영 MVP
 
 ## 문제
 
-BATON 사용자는 시즌 일정, 운영 회차와 실제 마감을 기존 calendar client에서도 확인할
-필요가 있다. BATON의 시간 규칙을 외부 client나 새 서비스가 다시 계산하면 timezone과
+BATON 사용자는 시즌 일정, 운영 회차와 실제 마감을 기존 캘린더 클라이언트에서도 확인할
+필요가 있다. BATON의 시간 규칙을 외부 클라이언트나 새 서비스가 다시 계산하면 시간대와
 변경·취소 의미가 서로 달라질 수 있다.
 
 ## 목표
 
-- BATON이 확정한 schedule snapshot을 멱등하게 수신한다.
-- 폐기 가능한 read-only subscription으로 표준 `.ics` feed를 제공한다.
-- 생성, 수정, 취소와 timezone 의미를 안정적인 iCalendar identity로 표현한다.
-- conditional GET과 projection rebuild를 지원한다.
+- BATON이 확정한 일정 스냅샷을 멱등하게 수신한다.
+- 폐기 가능한 읽기 전용 구독으로 표준 `.ics` 피드를 제공한다.
+- 생성, 수정, 취소와 시간대 의미를 안정적인 iCalendar 식별자로 표현한다.
+- 조건부 GET과 투영 재구축을 지원한다.
 
 ## 비목표
 
 - Google/Microsoft Calendar API의 양방향 동기화
-- BATON의 recurrence, round 또는 deadline 재계산
-- calendar client에서 BATON 원본을 수정하는 기능
-- 알림 provider 호출, ROUND grant 발급 또는 GO 링크 생명주기 관리
-- workspace key나 Account session을 subscription credential로 재사용
+- BATON의 반복 규칙, 회차 또는 마감 재계산
+- 캘린더 클라이언트에서 BATON 원본을 수정하는 기능
+- 알림 제공자 호출, ROUND 권한 증표 발급 또는 GO 링크 생명주기 관리
+- 워크스페이스 키나 계정 세션을 구독 자격 증명으로 재사용
 
 ## 핵심 불변식
 
-1. 하나의 BATON calendar item은 lifecycle 전체에서 안정적인 `UID`를 가진다.
-2. source revision이 전진할 때만 `SEQUENCE`가 전진한다.
-3. 삭제·보관·시즌 종료의 채택된 의미는 필요한 기간 동안 취소 tombstone으로 남는다.
-4. token 원문은 persistence, 로그와 metric label에 저장하지 않는다.
-5. CAL은 source schedule을 계산하거나 최종 권한을 판정하지 않는다.
-6. 동일 projection은 동일한 `ETag`와 calendar representation을 만든다.
+1. 하나의 BATON 캘린더 항목은 생명주기 전체에서 안정적인 `UID`를 가진다.
+2. 원본 개정 번호가 전진할 때만 `SEQUENCE`가 전진한다.
+3. 삭제·보관·시즌 종료의 채택된 의미는 필요한 기간 동안 취소 표식으로 남는다.
+4. 토큰 원문은 저장소, 로그와 메트릭 레이블에 저장하지 않는다.
+5. CAL은 원본 일정을 계산하거나 최종 권한을 판정하지 않는다.
+6. 동일한 투영은 동일한 `ETag`와 캘린더 표현 결과를 만든다.
 
 ## 첫 사용자 흐름
 
-1. 권한 있는 사용자가 BATON에서 calendar subscription 생성을 요청한다.
-2. BATON이 권한과 scope를 판단하고 CAL에 opaque provisioning command를 전달한다.
-3. CAL은 한 번만 보이는 고엔트로피 token을 발급하고 hash만 저장한다.
-4. calendar client가 secret URL을 주기적으로 GET한다.
-5. CAL은 현재 projection을 `.ics`로 반환하거나 validator가 같으면 `304`를 반환한다.
-6. 사용자는 BATON에서 subscription을 폐기하거나 회전한다.
+1. 권한 있는 사용자가 BATON에서 캘린더 구독 생성을 요청한다.
+2. BATON이 권한과 범위를 판단하고 CAL에 불투명한 구독 생성 명령을 전달한다.
+3. CAL은 한 번만 보이는 고엔트로피 토큰을 발급하고 해시만 저장한다.
+4. 캘린더 클라이언트가 비밀 URL을 주기적으로 GET한다.
+5. CAL은 현재 투영을 `.ics`로 반환하거나 조건부 요청 검증 값이 같으면 `304`를 반환한다.
+6. 사용자는 BATON에서 구독을 폐기하거나 회전한다.
 
 ## MVP 수용 기준
 
-- 같은 snapshot replay가 중복 event를 만들지 않는다.
-- out-of-order revision이 최신 projection을 되돌리지 않는다.
+- 같은 스냅샷 재전달이 중복 이벤트를 만들지 않는다.
+- 순서가 뒤바뀐 개정 번호가 최신 투영을 되돌리지 않는다.
 - 생성·수정·취소가 안정적인 `UID`와 기대한 `SEQUENCE`로 표현된다.
-- DST, 자정, all-day가 아닌 local datetime과 UTC instant fixture를 검증한다.
-- 특수문자 escaping, line folding과 content type을 compatibility test로 검증한다.
-- token 폐기 직후 기존 URL이 더 이상 feed를 반환하지 않는다.
-- BATON 장애와 CAL 장애가 상대 서비스의 source transaction을 rollback하지 않는다.
+- DST, 자정, 종일 일정이 아닌 현지 날짜-시간과 UTC 시각 픽스처를 검증한다.
+- 특수문자 이스케이프, 줄 접기와 콘텐츠 유형을 호환성 테스트로 검증한다.
+- 토큰 폐기 직후 기존 URL이 더 이상 피드를 반환하지 않는다.
+- BATON 장애와 CAL 장애가 상대 서비스의 원본 트랜잭션을 롤백하지 않는다.
 
 ## 미결정 사항
 
-- feed의 team/season/account scope
-- provisioning authentication과 one-time token 반환 계약
-- source event envelope와 cancellation retention
-- storage와 application 기술 스택
-- rate limit, cache policy와 access audit retention
+- 피드의 팀/시즌/계정 범위
+- 구독 생성 인증과 일회성 토큰 반환 계약
+- 원본 이벤트 봉투와 취소 정보 보존
+- 저장소와 애플리케이션 기술 스택
+- 요청 제한, 캐시 정책과 접근 감사 기록 보존

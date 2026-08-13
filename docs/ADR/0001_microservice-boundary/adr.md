@@ -1,42 +1,42 @@
 # ADR-0001: BATON CAL 마이크로서비스 경계
 
-- 상태: Accepted
+- 상태: 채택됨
 - 결정일: 2026-08-11
 
 ## 맥락
 
-BATON은 시즌 timezone, 반복 일정, 운영 회차와 실제 deadline의 권위 있는 원본이다.
-Calendar client는 pull, caching, token 폐기와 취소 동기화라는 별도 실패·보안 수명주기를
+BATON은 시즌 시간대, 반복 일정, 운영 회차와 실제 마감의 권위 있는 원본이다.
+캘린더 클라이언트는 가져오기, 캐싱, 토큰 폐기와 취소 동기화라는 별도 실패·보안 수명주기를
 가진다.
 
 ## 결정
 
-BATON CAL을 pull-only iCalendar projection 서비스로 둔다. CAL은 BATON이 확정한 snapshot을
-수신하며 recurrence나 deadline을 다시 계산하지 않는다.
+BATON CAL을 가져오기 전용 iCalendar 투영 서비스로 둔다. CAL은 BATON이 확정한 스냅샷을
+수신하며 반복 일정이나 마감을 다시 계산하지 않는다.
 
-CAL은 hashed subscription token, feed projection, 안정적인 `UID`와 `SEQUENCE`, cancellation
-tombstone, conditional GET와 rebuild를 소유한다. subscription 발급 가능 여부와 원본 접근
+CAL은 해시된 구독 토큰, 캘린더 피드 투영, 안정적인 `UID`와 `SEQUENCE`, 취소 표식,
+조건부 GET와 재구축을 소유한다. 구독 발급 가능 여부와 원본 접근
 권한은 BATON이 계속 소유한다.
 
-첫 버전에는 provider API를 이용한 양방향 calendar synchronization을 포함하지 않는다.
+첫 버전에는 제공자 API를 이용한 양방향 캘린더 동기화를 포함하지 않는다.
 
 ## 결과
 
 장점:
 
-- calendar pull traffic과 cache lifecycle을 BATON mutation 경로에서 분리한다.
-- token 폐기·회전과 calendar compatibility를 독립적으로 운영할 수 있다.
-- BATON의 시간 규칙을 단일 source of truth로 유지한다.
+- 캘린더 가져오기 트래픽과 캐시 수명주기를 BATON 변경 경로에서 분리한다.
+- 토큰 폐기·회전과 캘린더 호환성을 독립적으로 운영할 수 있다.
+- BATON의 시간 규칙을 단일 기준 원본으로 유지한다.
 
 비용:
 
-- snapshot event, revision과 cancellation retention 계약이 필요하다.
-- secret URL 유출을 고려한 token 보안과 rate limit이 필요하다.
-- calendar client별 갱신 지연과 eventual consistency를 받아들여야 한다.
+- 스냅샷 이벤트, 원본 개정 번호와 취소 보존 기간 계약이 필요하다.
+- 비밀 URL 유출을 고려한 토큰 보안과 요청률 제한이 필요하다.
+- 캘린더 클라이언트별 갱신 지연과 최종 일관성을 받아들여야 한다.
 
 ## 보류한 대안
 
-- BATON 내부 `.ics` endpoint: 초기 구현은 단순하지만 pull traffic, token과 cache 정책이
+- BATON 내부 `.ics` 엔드포인트: 초기 구현은 단순하지만 가져오기 트래픽, 토큰과 캐시 정책이
   본체에 결합된다.
-- Google/Microsoft provider adapter: 더 풍부하지만 OAuth credential과 양방향 conflict까지
+- Google/Microsoft 제공자 어댑터: 더 풍부하지만 OAuth 자격 증명과 양방향 충돌까지
   첫 MVP에 포함해 경계와 운영 위험을 크게 만든다.

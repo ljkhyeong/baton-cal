@@ -1,34 +1,34 @@
-# HANDOFF
+# 인수인계
 
 진행 중 작업 없음.
 
 ## 현재 구현
 
-- PRD-0002와 ADR-0002가 season-only MVP 계약과 기술 스택의 기준이다.
-- schedule snapshot ingest, duplicate/stale/conflict 분류와 원자적 projection rebuild가 구현되어 있다.
-- digest-only subscription create/rotate/revoke와 public conditional `.ics` GET이 구현되어 있다.
-- iCal4j model/serializer, PostgreSQL/Flyway와 Testcontainers integration test를 사용한다.
-- strict timestamp shape와 microsecond canonicalization, Java/iCal4j timezone 교집합을 검증한다.
-- empty/DST/midnight/cancellation golden, transaction rollback/retry와 subscription CAS 경쟁을 검증한다.
-- credential 응답은 `no-store`이며 health/readiness와 로컬 PostgreSQL 실행 절차가 준비되어 있다.
+- PRD-0002와 ADR-0002가 시즌 단위 MVP 계약과 기술 스택의 기준이다.
+- 일정 스냅샷 수신, 중복·낮은 개정 번호·충돌 분류와 원자적 투영 재구축이 구현되어 있다.
+- 해시만 저장하는 구독 생성·회전·폐기와 공개 조건부 `.ics` GET이 구현되어 있다.
+- iCal4j 모델과 직렬화 도구, PostgreSQL·Flyway와 Testcontainers 통합 테스트를 사용한다.
+- 엄격한 타임스탬프 형식과 마이크로초 정규화, Java와 iCal4j 시간대의 교집합을 검증한다.
+- 빈 피드·DST·자정·취소 골든 픽스처, 트랜잭션 롤백·재시도와 구독 CAS 경쟁을 검증한다.
+- 자격 증명 응답은 `no-store`이며 상태·준비 상태 검사와 로컬 PostgreSQL 실행 절차가 준비되어 있다.
 
 ## 검증
 
 - `./gradlew --no-daemon test`: 37개 테스트 성공 (2026-08-13)
-- `./gradlew --no-daemon bootJar`: executable jar 생성 성공 (2026-08-13)
+- `./gradlew --no-daemon bootJar`: 실행 가능한 JAR 생성 성공 (2026-08-13)
 
 ## 다음 작업
 
-1. BATON producer가 PRD-0002 JSON/revision/cancellation 계약을 지키는 consumer-driven fixture를 연결한다.
-2. internal bearer 발급·회전, TLS, reverse-proxy token path redaction과 request size limit을 정한다.
-3. 추가 Unicode escaping/folding edge fixture와 dependency update 절차를 보강한다.
-4. backup/restore와 배포 runbook을 실제 환경에서 검증한다.
+1. BATON 발행 측이 PRD-0002의 JSON·개정 번호·취소 계약을 지키는 소비자 주도 픽스처를 연결한다.
+2. 내부 베어러 발급·회전, TLS, 역방향 프록시의 토큰 경로 삭제 처리와 요청 크기 제한을 정한다.
+3. 추가 유니코드 이스케이프·줄 접기 경계 픽스처와 의존성 갱신 절차를 보강한다.
+4. 백업·복원과 배포 운영 절차서를 실제 환경에서 검증한다.
 
 ## 현재 제한
 
-- BATON producer와 아직 연결하지 않았다.
-- public deployment, production secret 운영과 rate limit은 준비되지 않았다.
-- 현재 구현은 MVP이며 production readiness 완료를 뜻하지 않는다.
+- BATON 발행 측과 아직 연결하지 않았다.
+- 공개 배포, 운영 환경 비밀 값 관리와 호출량 제한은 준비되지 않았다.
+- 현재 구현은 MVP이며 운영 준비 완료를 뜻하지 않는다.
 
 ## 저장소
 

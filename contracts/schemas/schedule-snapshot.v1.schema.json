@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cal.baton/contracts/schemas/schedule-snapshot.v1.schema.json",
   "title": "ScheduleSnapshotV1",
-  "description": "A complete BATON calendar item snapshot at one source revision.",
+  "description": "하나의 원본 개정 번호에 해당하는 완전한 BATON 캘린더 항목 스냅샷입니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,40 +1,40 @@
-# BATON CAL Agent Guide
+# BATON CAL 에이전트 안내서
 
 ## 시작 순서
 
 - 작업 전에 `HANDOFF.md`, `README.md`와 영향받는 PRD/ADR을 읽는다.
-- 구현되지 않은 기능, route, event와 배포 방식을 완료된 것처럼 기록하지 않는다.
+- 구현되지 않은 기능, 경로, 이벤트와 배포 방식을 완료된 것처럼 기록하지 않는다.
 - 계약이나 구조를 바꾸면 같은 변경에서 기준 문서를 갱신한다.
 
 ## 서비스 경계
 
-- BATON은 timezone, recurrence, schedule, round, deadline과 최종 권한을 소유한다.
-- CAL은 확정된 snapshot을 iCalendar로 투영하며 원본 일정을 다시 계산하지 않는다.
-- RELAY는 push delivery, GO는 app link, ROUND는 room 참여권을 소유한다.
-- 다른 서비스의 데이터베이스, entity, session, workspace key와 credential을 공유하지 않는다.
+- BATON은 시간대, 반복 규칙, 일정, 회차, 마감과 최종 권한을 소유한다.
+- CAL은 확정된 스냅샷을 iCalendar로 투영하며 원본 일정을 다시 계산하지 않는다.
+- RELAY는 푸시 전달, GO는 앱 링크, ROUND는 방 참여권을 소유한다.
+- 다른 서비스의 데이터베이스, 엔티티, 세션, 작업공간 키와 자격 증명을 공유하지 않는다.
 
 ## 구현 원칙
 
-- source event는 after-commit, at-least-once 전달을 전제로 멱등하게 처리한다.
-- iCalendar `UID`는 안정적이어야 하고 source 변경은 단조 증가하는 revision을 통해
+- 원천 이벤트는 트랜잭션 커밋 이후 최소 한 번 전달된다는 전제로 멱등하게 처리한다.
+- iCalendar `UID`는 안정적이어야 하고 원본 변경은 단조 증가하는 개정 번호를 통해
   `SEQUENCE`에 반영한다.
-- 삭제를 즉시 망각하지 않고 calendar client가 관측할 수 있는 cancellation tombstone으로
+- 삭제를 즉시 망각하지 않고 캘린더 클라이언트가 관측할 수 있는 취소 표식으로
   표현한다.
-- timezone은 IANA zone과 명시적인 instant/local 의미를 보존한다.
-- 시간 의존 코드는 `Clock`을 주입하고 DST·자정 경계를 fixed-clock 테스트로 검증한다.
-- subscription token 원문, workspace key, session과 grant를 저장·로그·metric label에 넣지
+- 시간대는 IANA 시간대 식별자와 명시적인 절대 시각·지역 시각 의미를 보존한다.
+- 시간 의존 코드는 `Clock`을 주입하고 DST·자정 경계를 고정 시계 테스트로 검증한다.
+- 구독 토큰 원문, 작업공간 키, 세션과 권한 증서를 저장소·로그·메트릭 레이블에 넣지
   않는다.
-- 조건부 GET의 validator는 동일 projection에서 결정적으로 계산한다.
+- 조건부 GET의 검증 값은 동일한 투영에서 결정적으로 계산한다.
 
 ## 문서와 검증
 
 - 제품 동작은 `docs/PRD/`, 장기 구조 결정은 `docs/ADR/`에 기록한다.
-- calendar compatibility test에는 생성, 수정, 취소, timezone과 escaping을 포함한다.
-- projection test에는 duplicate, out-of-order, rebuild와 token rotation을 포함한다.
-- 실제 실행 명령이 생기기 전에는 존재하지 않는 build나 test 명령을 기록하지 않는다.
+- 캘린더 호환성 테스트에는 생성, 수정, 취소, 시간대와 이스케이프를 포함한다.
+- 투영 테스트에는 중복, 순서가 뒤바뀐 전달, 재구축과 토큰 회전을 포함한다.
+- 실제 실행 명령이 생기기 전에는 존재하지 않는 빌드나 테스트 명령을 기록하지 않는다.
 
-## Git
+## 깃
 
 - 커밋 제목은 `종류: 한글 요약` 형식을 사용한다.
 - 종류는 `기능`, `수정`, `문서`, `테스트`, `설정`, `리팩터` 중에서 고른다.
-- 기능 작업 브랜치는 기본적으로 `codex/` prefix를 사용한다.
+- 기능 작업 브랜치는 기본적으로 `codex/` 접두사를 사용한다.
