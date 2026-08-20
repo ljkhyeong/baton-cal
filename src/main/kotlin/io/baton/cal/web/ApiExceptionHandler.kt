@@ -5,10 +5,12 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import tools.jackson.core.exc.StreamConstraintsException
 
 @RestControllerAdvice
 class ApiExceptionHandler : ResponseEntityExceptionHandler() {
@@ -16,6 +18,25 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     fun handleApiException(exception: ApiException): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(exception.status)
         .body(ApiErrorResponse(exception.code, exception.message))
+
+    override fun handleHttpMessageNotReadable(
+        exception: HttpMessageNotReadableException,
+        headers: HttpHeaders,
+        statusCode: HttpStatusCode,
+        request: WebRequest,
+    ): ResponseEntity<Any>? {
+        if (exception.contains(StreamConstraintsException::class.java)) {
+            return ResponseEntity(
+                ApiErrorResponse(
+                    code = "REQUEST_TOO_LARGE",
+                    message = "request body exceeds the maximum size",
+                ),
+                headers,
+                HttpStatus.CONTENT_TOO_LARGE,
+            )
+        }
+        return super.handleHttpMessageNotReadable(exception, headers, statusCode, request)
+    }
 
     override fun handleExceptionInternal(
         exception: Exception,

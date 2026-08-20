@@ -19,7 +19,10 @@ class InternalApiAuthenticationFilter(
     properties: CalProperties,
     private val objectMapper: ObjectMapper,
 ) : OncePerRequestFilter() {
-    private val expectedToken = properties.internalToken.toByteArray(StandardCharsets.UTF_8)
+    private val expectedTokens = listOfNotNull(
+        properties.internalToken,
+        properties.previousInternalToken,
+    ).map { it.toByteArray(StandardCharsets.UTF_8) }
 
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -32,7 +35,7 @@ class InternalApiAuthenticationFilter(
             ?.substring(BEARER_PREFIX.length)
             ?.toByteArray(StandardCharsets.UTF_8)
 
-        if (presented == null || !MessageDigest.isEqual(expectedToken, presented)) {
+        if (presented == null || !matchesExpectedToken(presented)) {
             response.status = HttpServletResponse.SC_UNAUTHORIZED
             response.contentType = MediaType.APPLICATION_JSON_VALUE
             objectMapper.writeValue(
@@ -46,6 +49,14 @@ class InternalApiAuthenticationFilter(
         }
 
         filterChain.doFilter(request, response)
+    }
+
+    private fun matchesExpectedToken(presented: ByteArray): Boolean {
+        var matched = false
+        expectedTokens.forEach { expected ->
+            matched = MessageDigest.isEqual(expected, presented) or matched
+        }
+        return matched
     }
 
     private companion object {

@@ -145,19 +145,57 @@ class PersistenceRepositoryTest @Autowired constructor(
             id = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
             seasonId = SEASON_ID,
             tokenHash = HASH_A,
+            credentialGeneration = INITIAL_CREDENTIAL_GENERATION,
             status = CalendarSubscriptionStatus.ACTIVE,
         )
 
         subscriptionRepository.insert(subscription)
         assertThat(subscriptionRepository.findById(subscription.id)).isEqualTo(subscription)
         assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_A,
+                INITIAL_CREDENTIAL_GENERATION,
+            ),
+        ).isNotNull()
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_A,
+                REPLACEMENT_CREDENTIAL_GENERATION,
+            ),
+        ).isNull()
+        assertThat(
             subscriptionRepository.rotate(
                 id = subscription.id,
                 expectedTokenHash = HASH_A,
                 replacementTokenHash = HASH_B,
+                replacementCredentialGeneration = REPLACEMENT_CREDENTIAL_GENERATION,
             ),
         ).isTrue()
-        assertThat(subscriptionRepository.findById(subscription.id)?.tokenHash).isEqualTo(HASH_B)
+        assertThat(subscriptionRepository.findById(subscription.id))
+            .isEqualTo(
+                subscription.copy(
+                    tokenHash = HASH_B,
+                    credentialGeneration = REPLACEMENT_CREDENTIAL_GENERATION,
+                ),
+            )
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_A,
+                INITIAL_CREDENTIAL_GENERATION,
+            ),
+        ).isNull()
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_B,
+                INITIAL_CREDENTIAL_GENERATION,
+            ),
+        ).isNull()
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_B,
+                REPLACEMENT_CREDENTIAL_GENERATION,
+            ),
+        ).isNotNull()
 
         assertThat(
             subscriptionRepository.revoke(
@@ -167,6 +205,12 @@ class PersistenceRepositoryTest @Autowired constructor(
         ).isTrue()
         assertThat(subscriptionRepository.findById(subscription.id)?.status)
             .isEqualTo(CalendarSubscriptionStatus.REVOKED)
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                HASH_B,
+                REPLACEMENT_CREDENTIAL_GENERATION,
+            ),
+        ).isNull()
         assertThat(
             subscriptionRepository.revoke(
                 subscription.id,
@@ -276,6 +320,10 @@ class PersistenceRepositoryTest @Autowired constructor(
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
         val OTHER_SEASON_ID: UUID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc")
         val SOURCE_ITEM_ID: UUID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        val INITIAL_CREDENTIAL_GENERATION: UUID =
+            UUID.fromString("10000000-0000-0000-0000-000000000001")
+        val REPLACEMENT_CREDENTIAL_GENERATION: UUID =
+            UUID.fromString("20000000-0000-0000-0000-000000000002")
         const val HASH_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         const val HASH_C = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

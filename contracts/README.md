@@ -24,14 +24,82 @@ MVP 애플리케이션 골격에 구현되어 있지만 BATON 생산자 연동�
 - 필드 간 비교, 개정 번호 순서, 멱등성, HTTP 상태, 토큰과 iCalendar 의미는
   PRD-0002가 정식 기준이다.
 - 예시는 스키마와 의미를 설명하지만 새로운 규칙을 만들지 않는다.
+- `schedule-snapshot.zoned-active-r0.json`, `schedule-snapshot.zoned-active-r2.json`,
+  `schedule-snapshot.zoned-cancelled.json`은 한 항목의 `ACTIVE` 개정 번호 0, 개정 번호 간격이 있는
+  `ACTIVE` 개정 번호 2, `CANCELLED` 개정 번호 3 생명주기를 구성한다.
 - 소비자는 `additionalProperties: false`를 전제로 한다. 필드나 열거형을 추가하려면 새 스키마
   버전과 생산자·소비자 계약 픽스처가 필요하다.
 - v1 절대 시각은 명시적 오프셋이 있는 RFC 3339이고 로컬 날짜·시간은 오프셋 없이 보낸다.
-  CAL은 타임스탬프를 마이크로초 정밀도로 정규화하고 iCalendar DATE-TIME은 초 단위로
-  내림한다.
+  초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
+  정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
 - JSON Schema만으로 표현하지 못하는 `end > start`, NFC, Java가 제공하는 이름 있는 TZDB 시간대,
   항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
   관계는 애플리케이션 검증 대상이다.
+
+## JSON 문서 자원 경계
+
+JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 검증한다. 이와 별도로 CAL의 JSON
+파서는 공백과 구조를 포함한 전체 요청 문서를 128 KiB(131,072바이트)로 제한한다. 이 상한은
+JSON Schema에 표현하는 필드 제약이 아니라, 큰 문서를 DTO로 만들기 전에 적용하는 자원 경계다.
+
+전체 문서 상한을 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
+반환한다.
+
+```json
+{"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}
+```
+
+## 자동 검증과 BATON 연동
+
+`ContractSchemaSupport`가 Draft 2020-12 스키마 로딩과 검증 결과 보고를 한 곳에서 맡는다.
+`ContractArtifactsTest`는 이를 사용해 Docker 없이 모든 JSON 예시를 검증하고, UUID, RFC 3339
+시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 일정 생명주기 예시는 실제 CAL
+내부 HTTP 경로에서도 `APPLIED`, `APPLIED`, `APPLIED`, 정확한 재전달의 `DUPLICATE` 순서로
+검증한다. 기존 전체 HTTP 흐름을 실행하는 `MvpHttpFlowTest`는 같은 스키마 지원 코드를 재사용해
+MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을 각 응답 스키마에
+직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
+유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다.
+
+이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 실제 BATON 직렬화기,
+전역 `sourceItemId` 비재사용, 원본 트랜잭션 커밋 이후 발행과 삭제·보관 시 완전한
+`CANCELLED` 발행은 BATON 저장소가 이 버전의 계약 팩을 고정해 생산자 테스트로 실행한 뒤에만
+검증된 것으로 본다.
+
+## 계약 팩 생성과 배포
+
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.1`이다. BATON 생산자 구현이
+이 계약을 아직 검증하지 않았으므로 정식 `1.0.0`이 아닌 RC로 둔다. 계약 팩은 Gradle 표준 `Zip`
+작업으로 생성한다.
+
+```shell
+./gradlew --no-daemon contractsZip
+```
+
+`build/distributions/baton-cal-contracts-1.0.0-rc.1.zip`에는 다음 기준만 들어간다.
+
+- `contracts/**`: JSON Schema, 예시, 정규 iCalendar 골든과 이 안내서
+- `docs/PRD/0002_mvp-contract/spec.md`: JSON Schema로 표현하지 못하는 필드 간 의미, HTTP 상태,
+  토큰과 iCalendar 규칙
+
+작업은 파일 시각을 보존하지 않고 재현 가능한 항목 순서와 Unix 권한을 고정하므로 같은 입력에서
+같은 ZIP 바이트를 만든다. 계약을 JVM 구현에 결합하는 공유 DTO JAR은 만들지 않는다. 압축, 체크섬이나
+매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과 GitHub Actions가 제공하는
+artifact digest를 사용한다.
+
+ZIP 내부의 `contracts/VERSION`, 파일명과 예정 태그 `contracts-v1.0.0-rc.1`은 모두 같은 버전을
+가리켜야 한다. BATON 생산자 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면 동일한 계약
+의미의 안정 버전 `1.0.0`으로 승격한다. 의미 변경이 필요하면 게시된 RC 파일을 덮어쓰지 않고
+`contracts/VERSION`을 `1.0.0-rc.2`로 올려 새 파일과 태그를 만든다.
+
+GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
+실제 만료 시점은 저장소·조직의 보존 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한
+임시 CI 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
+
+공식 RC는 아직 게시하지 않았다. 게시 전 변경 검토 → 풀 리퀘스트와 CI → `main` 반영 → `main`의
+깨끗한 체크아웃 → `Enable release immutability` 활성화 →
+`contracts-v1.0.0-rc.1` 초안 릴리스에 같은 ZIP 첨부 → 사전 릴리스 게시 순서로 진행한다. 게시 뒤
+릴리스 증명과 자산을 `gh release verify`, `gh release verify-asset`으로 확인하고, BATON이
+확인한 RC를 고정해 실제 직렬화기와 발행 계약 테스트를 통과해야 생산자 연동이 완료된다.
 
 ## 비밀정보 처리
 
@@ -49,7 +117,28 @@ MVP 애플리케이션 골격에 구현되어 있지만 BATON 생산자 연동�
 - `golden/season-empty.ics.b64`: `VEVENT`와 `VTIMEZONE`이 없는 빈 시즌 피드
 - `golden/season-zoned-midnight-cancellation.ics.b64`: `America/New_York` DST 종료와 자정을
   통과하는 시간대 지정 로컬 취소 표식
+- `golden/season-unicode-fold-boundaries.ics.b64`: TEXT 이스케이프와 4바이트 Unicode 문자가
+  iCal4j 줄 접기 경계에 놓이는 UTC 활성 항목
 
 iCal4j 또는 시간대 데이터를 올려 픽스처 바이트가 바뀌면 자동 갱신하지 않고 변경점과 캘린더
-호환성 영향을 먼저 검토한다. 추가 이스케이프·줄 접기 픽스처는 PRD-0002의 출시 조건에 남아
-있다.
+호환성 영향을 먼저 검토한다.
+
+## 의존성과 골든 갱신 절차
+
+Spring Boot, Kotlin, iCal4j 또는 JSON Schema 검증기 버전은 한 종류씩 올린다. 의존성을 바꾼 뒤
+잠금 파일을 갱신하고 계약·캘린더 테스트를 먼저 실행한다.
+
+```shell
+./gradlew --no-daemon dependencies --write-locks
+./gradlew --no-daemon test --tests io.baton.cal.contract.ContractArtifactsTest
+./gradlew --no-daemon test --tests io.baton.cal.calendar.IcsCalendarRendererTest
+```
+
+골든이 달라지면 테스트에서 자동 덮어쓰지 않는다. 후보 `.ics`를 임시 위치에 생성해 속성·컴포넌트
+순서, TEXT 재파싱 결과, TZID·VTIMEZONE, UTF-8 물리 줄 길이와 ETag 변화를 검토한다. 의도한
+호환성 변화만 Base64 골든에 반영한 뒤 전체 테스트와 실행 JAR 생성을 검증한다.
+
+```shell
+./gradlew --no-daemon test
+./gradlew --no-daemon bootJar
+```

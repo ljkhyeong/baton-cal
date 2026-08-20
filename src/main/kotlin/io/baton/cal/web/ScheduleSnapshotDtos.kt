@@ -31,13 +31,13 @@ data class ScheduleSnapshotRequest(
     val revision: Int,
     val status: CalendarItemStatus,
     @field:Normalized(form = Normalizer.Form.NFC)
-    @field:Pattern(regexp = "[^\\r]{1,512}")
+    @field:Pattern(regexp = "[^\\x{0}-\\x{8}\\x{B}-\\x{1F}\\x{7F}\\x{D800}-\\x{DFFF}]{1,512}")
     val summary: String,
     @field:Normalized(form = Normalizer.Form.NFC)
-    @field:Pattern(regexp = "[^\\r]{1,4096}")
+    @field:Pattern(regexp = "[^\\x{0}-\\x{8}\\x{B}-\\x{1F}\\x{7F}\\x{D800}-\\x{DFFF}]{1,4096}")
     val description: String?,
     @field:Normalized(form = Normalizer.Form.NFC)
-    @field:Pattern(regexp = "[^\\r]{1,512}")
+    @field:Pattern(regexp = "[^\\x{0}-\\x{8}\\x{B}-\\x{1F}\\x{7F}\\x{D800}-\\x{DFFF}]{1,512}")
     val location: String?,
     val time: ScheduleTimeRequest,
     val sourceUpdatedAt: String,

@@ -88,13 +88,55 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
-    fun `text constraints count Unicode code points and reject CR and non-NFC`() {
+    fun `TEXT 길이는 Unicode 코드 포인트로 세고 NFC를 요구한다`() {
         val emoji = "😀"
         assertApplied(utcSnapshot(summary = emoji.repeat(512)))
+        assertApplied(
+            utcSnapshot(
+                description = emoji.repeat(4096),
+                location = emoji.repeat(512),
+            ),
+        )
         assertInvalid(utcSnapshot(summary = emoji.repeat(513)))
-        assertApplied(utcSnapshot(summary = "첫 줄\\n둘째 줄"))
-        assertInvalid(utcSnapshot(summary = "첫 줄\\r둘째 줄"))
+        assertInvalid(utcSnapshot(description = emoji.repeat(4097)))
+        assertInvalid(utcSnapshot(location = emoji.repeat(513)))
+        assertInvalid(utcSnapshot(summary = ""))
+        assertInvalid(utcSnapshot(description = ""))
+        assertInvalid(utcSnapshot(location = ""))
         assertInvalid(utcSnapshot(summary = Normalizer.normalize("é", Normalizer.Form.NFD)))
+    }
+
+    @Test
+    fun `TEXT는 LF와 HTAB 및 보조 평면 Unicode를 허용한다`() {
+        assertApplied(
+            utcSnapshot(
+                summary = "요약\\n다음 줄\\t😀\\uD83D\\uDE00",
+                description = "설명\\n다음 줄\\t😀\\uD83D\\uDE00",
+                location = "장소\\n다음 줄\\t😀\\uD83D\\uDE00",
+            ),
+        )
+    }
+
+    @Test
+    fun `TEXT는 RFC 5545에서 허용하지 않는 제어 문자를 모든 필드에서 거부한다`() {
+        listOf(
+            utcSnapshot(summary = "앞\\u0000뒤"),
+            utcSnapshot(summary = "앞\\u000B뒤"),
+            utcSnapshot(summary = "앞\\u001F뒤"),
+            utcSnapshot(summary = "앞\\u007F뒤"),
+            utcSnapshot(description = "앞\\u0008뒤"),
+            utcSnapshot(location = "앞\\u000D뒤"),
+        ).forEach(::assertInvalid)
+    }
+
+    @Test
+    fun `JSON 이스케이프로 전달된 짝이 없는 서로게이트를 모든 TEXT 필드에서 거부한다`() {
+        listOf(
+            utcSnapshot(summary = "앞\\uD800뒤"),
+            utcSnapshot(summary = "앞\\uDC00뒤"),
+            utcSnapshot(description = "앞\\uD800뒤"),
+            utcSnapshot(location = "앞\\uDC00뒤"),
+        ).forEach(::assertInvalid)
     }
 
     @Test
@@ -151,6 +193,8 @@ class SnapshotInputContractTest @Autowired constructor(
         startInstant: String = quoted("2026-08-16T09:00:00Z"),
         endInstant: String = quoted("2026-08-16T10:30:00Z"),
         summary: String = "ROUND 1",
+        description: String? = null,
+        location: String? = null,
     ): String =
         """
         {
@@ -161,8 +205,8 @@ class SnapshotInputContractTest @Autowired constructor(
           "revision": 0,
           "status": "ACTIVE",
           "summary": "$summary",
-          "description": null,
-          "location": null,
+          "description": ${description?.let(::quoted) ?: "null"},
+          "location": ${location?.let(::quoted) ?: "null"},
           "sourceUpdatedAt": $sourceUpdatedAt,
           "time": {
             "type": "UTC_INSTANT",

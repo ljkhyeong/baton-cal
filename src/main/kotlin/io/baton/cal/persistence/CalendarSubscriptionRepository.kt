@@ -15,11 +15,13 @@ class CalendarSubscriptionRepository(
                 id,
                 season_id,
                 token_hash,
+                credential_generation,
                 status
             ) VALUES (
                 :id,
                 :seasonId,
                 :tokenHash,
+                :credentialGeneration,
                 :status
             )
             """.trimIndent(),
@@ -27,6 +29,7 @@ class CalendarSubscriptionRepository(
             .param("id", row.id)
             .param("seasonId", row.seasonId)
             .param("tokenHash", row.tokenHash)
+            .param("credentialGeneration", row.credentialGeneration)
             .param("status", row.status.name)
             .update()
     }
@@ -44,7 +47,10 @@ class CalendarSubscriptionRepository(
             .optional()
             .orElse(null)
 
-    fun findProjectionByActiveTokenHash(tokenHash: String): SeasonFeedProjectionRow? =
+    fun findProjectionByActiveTokenHash(
+        tokenHash: String,
+        expectedCredentialGeneration: UUID,
+    ): SeasonFeedProjectionRow? =
         jdbcClient.sql(
             """
             SELECT
@@ -58,9 +64,11 @@ class CalendarSubscriptionRepository(
               ON projection.season_id = subscription.season_id
             WHERE subscription.token_hash = :tokenHash
               AND subscription.status = 'ACTIVE'
+              AND subscription.credential_generation = :expectedCredentialGeneration
             """.trimIndent(),
         )
             .param("tokenHash", tokenHash)
+            .param("expectedCredentialGeneration", expectedCredentialGeneration)
             .query { resultSet, _ -> resultSet.seasonFeedProjectionRow() }
             .optional()
             .orElse(null)
@@ -70,11 +78,13 @@ class CalendarSubscriptionRepository(
         id: UUID,
         expectedTokenHash: String,
         replacementTokenHash: String,
+        replacementCredentialGeneration: UUID,
     ): Boolean =
         jdbcClient.sql(
             """
             UPDATE calendar_subscription
-            SET token_hash = :replacementTokenHash
+            SET token_hash = :replacementTokenHash,
+                credential_generation = :replacementCredentialGeneration
             WHERE id = :id
               AND status = 'ACTIVE'
               AND token_hash = :expectedTokenHash
@@ -83,6 +93,7 @@ class CalendarSubscriptionRepository(
             .param("id", id)
             .param("expectedTokenHash", expectedTokenHash)
             .param("replacementTokenHash", replacementTokenHash)
+            .param("replacementCredentialGeneration", replacementCredentialGeneration)
             .update() == 1
 
     fun revoke(
@@ -107,6 +118,7 @@ class CalendarSubscriptionRepository(
             id,
             season_id,
             token_hash,
+            credential_generation,
             status
         """
     }

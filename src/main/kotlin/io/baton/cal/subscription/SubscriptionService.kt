@@ -32,6 +32,7 @@ class SubscriptionService(
                 id = subscriptionId,
                 seasonId = seasonId,
                 tokenHash = tokenCodec.hash(token),
+                credentialGeneration = properties.subscriptionGeneration,
                 status = CalendarSubscriptionStatus.ACTIVE,
             ),
         )
@@ -47,7 +48,14 @@ class SubscriptionService(
         val token = tokenCodec.generate()
         val replacementHash = tokenCodec.hash(token)
 
-        if (repository.rotate(subscriptionId, current.tokenHash, replacementHash)) {
+        if (
+            repository.rotate(
+                subscriptionId,
+                current.tokenHash,
+                replacementHash,
+                properties.subscriptionGeneration,
+            )
+        ) {
             return SubscriptionCredential(subscriptionId, token, feedUri(token))
         }
 
@@ -82,7 +90,10 @@ class SubscriptionService(
 
     @Transactional(readOnly = true)
     fun findFeed(token: String): SeasonFeedProjectionRow? =
-        repository.findProjectionByActiveTokenHash(tokenCodec.hash(token))
+        repository.findProjectionByActiveTokenHash(
+            tokenCodec.hash(token),
+            properties.subscriptionGeneration,
+        )
 
     private fun feedUri(token: String): URI = UriComponentsBuilder
         .fromUri(properties.publicBaseUrl)

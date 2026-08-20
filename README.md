@@ -41,6 +41,84 @@ CAL이 소유하지 않는다.
 - 캘린더 설명에는 최소 정보와 권한이 필요 없는 위치 식별자만 포함한다.
 - 캘린더 클라이언트의 조회는 BATON의 권한 판단을 우회하지 않는다.
 
+## 운영 안전 기본값
+
+- JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트)까지만
+  파싱한다. 이를 넘으면 `413`과 `REQUEST_TOO_LARGE` 고정 오류를 반환한다.
+- 공개 피드 기준 URL은 외부 또는 비루프백 주소에서 HTTPS만 허용한다. 루프백 HTTP는 로컬
+  개발에서만 허용하며 `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시하지 않거나 HTTPS가
+  아니면 시작에 실패한다.
+- Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
+  기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
+- 공개 `/calendars/v1/**` 요청의 고카디널리티 `http.url` 관측값은 실제 토큰 대신
+  `/calendars/v1/{token}.ics`로 기록한다.
+- 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
+  `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
+  하며, 선택적 값을 빈 문자열로 설정하면 시작에 실패한다.
+- 공개 구독은 DB 상태가 `ACTIVE`이고 토큰 해시와 저장된 구독 세대가 모두 일치할 때만 조회된다.
+  외부 런타임 값 `BATON_CAL_SUBSCRIPTION_GENERATION`은 비밀이 아닌 UUID이며 정상 재시작·일반
+  배포에서는 같은 값을 유지한다.
+  호환용 초기값은 `00000000-0000-0000-0000-000000000001`이고, `prod` 프로필은 환경 변수로
+  값을 명시하지 않으면 시작에 실패한다.
+
+실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 공개 배포 전에 실제 환경에서
+검증해야 한다.
+
+### 내부 Bearer 회전
+
+운영용 내부 Bearer는 다음 표준 명령으로 새 값을 발급한다.
+
+```shell
+openssl rand -hex 32
+```
+
+회전할 때는 새 값을 `BATON_CAL_INTERNAL_TOKEN`, 기존 값을
+`BATON_CAL_PREVIOUS_INTERNAL_TOKEN`으로 넣어 CAL을 먼저 배포한다. 그다음 BATON 호출자를 새 값으로
+전환하고, 이전 값을 쓰는 요청이 없음을 확인한 즉시 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 제거해
+CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
+토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다.
+
+### V4 최초 배포
+
+구독 세대를 처음 도입하는 V4는 유지보수 배포다. 모든 pre-V4 CAL 인스턴스를 먼저 중지하고
+`BATON_CAL_SUBSCRIPTION_GENERATION=00000000-0000-0000-0000-000000000001`로 신버전만 시작한다.
+V4는 기존 구독을 이 초기 세대로 승격하므로 이 값을 써야 기존 피드 URL이 유지된다.
+
+V4 적용 뒤에는 세대를 검사하지 않는 pre-V4 바이너리를 다시 시작하거나 그 버전으로 롤백하지 않는다.
+문제가 생기면 신버전으로 전진 수정하거나, 신버전과 아래 복원 절차를 사용한다. V4 적용 중에는 구·신
+버전을 함께 서비스하지 않는다. V4 배포가 끝난 뒤의 일반 배포는 같은 세대를 유지한다.
+
+### 과거 DB 백업 복원
+
+과거 백업을 복원할 때는 CAL을 중지한 상태로 두고 다음 순서를 지킨다. 표준 UUID 생성 명령은
+`uuidgen`이며 별도 생성기를 구현하지 않는다.
+
+```shell
+uuidgen
+```
+
+1. 생성한 값이 NIL UUID `00000000-0000-0000-0000-000000000000`이 아니고 이전에 사용하지 않은
+   값인지 확인한다.
+2. DB를 복원하기 전에 외부 런타임 설정의 `BATON_CAL_SUBSCRIPTION_GENERATION`부터 새 값으로
+   바꾼다.
+3. CAL이 중지된 상태에서 과거 DB를 복원한다.
+4. 새 세대 설정으로 CAL을 시작한다.
+5. 현재 세대 자격 증명을 아직 발급하지 않은 상태에서 BATON이 모든 시즌의 최신 전체 스냅샷을
+   다시 전달한다. 복원 DB에만 활성 상태로 남을 항목의 `CANCELLED` 스냅샷도 포함하고 완료를 확인한다.
+6. 최신 상태 복구가 끝난 뒤 기존 `subscriptionId`를 rotate하거나 새 구독을 create해 현재 세대
+   자격 증명을 발급한다.
+
+정상 재시작과 일반 배포에는 기존 세대를 유지하며 과거에 사용한 세대를 다시 사용하지 않는다.
+
+복원된 DB의 구독은 이전 세대에 속하므로 기존 피드 URL은 즉시 본문 없는 일반 `404`가 된다.
+BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자격 증명을 발급해서는 안 된다. CAL 내부
+재구축만으로는 백업 시점 이후의 원본 최신성을 되찾을 수 없다.
+
+저장소의 OCI 스모크는 이 순서를 대표 계약 픽스처로 실제 PostgreSQL 논리 백업·복원까지 훈련한다.
+다만 CAL은 BATON 전체 재전달 완료를 알려 주는 매니페스트나 완료 신호를 아직 받지 않으며, 재생 전에
+구독 create·rotate를 자동 차단하지 않는다. 따라서 현재 구현은 스크립트가 위 순서를 지키는지
+검증할 뿐이고, 운영자 또는 상위 오케스트레이션도 같은 순서를 보장해야 한다.
+
 ## 문서
 
 - [제품 기준](docs/PRD/0001_product-baseline/spec.md)
@@ -71,8 +149,9 @@ docker compose up -d postgres
 BATON_CAL_INTERNAL_TOKEN=local-development-internal-token-change-me ./gradlew --no-daemon bootRun
 ```
 
-기본 상태 확인 엔드포인트는 `http://localhost:8080/actuator/health`이며 PostgreSQL은 로컬
-루프백의 `5432` 포트에만 바인딩된다. 종료할 때는 다음 명령을 사용한다.
+로컬 기본 공개 기준 URL은 `http://localhost:8080`이다. 기본 상태 확인 엔드포인트는
+`http://localhost:8080/actuator/health`이며 PostgreSQL은 로컬 루프백의 `5432` 포트에만
+바인딩된다. 종료할 때는 다음 명령을 사용한다.
 
 ```shell
 docker compose down
@@ -81,5 +160,72 @@ docker compose down
 Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로 실행한다.
 
 ```shell
-./gradlew --no-daemon test
+./gradlew --no-daemon test bootJar
 ```
+
+## 계약 팩 검증과 배포
+
+실제 Spring MVC 응답은 MockMvc로 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류를
+실행한 뒤 각 v1 JSON Schema에 직접 대조한다. 따라서 예제 파일뿐 아니라 컨트롤러의 실제
+직렬화 결과도 `additionalProperties: false`를 포함한 응답 계약을 따라야 한다.
+
+BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
+
+```shell
+./gradlew --no-daemon contractsZip
+```
+
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.1`이다. 따라서 결과는
+`build/distributions/baton-cal-contracts-1.0.0-rc.1.zip`이고, ZIP 안에도 같은
+`contracts/VERSION`이 들어간다. 예정된 릴리스 태그는 `contracts-v1.0.0-rc.1`이며 파일명, ZIP 내부
+버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
+토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
+순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
+체크섬·매니페스트를 유지하지 않는다.
+
+GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
+실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
+산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 현재 계약은 BATON 생산자 구현으로 아직
+검증하지 않았으므로 정식 버전이 아닌 `1.0.0-rc.1`이다. 생산자 검증 결과 버전 표식 외 계약 의미를
+바꿀 필요가 없으면 동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 기존
+RC를 교체하지 않고 `1.0.0-rc.2`를 만든다.
+
+공식 RC는 아직 게시하지 않았다. 게시 전 변경을 검토해 풀 리퀘스트의 CI를 통과시켜 `main`에
+반영하고, `main`의 깨끗한 체크아웃에서 `Enable release immutability`를 활성화해야 한다. 그다음
+`contracts-v1.0.0-rc.1` 초안 릴리스에 정확히 같은 ZIP을 첨부한 뒤 사전 릴리스로 게시한다. BATON
+생산자는 `gh release verify`와
+`gh release verify-asset`으로 릴리스와 자산을 확인하고 그 버전을 고정해 실제 직렬화기·개정 번호·
+취소·커밋 후 발행 테스트를 통과해야 연동 완료로 본다.
+
+## OCI 이미지 검증
+
+운영 전달 단위는 Spring Boot의 `bootBuildImage`가 Cloud Native Buildpacks로 만드는 OCI 이미지다.
+Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달하고 프로젝트명·버전으로 이미지
+이름을 정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. 로컬 검증 이미지는 다음처럼 만든다.
+
+```shell
+./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
+```
+
+만든 이미지는 실제 `prod` 프로필과 격리된 PostgreSQL에서 스모크와 대표 복원 훈련을 실행한다.
+
+```shell
+./scripts/smoke-oci-image.sh baton-cal:smoke
+```
+
+스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V4 적용, DB를 포함한 준비 상태,
+SIGTERM 종료 코드 143을 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고
+아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔
+`pg_restore --clean --create --exit-on-error`로 복원한다. 복원된 기존 토큰의 본문 없는 일반 `404`,
+대표 계약 픽스처의 최신 변경·취소 재전달, 재전달 뒤 기존 구독 rotate, 새 토큰의 `200`과
+`STATUS:CANCELLED`·`SEQUENCE:3`까지 검증한다. 전용 Compose 프로젝트·네트워크·볼륨과 임시 백업만
+정리하고 입력 이미지는 남긴다. 별도 Dockerfile과 JRE 조립은 buildpack으로 실행 계약을 충족할 수
+없을 때만 검토한다.
+
+이 훈련은 저장소의 대표 픽스처로 복원 펜스와 절차 순서를 회귀 검증하는 범위다. 실제 BATON 전체
+시즌의 매니페스트·재전달 완료 신호, 운영 RTO/RPO, 백업 저장소와 암호화, 비밀 관리 시스템 연동,
+실제 배포 환경의 복원 훈련을 대신하지 않는다.
+
+GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테스트, 계약 팩과 OCI 이미지를
+만들고 같은 컨테이너 스모크·대표 복원 훈련을 실행한다. 이 검증은 계약 팩의 불변 릴리스,
+레지스트리 게시나 공개 배포 완료를 뜻하지 않는다.

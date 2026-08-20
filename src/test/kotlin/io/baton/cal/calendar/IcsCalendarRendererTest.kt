@@ -65,6 +65,44 @@ class IcsCalendarRendererTest {
     }
 
     @Test
+    fun `유니코드 이스케이프와 줄 접기 경계가 골든 바이트와 원문을 보존한다`() {
+        val summary = "1234567890123456,접힘 경계"
+        val description = "12345678901😀 뒤따르는 설명"
+        val location = "실제 줄바꿈\n리터럴 \\n"
+        val item = CalendarItem(
+            sourceItemId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            seasonId = seasonId,
+            revision = 11,
+            status = CalendarItemStatus.ACTIVE,
+            summary = summary,
+            description = description,
+            location = location,
+            schedule = ScheduleWindow.UtcInstant(
+                start = Instant.parse("2026-08-14T01:02:03Z"),
+                end = Instant.parse("2026-08-14T02:03:04Z"),
+            ),
+            sourceUpdatedAt = Instant.parse("2026-08-13T12:34:56.987Z"),
+            acceptedAt = Instant.parse("2026-08-13T12:34:56.987Z"),
+        )
+
+        val rendered = renderer.render(seasonId, listOf(item))
+        val event = rendered.bytes.parseIcalendar().events().single()
+        val physicalLines = rendered.bytes.toString(StandardCharsets.UTF_8)
+            .split("\r\n")
+            .dropLast(1)
+
+        assertThat(rendered.bytes)
+            .isEqualTo(goldenFixture("season-unicode-fold-boundaries.ics.b64"))
+        assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo(summary)
+        assertThat(event.requiredPropertyValue(Property.DESCRIPTION)).isEqualTo(description)
+        assertThat(event.requiredPropertyValue(Property.LOCATION)).isEqualTo(location)
+        assertThat(physicalLines).allSatisfy { line ->
+            assertThat(line.toByteArray(StandardCharsets.UTF_8).size).isLessThanOrEqualTo(75)
+        }
+        assertCanonicalCrLf(rendered.bytes)
+    }
+
+    @Test
     fun `zoned local cancellation across DST and midnight matches canonical golden`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),

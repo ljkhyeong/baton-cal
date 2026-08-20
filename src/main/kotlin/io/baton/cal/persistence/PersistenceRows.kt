@@ -58,5 +58,6 @@ data class CalendarSubscriptionRow(
     val id: UUID,
     val seasonId: UUID,
     val tokenHash: String,
+    val credentialGeneration: UUID,
     val status: CalendarSubscriptionStatus,
 )

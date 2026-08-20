@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.bundling.Zip
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -48,6 +49,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("com.networknt:json-schema-validator:3.0.6") {
+        exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
+    }
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -55,4 +59,28 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+val contractsVersion = providers
+    .fileContents(layout.projectDirectory.file("contracts/VERSION"))
+    .asText
+    .map { it.trim() }
+
+tasks.register<Zip>("contractsZip") {
+    group = "distribution"
+    description = "BATON CAL 계약 팩 ZIP을 생성합니다."
+    archiveFileName.set(contractsVersion.map { "baton-cal-contracts-$it.zip" })
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+
+    from(layout.projectDirectory.dir("contracts")) {
+        into("contracts")
+    }
+    from(layout.projectDirectory.file("docs/PRD/0002_mvp-contract/spec.md")) {
+        into("docs/PRD/0002_mvp-contract")
+    }
+
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    dirPermissions { unix("755") }
+    filePermissions { unix("644") }
 }

@@ -1,8 +1,11 @@
 package io.baton.cal.persistence
 
+import io.baton.cal.config.CalProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
+import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -11,7 +14,7 @@ import java.sql.DriverManager
 @Testcontainers
 class SchemaMigrationTest {
     @Test
-    fun `V3는 기존 데이터와 구독 동작을 보존하며 중복 상태를 제거한다`() {
+    fun `V3와 V4는 기존 구독을 보존하고 자격 증명 세대를 명시 값으로 승격한다`() {
         val before = Flyway.configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .target("2")
@@ -43,6 +46,7 @@ class SchemaMigrationTest {
 
         Flyway.configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .target("3")
             .load()
             .migrate()
 
@@ -67,6 +71,48 @@ class SchemaMigrationTest {
                 ).use { rows -> assertThat(rows.next()).isFalse() }
             }
         }
+
+        Flyway.configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .load()
+            .migrate()
+
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { connection ->
+            connection.createStatement().use { statement ->
+                statement.executeQuery(
+                    "SELECT credential_generation FROM calendar_subscription",
+                ).use { rows ->
+                    assertThat(rows.next()).isTrue()
+                    assertThat(rows.getString("credential_generation"))
+                        .isEqualTo(CalProperties.DEFAULT_SUBSCRIPTION_GENERATION.toString())
+                }
+                statement.executeQuery(
+                    """
+                    SELECT is_nullable, column_default
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'calendar_subscription'
+                      AND column_name = 'credential_generation'
+                    """.trimIndent(),
+                ).use { rows ->
+                    assertThat(rows.next()).isTrue()
+                    assertThat(rows.getString("is_nullable")).isEqualTo("NO")
+                    assertThat(rows.getString("column_default")).isNull()
+                }
+            }
+        }
+
+        val migratedRepository = CalendarSubscriptionRepository(
+            JdbcClient.create(
+                DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password),
+            ),
+        )
+        assertThat(
+            migratedRepository.findProjectionByActiveTokenHash(
+                TOKEN_HASH,
+                CalProperties.DEFAULT_SUBSCRIPTION_GENERATION,
+            ),
+        ).isNotNull()
     }
 
     private companion object {
