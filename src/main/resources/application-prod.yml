@@ -1,0 +1,8 @@
+baton:
+  cal:
+    public-base-url: ${BATON_CAL_PUBLIC_BASE_URL}
+    subscription-generation: ${BATON_CAL_SUBSCRIPTION_GENERATION}
+
+logging:
+  level:
+    org.springframework.jdbc.core.StatementCreatorUtils: "OFF"

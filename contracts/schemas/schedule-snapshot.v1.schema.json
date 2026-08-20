@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/schedule-snapshot.v1.schema.json",
+  "title": "ScheduleSnapshotV1",
+  "description": "하나의 원본 개정 번호에 해당하는 완전한 BATON 캘린더 항목 스냅샷입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "sourceItemId",
+    "seasonId",
+    "revision",
+    "status",
+    "summary",
+    "sourceUpdatedAt",
+    "time"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurredAt": {
+      "$ref": "#/$defs/instant"
+    },
+    "sourceItemId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "CANCELLED"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![\\s\\S]*[\\u0000-\\u0008\\u000B-\\u001F\\u007F\\uD800-\\uDFFF])"
+    },
+    "description": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^(?![\\s\\S]*[\\u0000-\\u0008\\u000B-\\u001F\\u007F\\uD800-\\uDFFF])"
+        }
+      ]
+    },
+    "location": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?![\\s\\S]*[\\u0000-\\u0008\\u000B-\\u001F\\u007F\\uD800-\\uDFFF])"
+        }
+      ]
+    },
+    "sourceUpdatedAt": {
+      "$ref": "#/$defs/instant"
+    },
+    "time": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/utcInstantTime"
+        },
+        {
+          "$ref": "#/$defs/zonedLocalTime"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9](?:\\.[0-9]{1,9})?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "localSecond": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\\.[0-9]{1,9})?$"
+    },
+    "utcInstantTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "startInstant",
+        "endInstant"
+      ],
+      "properties": {
+        "type": {
+          "const": "UTC_INSTANT"
+        },
+        "startInstant": {
+          "$ref": "#/$defs/instant"
+        },
+        "endInstant": {
+          "$ref": "#/$defs/instant"
+        }
+      }
+    },
+    "zonedLocalTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "zoneId",
+        "startLocal",
+        "endLocal"
+      ],
+      "properties": {
+        "type": {
+          "const": "ZONED_LOCAL"
+        },
+        "zoneId": {
+          "type": "string"
+        },
+        "startLocal": {
+          "$ref": "#/$defs/localSecond"
+        },
+        "endLocal": {
+          "$ref": "#/$defs/localSecond"
+        }
+      }
+    }
+  }
+}

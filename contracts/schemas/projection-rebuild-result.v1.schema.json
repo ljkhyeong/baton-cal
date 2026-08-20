@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/projection-rebuild-result.v1.schema.json",
+  "title": "ProjectionRebuildResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seasonId",
+    "etag",
+    "itemCount"
+  ],
+  "properties": {
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "etag": {
+      "type": "string",
+      "pattern": "^\\\"[0-9a-f]{64}\\\"$"
+    },
+    "itemCount": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

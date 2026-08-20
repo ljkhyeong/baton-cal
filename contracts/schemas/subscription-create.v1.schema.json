@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/subscription-create.v1.schema.json",
+  "title": "SubscriptionCreateV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seasonId"
+  ],
+  "properties": {
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

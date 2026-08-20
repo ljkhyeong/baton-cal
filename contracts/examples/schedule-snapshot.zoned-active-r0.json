@@ -1,0 +1,18 @@
+{
+  "eventId": "a862ae31-69ea-43c7-8851-9c0995314400",
+  "occurredAt": "2026-08-11T03:10:15Z",
+  "sourceItemId": "b8ca471a-b228-42fa-8d41-28f05ee90d40",
+  "seasonId": "f5316f93-d49e-4230-b1d0-9e9c2d079819",
+  "revision": 0,
+  "status": "ACTIVE",
+  "summary": "제출 마감",
+  "description": "참여자는 마감 전까지 BATON에서 제출합니다.",
+  "location": "온라인",
+  "sourceUpdatedAt": "2026-08-11T03:10:10Z",
+  "time": {
+    "type": "ZONED_LOCAL",
+    "zoneId": "Asia/Seoul",
+    "startLocal": "2026-08-31T22:30:00",
+    "endLocal": "2026-08-31T23:30:00"
+  }
+}

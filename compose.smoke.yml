@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: baton_cal_smoke
+      POSTGRES_USER: baton_cal_smoke
+      POSTGRES_PASSWORD: baton-cal-smoke-only
+    volumes:
+      - postgres-smoke-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  app:
+    image: ${BATON_CAL_IMAGE:?BATON_CAL_IMAGE 환경 변수가 필요합니다}
+    pull_policy: never
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DATABASE_URL: jdbc:postgresql://postgres:5432/baton_cal_smoke
+      DATABASE_USERNAME: baton_cal_smoke
+      DATABASE_PASSWORD: baton-cal-smoke-only
+      DATABASE_MAXIMUM_POOL_SIZE: "2"
+      BATON_CAL_INTERNAL_TOKEN: ${BATON_CAL_INTERNAL_TOKEN:?BATON_CAL_INTERNAL_TOKEN 환경 변수가 필요합니다}
+      BATON_CAL_PUBLIC_BASE_URL: https://calendar.smoke.invalid
+      BATON_CAL_SUBSCRIPTION_GENERATION: ${BATON_CAL_SUBSCRIPTION_GENERATION:?BATON_CAL_SUBSCRIPTION_GENERATION 환경 변수가 필요합니다}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - target: 8080
+        host_ip: 127.0.0.1
+        protocol: tcp
+    stop_grace_period: 35s
+
+volumes:
+  postgres-smoke-data:
