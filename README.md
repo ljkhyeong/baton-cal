@@ -181,7 +181,7 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 
 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.1`이다. 따라서 결과는
 `build/distributions/baton-cal-contracts-1.0.0-rc.1.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 예정된 릴리스 태그는 `contracts-v1.0.0-rc.1`이며 파일명, ZIP 내부
+`contracts/VERSION`이 들어간다. 게시된 릴리스 태그는 `contracts-v1.0.0-rc.1`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
@@ -194,12 +194,11 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 바꿀 필요가 없으면 동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 기존
 RC를 교체하지 않고 `1.0.0-rc.2`를 만든다.
 
-공식 RC는 아직 게시하지 않았다. 게시 전 변경을 검토해 풀 리퀘스트의 CI를 통과시켜 `main`에
-반영하고, `main`의 깨끗한 체크아웃에서 `Enable release immutability`를 활성화해야 한다. 그다음
-`contracts-v1.0.0-rc.1` 초안 릴리스에 정확히 같은 ZIP을 첨부한 뒤 사전 릴리스로 게시한다. BATON
-생산자는 `gh release verify`와
-`gh release verify-asset`으로 릴리스와 자산을 확인하고 그 버전을 고정해 실제 직렬화기·개정 번호·
-취소·커밋 후 발행 테스트를 통과해야 연동 완료로 본다.
+[불변 사전 릴리스 `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)은
+`main` 커밋 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리킨다. 첨부 ZIP의 SHA-256은
+`0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`이며,
+`gh release verify`와 `gh release verify-asset` 검증을 통과했다. BATON 생산자는 이 버전을 고정해
+실제 직렬화기·개정 번호·취소·커밋 후 발행 테스트를 통과해야 연동 완료로 본다.
 
 ## OCI 이미지 검증
 

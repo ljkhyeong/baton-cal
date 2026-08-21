@@ -21,9 +21,14 @@
 - 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 BATON 생산자 미검증 상태를 나타내는
   `1.0.0-rc.1`이다. Gradle 표준 `contractsZip` 작업은 `contracts/**`와 PRD-0002를 파일 시각·
   항목 순서·권한이 고정된 `build/distributions/baton-cal-contracts-1.0.0-rc.1.zip`으로 만든다.
-  ZIP 내부 `contracts/VERSION`, 파일명과 예정 태그 `contracts-v1.0.0-rc.1`은 같은 버전을 가리킨다.
+  ZIP 내부 `contracts/VERSION`, 파일명과 게시된 태그 `contracts-v1.0.0-rc.1`은 같은 버전을 가리킨다.
   GitHub Actions는 이 파일을 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
   업로드한다.
+- GitHub의 release immutability를 활성화한 뒤 [불변 사전 릴리스
+  `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)을
+  게시했다. 태그는 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리키며, 자산 SHA-256
+  `0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`은
+  `gh release verify`와 `gh release verify-asset` 검증을 통과했다.
 - RFC 5545 TEXT의 LF·HTAB과 정상 Unicode는 보존하고 금지 제어 문자와 짝이 없는 서로게이트는
   HTTP 경계와 JSON Schema에서 거부한다. Unicode 이스케이프와 4바이트 문자 줄 접기 경계는
   정규 골든으로 고정했고 의존성과 골든의 수동 검토 절차도 문서화했다.
@@ -65,11 +70,8 @@
 
 ## 다음 작업
 
-1. `main`의 깨끗한 체크아웃에서 `Enable release immutability`를 활성화하고,
-   `contracts-v1.0.0-rc.1` 초안 릴리스에
-   `baton-cal-contracts-1.0.0-rc.1.zip`을 첨부한 뒤 사전 릴리스로 게시한다. 이어
-   `gh release verify`와 `gh release verify-asset`으로 릴리스와 자산을 확인하고, BATON 발행 측이
-   이 RC를 고정해 실제 직렬화기·개정 번호·취소·커밋 후 발행을 검증하는 생산자 테스트를 연결한다.
+1. BATON 발행 측이 불변 RC `contracts-v1.0.0-rc.1`을 고정해 실제 직렬화기·개정 번호·취소·
+   커밋 후 발행을 검증하는 생산자 테스트를 연결한다.
    검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면 동일한 계약 의미의 안정 버전 `1.0.0`으로
    승격하고, 의미 변경이 필요하면 게시된 RC를 교체하지 않고 `1.0.0-rc.2`를 만든다.
 2. 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 현재 값·이전 값 회전 절차를 운영 환경에서
@@ -86,8 +88,8 @@
 
 - BATON 발행 측과 아직 연결하지 않았다.
 - CI 계약 팩은 90일 보존을 요청하는 변경 검토용 임시 산출물이다. 저장소·조직 정책에 따라 실제
-  만료 시점은 달라질 수 있다. 릴리스 불변성 활성화, 원격 GitHub 사전 릴리스 게시, 검증 가능한
-  릴리스 자산과 BATON 생산자 고정·직렬화 테스트는 아직 완료하지 않았다.
+  만료 시점은 달라질 수 있다. 검증 가능한 불변 사전 릴리스는 게시했지만 BATON 생산자 고정·
+  직렬화 테스트는 아직 완료하지 않았다.
 - OCI 이미지의 로컬·CI 실행 검증은 준비됐지만 레지스트리 게시와 공개 배포, 운영 비밀 수명주기,
   호출량 제한과 외부 관측 경로의 비노출 검증은 준비되지 않았다.
 - 저장소 복원 훈련은 대표 계약 픽스처와 절차 순서만 검증한다. 실제 BATON 전체 재전달 완료를
