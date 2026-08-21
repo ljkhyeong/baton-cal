@@ -1,5 +1,4 @@
 import org.gradle.api.tasks.bundling.Zip
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     kotlin("jvm") version "2.3.21"
@@ -11,16 +10,9 @@ plugins {
 group = "io.baton"
 version = "0.0.1-SNAPSHOT"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        jvmTarget = JvmTarget.JVM_25
         freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
@@ -52,6 +44,7 @@ dependencies {
     testImplementation("com.networknt:json-schema-validator:3.0.6") {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
+    testImplementation("io.micrometer:micrometer-observation-test")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -78,9 +71,4 @@ tasks.register<Zip>("contractsZip") {
     from(layout.projectDirectory.file("docs/PRD/0002_mvp-contract/spec.md")) {
         into("docs/PRD/0002_mvp-contract")
     }
-
-    isPreserveFileTimestamps = false
-    isReproducibleFileOrder = true
-    dirPermissions { unix("755") }
-    filePermissions { unix("644") }
 }

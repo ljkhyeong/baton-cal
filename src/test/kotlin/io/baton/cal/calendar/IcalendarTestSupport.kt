@@ -13,14 +13,18 @@ internal fun ByteArray.parseIcalendar(): Calendar = inputStream().use { input ->
     CalendarBuilder().build(input)
 }
 
-internal fun Calendar.events(): List<VEvent> = componentList.all.filterIsInstance<VEvent>()
+internal fun Calendar.events(): List<VEvent> = componentList.get(Component.VEVENT)
 
-internal fun Calendar.timeZones(): List<VTimeZone> = componentList.all.filterIsInstance<VTimeZone>()
+internal fun Calendar.requiredEvent(): VEvent = componentList.getRequired(Component.VEVENT)
+
+internal fun Calendar.timeZones(): List<VTimeZone> = componentList.get(Component.VTIMEZONE)
+
+internal fun Calendar.requiredTimeZone(): VTimeZone = componentList.getRequired(Component.VTIMEZONE)
 
 internal fun Component.requiredProperty(name: String): Property =
-    propertyList.all.first { it.name == name }
+    propertyList.getRequired(name)
 
 internal fun Component.requiredPropertyValue(name: String): String = requiredProperty(name).value
 
 internal fun Property.requiredTimeZoneId(): String =
-    getParameter<TzId>(Parameter.TZID).orElseThrow().value
+    getRequiredParameter<TzId>(Parameter.TZID).value

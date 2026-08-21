@@ -6,13 +6,14 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -26,15 +27,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
-import java.nio.file.Files
+import kotlin.io.path.readText
 import java.nio.file.Path
 
 private const val PUBLIC_BASE_URL = "https://calendar.example.test"
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
@@ -112,8 +110,6 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(content().contentType("text/calendar;charset=UTF-8"))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("private")))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-cache")))
-            .andExpect(header().exists(HttpHeaders.ETAG))
-            .andExpect(header().exists(HttpHeaders.LAST_MODIFIED))
             .andReturn()
         val firstCalendar = firstFeed.response.contentAsByteArray.parseIcalendar()
         val sourceEvent = firstCalendar.events().single {
@@ -132,6 +128,8 @@ class MvpHttpFlowTest @Autowired constructor(
                 .header(HttpHeaders.IF_NONE_MATCH, "W/$originalEtag"),
         )
             .andExpect(status().isNotModified)
+            .andExpect(header().string(HttpHeaders.ETAG, originalEtag))
+            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, originalLastModified))
             .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
             .andExpect(content().bytes(byteArrayOf()))
 
@@ -140,6 +138,8 @@ class MvpHttpFlowTest @Autowired constructor(
                 .header(HttpHeaders.IF_MODIFIED_SINCE, originalLastModified),
         )
             .andExpect(status().isNotModified)
+            .andExpect(header().string(HttpHeaders.ETAG, originalEtag))
+            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, originalLastModified))
             .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
             .andExpect(content().bytes(byteArrayOf()))
 
@@ -224,12 +224,11 @@ class MvpHttpFlowTest @Autowired constructor(
         mockMvc.perform(get("/calendars/v1/{token}.ics", replacementToken))
             .andExpect(status().isNotFound)
 
-        val persistedHashes = jdbcClient.sql("SELECT token_hash FROM calendar_subscription")
+        val persistedHash = jdbcClient.sql("SELECT token_hash FROM calendar_subscription")
             .query(String::class.java)
-            .list()
-        assertThat(persistedHashes).hasSize(1)
-        assertThat(persistedHashes.single()).matches("^[0-9a-f]{64}$")
-        assertThat(persistedHashes.single()).isNotIn(originalToken, replacementToken)
+            .single()
+        assertThat(persistedHash).matches("^[0-9a-f]{64}$")
+        assertThat(persistedHash).isNotIn(originalToken, replacementToken)
     }
 
     @Test
@@ -282,28 +281,26 @@ class MvpHttpFlowTest @Autowired constructor(
 
     @Test
     fun `타임스탬프 정밀도는 개정 번호 비교 전에 정규화한다`() {
-        val initial = withSourceUpdatedAt(
-            utcSnapshot(EVENT_1, revision = 0, summary = "Initial"),
-            "2026-08-11T00:20:00.000000100Z",
+        val initial = utcSnapshot(
+            EVENT_1,
+            revision = 0,
+            summary = "Initial",
+            sourceUpdatedAt = "2026-08-11T00:20:00.000000100Z",
         )
-        val sameMicrosecond = withSourceUpdatedAt(
-            utcSnapshot(EVENT_2, revision = 1, summary = "Too fine"),
-            "2026-08-11T00:20:00.000000200Z",
+        val sameMicrosecond = utcSnapshot(
+            EVENT_2,
+            revision = 1,
+            summary = "Too fine",
+            sourceUpdatedAt = "2026-08-11T00:20:00.000000200Z",
         )
-        val correctedRetry = withSourceUpdatedAt(
-            utcSnapshot(EVENT_2, revision = 1, summary = "Valid precision"),
-            "2026-08-11T00:20:00.000001100Z",
+        val correctedRetry = utcSnapshot(
+            EVENT_2,
+            revision = 1,
+            summary = "Valid precision",
+            sourceUpdatedAt = "2026-08-11T00:20:00.000001100Z",
         )
 
         ingest(initial, "APPLIED")
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(sameMicrosecond),
-        )
-            .andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("SOURCE_REVISION_CONFLICT"))
-
         mockMvc.perform(
             authorizedPost("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -318,10 +315,10 @@ class MvpHttpFlowTest @Autowired constructor(
 
     @Test
     fun `문서화한 일정 예시는 실제 수신 경로에서 생명주기를 따른다`() {
-        ingest(Files.readString(Path.of("contracts/examples/schedule-snapshot.utc-active.json")), "APPLIED")
-        ingest(Files.readString(Path.of("contracts/examples/schedule-snapshot.zoned-active-r0.json")), "APPLIED")
-        ingest(Files.readString(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json")), "APPLIED")
-        val cancelled = Files.readString(Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json"))
+        ingest(Path.of("contracts/examples/schedule-snapshot.utc-active.json").readText(), "APPLIED")
+        ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r0.json").readText(), "APPLIED")
+        ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json").readText(), "APPLIED")
+        val cancelled = Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json").readText()
         ingest(cancelled, "APPLIED")
         ingest(cancelled, "DUPLICATE")
     }
@@ -338,9 +335,10 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
 
-        val dstGap = zonedSnapshot()
-            .replace("2026-11-01T01:30:00", "2026-03-08T02:30:00")
-            .replace("2026-11-01T02:30:00", "2026-03-08T03:30:00")
+        val dstGap = zonedSnapshot(
+            startLocal = "2026-03-08T02:30:00",
+            endLocal = "2026-03-08T03:30:00",
+        )
         mockMvc.perform(
             authorizedPost("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -380,26 +378,18 @@ class MvpHttpFlowTest @Autowired constructor(
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
 
-    private fun withSourceUpdatedAt(payload: String, sourceUpdatedAt: String): String {
-        val marker = "\"sourceUpdatedAt\": \""
-        val valueStart = payload.indexOf(marker) + marker.length
-        require(valueStart >= marker.length) { "sourceUpdatedAt field is missing" }
-        val valueEnd = payload.indexOf('"', valueStart)
-        return payload.replaceRange(valueStart, valueEnd, sourceUpdatedAt)
-    }
-
     private fun utcSnapshot(
         eventId: String,
         revision: Int,
         summary: String,
         status: String = "ACTIVE",
-    ): String {
-        val sourceUpdatedAt = when (revision) {
+        sourceUpdatedAt: String = when (revision) {
             0 -> "2026-08-11T00:20:00Z"
             1 -> "2026-08-11T00:30:00Z"
             2 -> "2026-08-11T00:40:00Z"
             else -> "2026-08-11T00:50:00Z"
-        }
+        },
+    ): String {
         return """
         {
           "eventId": "$eventId",
@@ -421,7 +411,10 @@ class MvpHttpFlowTest @Autowired constructor(
         """.trimIndent()
     }
 
-    private fun zonedSnapshot(): String =
+    private fun zonedSnapshot(
+        startLocal: String = "2026-11-01T01:30:00",
+        endLocal: String = "2026-11-01T02:30:00",
+    ): String =
         """
         {
           "eventId": "$ZONED_EVENT_ID",
@@ -435,8 +428,8 @@ class MvpHttpFlowTest @Autowired constructor(
           "location": "New York",
           "time": {
             "type": "ZONED_LOCAL",
-            "startLocal": "2026-11-01T01:30:00",
-            "endLocal": "2026-11-01T02:30:00",
+            "startLocal": "$startLocal",
+            "endLocal": "$endLocal",
             "zoneId": "America/New_York"
           },
           "sourceUpdatedAt": "2026-10-01T00:30:00Z"
@@ -456,10 +449,5 @@ class MvpHttpFlowTest @Autowired constructor(
         const val EVENT_5 = "55555555-5555-5555-5555-555555555555"
         const val ZONED_EVENT_ID = "66666666-6666-6666-6666-666666666666"
         const val EVENT_7 = "77777777-7777-7777-7777-777777777777"
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

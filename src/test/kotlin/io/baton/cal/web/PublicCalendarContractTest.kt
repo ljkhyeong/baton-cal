@@ -1,15 +1,16 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
-import io.micrometer.observation.Observation
-import io.micrometer.observation.ObservationHandler
+import io.baton.cal.support.PostgreSqlTestContainer
+import io.micrometer.observation.tck.TestObservationRegistry
+import io.micrometer.observation.tck.TestObservationRegistryAssert
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
@@ -26,18 +27,13 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
-import java.nio.file.Files
+import kotlin.io.encoding.Base64
+import kotlin.io.path.readText
 import java.nio.file.Path
 import java.security.MessageDigest
-import java.util.Base64
-import java.util.HexFormat
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
@@ -46,12 +42,12 @@ import java.util.concurrent.CopyOnWriteArrayList
         "baton.cal.subscription-generation=20000000-0000-0000-0000-000000000002",
     ],
 )
-@Import(PublicCalendarObservationCaptureConfiguration::class)
+@Import(TestObservationRegistryConfiguration::class)
 @Sql("/reset-database.sql")
 class PublicCalendarContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,
-    private val observationCapture: PublicCalendarObservationCapture,
+    private val observationRegistry: TestObservationRegistry,
 ) {
 
     @Test
@@ -60,11 +56,9 @@ class PublicCalendarContractTest @Autowired constructor(
         val subscriptionId: String = JsonPath.read(credential, "$.subscriptionId")
         val token: String = JsonPath.read(credential, "$.token")
         val golden = emptyFeedGolden()
-        val expectedEtag = "\"${
-            HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(golden))
-        }\""
+        val expectedEtag = "\"${MessageDigest.getInstance("SHA-256").digest(golden).toHexString()}\""
 
-        val initial = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+        mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isOk)
             .andExpect(content().contentType("text/calendar;charset=UTF-8"))
             .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, CONTENT_DISPOSITION))
@@ -73,30 +67,20 @@ class PublicCalendarContractTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.ETAG, expectedEtag))
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
             .andExpect(content().bytes(golden))
-            .andReturn()
-
-        val etag = checkNotNull(initial.response.getHeader(HttpHeaders.ETAG))
-        val lastModified = checkNotNull(initial.response.getHeader(HttpHeaders.LAST_MODIFIED))
-
-        mockMvc.perform(get("/calendars/v1/{token}.ics", token))
-            .andExpect(status().isOk)
-            .andExpect(header().string(HttpHeaders.ETAG, etag))
-            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, lastModified))
-            .andExpect(content().bytes(golden))
 
         assertNotModified(
             token = token,
             headerName = HttpHeaders.IF_NONE_MATCH,
-            headerValue = etag,
-            etag = etag,
-            lastModified = lastModified,
+            headerValue = expectedEtag,
+            etag = expectedEtag,
+            lastModified = EPOCH_HTTP_DATE,
         )
         assertNotModified(
             token = token,
             headerName = HttpHeaders.IF_MODIFIED_SINCE,
-            headerValue = lastModified,
-            etag = etag,
-            lastModified = lastModified,
+            headerValue = EPOCH_HTTP_DATE,
+            etag = expectedEtag,
+            lastModified = EPOCH_HTTP_DATE,
         )
 
         mockMvc.perform(
@@ -104,13 +88,13 @@ class PublicCalendarContractTest @Autowired constructor(
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
-            .andExpect(jsonPath("$.etag").value(etag))
+            .andExpect(jsonPath("$.etag").value(expectedEtag))
             .andExpect(jsonPath("$.itemCount").value(0))
 
         mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isOk)
-            .andExpect(header().string(HttpHeaders.ETAG, etag))
-            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, lastModified))
+            .andExpect(header().string(HttpHeaders.ETAG, expectedEtag))
+            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
             .andExpect(content().bytes(golden))
     }
 
@@ -177,24 +161,26 @@ class PublicCalendarContractTest @Autowired constructor(
     @Test
     fun `공개 캘린더 관측 URL은 실제 토큰을 기록하지 않는다`() {
         val sensitiveToken = "sensitive-calendar-token-that-must-not-appear"
-        observationCapture.clear()
+        observationRegistry.clear()
 
         assertPublicNotFound(sensitiveToken)
         assertPublicPathNotFound("/calendars/v1/nested/$sensitiveToken.ics")
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk)
 
-        val observedUrls = observationCapture.httpUrls
-        val publicCalendarUrls = observedUrls.filter { it.startsWith("/calendars/v1/") }
-        assertThat(publicCalendarUrls)
-            .hasSize(2)
-            .containsOnly("/calendars/v1/{token}.ics")
-        assertThat(observedUrls).allSatisfy { url ->
-            assertThat(url).doesNotContain(sensitiveToken)
-        }
-        assertThat(observedUrls).anySatisfy { url ->
-            assertThat(url).endsWith("/actuator/health")
-        }
+        TestObservationRegistryAssert.assertThat(observationRegistry)
+            .hasHandledContextsThatSatisfy { contexts ->
+                val observedUrls = contexts
+                    .filterIsInstance<ServerRequestObservationContext>()
+                    .mapNotNull { it.getHighCardinalityKeyValue("http.url")?.value }
+                val publicCalendarUrls = observedUrls.filter { it.startsWith("/calendars/v1/") }
+                assertThat(publicCalendarUrls)
+                    .hasSize(2)
+                    .containsOnly("/calendars/v1/{token}.ics")
+                assertThat(observedUrls).anySatisfy { url ->
+                    assertThat(url).endsWith("/actuator/health")
+                }
+            }
     }
 
     private fun createSubscription(): String = mockMvc.perform(
@@ -241,8 +227,8 @@ class PublicCalendarContractTest @Autowired constructor(
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
 
-    private fun emptyFeedGolden(): ByteArray = Base64.getMimeDecoder().decode(
-        Files.readString(Path.of("contracts/golden/season-empty.ics.b64")),
+    private fun emptyFeedGolden(): ByteArray = Base64.Mime.decode(
+        Path.of("contracts/golden/season-empty.ics.b64").readText(),
     )
 
     companion object {
@@ -252,35 +238,11 @@ class PublicCalendarContractTest @Autowired constructor(
         const val CONTENT_DISPOSITION = "inline; filename=\"baton-calendar.ics\""
         val RESTORED_CREDENTIAL_GENERATION: UUID =
             UUID.fromString("10000000-0000-0000-0000-000000000001")
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
-    }
-}
-
-class PublicCalendarObservationCapture : ObservationHandler<ServerRequestObservationContext> {
-    private val values = CopyOnWriteArrayList<String>()
-
-    val httpUrls: List<String>
-        get() = values.toList()
-
-    fun clear() {
-        values.clear()
-    }
-
-    override fun supportsContext(context: Observation.Context): Boolean =
-        context is ServerRequestObservationContext
-
-    override fun onStop(context: ServerRequestObservationContext) {
-        context.getHighCardinalityKeyValue("http.url")?.value?.let(values::add)
     }
 }
 
 @TestConfiguration(proxyBeanMethods = false)
-class PublicCalendarObservationCaptureConfiguration {
+class TestObservationRegistryConfiguration {
     @Bean
-    fun publicCalendarObservationCapture(): PublicCalendarObservationCapture =
-        PublicCalendarObservationCapture()
+    fun testObservationRegistry(): TestObservationRegistry = TestObservationRegistry.create()
 }

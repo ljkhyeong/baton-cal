@@ -4,11 +4,9 @@ import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
 import java.io.DataOutputStream
 import java.io.OutputStream
-import java.nio.charset.StandardCharsets
 import java.security.DigestOutputStream
 import java.security.MessageDigest
 import java.time.Instant
-import java.util.HexFormat
 import java.util.UUID
 
 data class ScheduleSnapshot(
@@ -61,11 +59,11 @@ object SnapshotFingerprint {
             }
         }
 
-        return HexFormat.of().formatHex(digest.digest())
+        return digest.digest().toHexString()
     }
 
     private fun DataOutputStream.writeString(value: String) {
-        val bytes = value.toByteArray(StandardCharsets.UTF_8)
+        val bytes = value.encodeToByteArray()
         writeInt(bytes.size)
         write(bytes)
     }

@@ -8,6 +8,9 @@ spring:
       constraints:
         read:
           max-document-length: 131072
+          max-name-length: 131072
+          max-nesting-depth: 131072
+          max-number-length: 131072
     mapper:
       allow-coercion-of-scalars: false
   datasource:

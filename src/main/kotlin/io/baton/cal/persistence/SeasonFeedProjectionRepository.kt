@@ -1,5 +1,7 @@
 package io.baton.cal.persistence
 
+import kotlin.jvm.optionals.getOrNull
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -17,45 +19,36 @@ class SeasonFeedProjectionRepository(
                 season_id,
                 representation,
                 etag,
-                last_modified,
-                item_count
+                last_modified
             ) VALUES (
                 :seasonId,
                 :representation,
                 :etag,
-                :lastModified,
-                :itemCount
+                :lastModified
             )
             ON CONFLICT (season_id) DO UPDATE SET
                 representation = EXCLUDED.representation,
                 etag = EXCLUDED.etag,
-                last_modified = EXCLUDED.last_modified,
-                item_count = EXCLUDED.item_count
+                last_modified = EXCLUDED.last_modified
             """.trimIndent(),
         )
             .param("seasonId", row.seasonId)
             .param("representation", row.representation)
             .param("etag", row.etag)
             .param("lastModified", OffsetDateTime.ofInstant(row.lastModified, ZoneOffset.UTC))
-            .param("itemCount", row.itemCount)
             .update()
     }
 
-    fun findBySeasonId(seasonId: UUID): SeasonFeedProjectionRow? =
+    fun findLastModifiedBySeasonId(seasonId: UUID): Instant? =
         jdbcClient.sql(
             """
-            SELECT
-                season_id,
-                representation,
-                etag,
-                last_modified,
-                item_count
+            SELECT last_modified
             FROM season_feed_projection
             WHERE season_id = :seasonId
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
-            .query { resultSet, _ -> resultSet.seasonFeedProjectionRow() }
+            .query(Instant::class.java)
             .optional()
-            .orElse(null)
+            .getOrNull()
 }

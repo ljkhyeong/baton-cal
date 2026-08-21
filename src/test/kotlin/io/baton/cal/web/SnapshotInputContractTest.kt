@@ -1,25 +1,25 @@
 package io.baton.cal.web
 
+import io.baton.cal.support.PostgreSqlTestContainer
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
 import java.text.Normalizer
 import java.util.UUID
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
+@Sql("/reset-database.sql")
 @SpringBootTest(
     properties = [
         "baton.cal.internal-token=test-internal-token-that-is-long-enough",
@@ -248,10 +248,5 @@ class SnapshotInputContractTest @Autowired constructor(
         const val SNAPSHOT_PATH = "/internal/api/v1/schedule-snapshots"
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

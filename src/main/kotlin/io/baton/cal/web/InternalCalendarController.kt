@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -46,11 +47,11 @@ class InternalCalendarController(
         .body(subscriptionService.rotate(subscriptionId))
 
     @DeleteMapping("/subscriptions/{subscriptionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     fun revokeSubscription(
         @PathVariable subscriptionId: UUID,
-    ): ResponseEntity<Void> {
+    ) {
         subscriptionService.revoke(subscriptionId)
-        return ResponseEntity.noContent().build()
     }
 
     @PostMapping("/projections/seasons/{seasonId}/rebuild")
