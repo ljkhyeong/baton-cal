@@ -24,11 +24,12 @@ class CalProperties(
                 "previousInternalToken은 internalToken과 달라야 한다"
             }
         }
-        require(!publicBaseUrl.isOpaque && publicBaseUrl.host != null) {
+        val publicHost = requireNotNull(publicBaseUrl.host) {
             "publicBaseUrl은 호스트가 있는 계층형 URI여야 한다"
         }
         require(
-            publicBaseUrl.scheme == "https" || publicBaseUrl.usesLoopbackHttp(),
+            publicBaseUrl.scheme == "https" ||
+                publicBaseUrl.scheme == "http" && publicHost.isLoopbackHost(),
         ) { "publicBaseUrl은 HTTPS 또는 로컬 개발용 HTTP를 사용해야 한다" }
         require(publicBaseUrl.query == null && publicBaseUrl.fragment == null) {
             "publicBaseUrl에는 쿼리나 프래그먼트를 넣을 수 없다"
@@ -50,13 +51,11 @@ class CalProperties(
 private fun String.isValidInternalToken(): Boolean =
     length >= 32 && none { it == '\r' || it == '\n' }
 
-private fun URI.usesLoopbackHttp(): Boolean {
-    if (scheme != "http") return false
-    val hostname = host ?: return false
-    if (hostname.equals("localhost", ignoreCase = true)) return true
+private fun String.isLoopbackHost(): Boolean {
+    if (equals("localhost", ignoreCase = true)) return true
 
     return try {
-        InetAddress.ofLiteral(hostname).isLoopbackAddress
+        InetAddress.ofLiteral(this).isLoopbackAddress
     } catch (_: IllegalArgumentException) {
         false
     }

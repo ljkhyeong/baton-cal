@@ -32,30 +32,32 @@ class SeasonProjectionService(
     @Transactional
     fun rebuild(seasonId: UUID): ProjectionResult {
         lockRepository.acquire(seasonId)
-        return rebuildWhileLocked(seasonId).toResult()
+        return rebuildWhileLocked(seasonId)
     }
 
     @Transactional
     fun ensureProjection(seasonId: UUID) {
         lockRepository.acquire(seasonId)
-        if (projectionRepository.findBySeasonId(seasonId) == null) rebuildWhileLocked(seasonId)
+        if (projectionRepository.findLastModifiedBySeasonId(seasonId) == null) rebuildWhileLocked(seasonId)
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    fun rebuildWhileLocked(seasonId: UUID): SeasonFeedProjectionRow {
-        val rendered = renderer.render(
-            seasonId = seasonId,
-            items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain),
+    fun rebuildWhileLocked(seasonId: UUID): ProjectionResult {
+        val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
+        val rendered = renderer.render(seasonId = seasonId, items = items)
+        projectionRepository.upsert(
+            SeasonFeedProjectionRow(
+                seasonId = seasonId,
+                representation = rendered.bytes,
+                etag = rendered.etag,
+                lastModified = rendered.lastModified,
+            ),
         )
-        val projection = SeasonFeedProjectionRow(
+        return ProjectionResult(
             seasonId = seasonId,
-            representation = rendered.bytes,
             etag = rendered.etag,
-            lastModified = rendered.lastModified,
-            itemCount = rendered.itemCount,
+            itemCount = items.size,
         )
-        projectionRepository.upsert(projection)
-        return projection
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -63,25 +65,18 @@ class SeasonProjectionService(
         seasonId: UUID,
         observedAt: Instant,
     ): Instant {
-        val current = projectionRepository.findBySeasonId(seasonId)
+        val lastModified = projectionRepository.findLastModifiedBySeasonId(seasonId)
         val observedSecond = observedAt.truncatedTo(ChronoUnit.SECONDS)
-        return if (current == null || observedSecond.isAfter(current.lastModified)) {
+        return if (lastModified == null || observedSecond.isAfter(lastModified)) {
             observedSecond
         } else {
-            current.lastModified.plusSeconds(1)
+            lastModified.plusSeconds(1)
         }
     }
-
-    private fun SeasonFeedProjectionRow.toResult(): ProjectionResult = ProjectionResult(
-        seasonId = seasonId,
-        etag = etag,
-        itemCount = itemCount,
-    )
 }
 
 private fun CalendarItemRow.toDomain(): CalendarItem = CalendarItem(
     sourceItemId = sourceItemId,
-    seasonId = seasonId,
     revision = revision,
     status = status,
     summary = summary,

@@ -46,7 +46,6 @@ data class SeasonFeedProjectionRow(
     val representation: ByteArray,
     val etag: String,
     val lastModified: Instant,
-    val itemCount: Int,
 )
 
 enum class CalendarSubscriptionStatus {

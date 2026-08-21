@@ -1,5 +1,6 @@
 package io.baton.cal.persistence
 
+import kotlin.jvm.optionals.getOrNull
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
@@ -45,7 +46,7 @@ class CalendarSubscriptionRepository(
             .param("id", id)
             .query(CalendarSubscriptionRow::class.java)
             .optional()
-            .orElse(null)
+            .getOrNull()
 
     fun findProjectionByActiveTokenHash(
         tokenHash: String,
@@ -57,8 +58,7 @@ class CalendarSubscriptionRepository(
                 projection.season_id,
                 projection.representation,
                 projection.etag,
-                projection.last_modified,
-                projection.item_count
+                projection.last_modified
             FROM calendar_subscription subscription
             JOIN season_feed_projection projection
               ON projection.season_id = subscription.season_id
@@ -69,9 +69,9 @@ class CalendarSubscriptionRepository(
         )
             .param("tokenHash", tokenHash)
             .param("expectedCredentialGeneration", expectedCredentialGeneration)
-            .query { resultSet, _ -> resultSet.seasonFeedProjectionRow() }
+            .query(SeasonFeedProjectionRow::class.java)
             .optional()
-            .orElse(null)
+            .getOrNull()
 
     /** 호출자가 읽은 자격 증명이 아직 활성 상태일 때만 회전한다. */
     fun rotate(
@@ -105,7 +105,7 @@ class CalendarSubscriptionRepository(
             UPDATE calendar_subscription
             SET status = 'REVOKED'
             WHERE id = :id
-              AND status = 'ACTIVE'
+              AND status IN ('ACTIVE', 'REVOKED')
               AND token_hash = :expectedTokenHash
             """.trimIndent(),
         )

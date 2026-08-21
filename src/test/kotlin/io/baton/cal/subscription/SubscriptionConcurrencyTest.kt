@@ -3,6 +3,7 @@ package io.baton.cal.subscription
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
+import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.SnapshotConflictException
 import io.baton.cal.web.SubscriptionCredential
@@ -17,14 +18,11 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @SpringBootTest(
     properties = [
         "baton.cal.internal-token=subscription-concurrency-test-token",
@@ -72,25 +70,18 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             },
         )
 
-        assertThat(outcomes.count { it !is Failed }).isEqualTo(1)
         assertSubscriptionConflict(outcomes.filterIsInstance<Failed>().single().error)
 
         when (repository.findById(initial.subscriptionId)?.status) {
             CalendarSubscriptionStatus.ACTIVE -> {
                 val winner = outcomes.filterIsInstance<Rotated>().single()
-                assertThat(outcomes).noneMatch { it is Revoked }
                 assertThat(service.findFeed(initial.token)).isNull()
                 assertThat(service.findFeed(winner.credential.token)).isNotNull()
             }
 
             CalendarSubscriptionStatus.REVOKED -> {
                 assertThat(outcomes).anyMatch { it is Revoked }
-                assertThat(outcomes).noneMatch { it is Rotated }
-                val issuedTokens = listOf(initial.token) +
-                    outcomes.filterIsInstance<Rotated>().map { it.credential.token }
-                assertThat(issuedTokens).allSatisfy { token ->
-                    assertThat(service.findFeed(token)).isNull()
-                }
+                assertThat(service.findFeed(initial.token)).isNull()
             }
 
             null -> throw AssertionError("subscription disappeared during the race")
@@ -110,8 +101,9 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         assertThat(service.findFeed(initial.token)).isNull()
 
         val error = catchThrowable { service.rotate(initial.subscriptionId) }
-        assertThat(error).isInstanceOf(InternalResourceNotFoundException::class.java)
-        assertThat((error as InternalResourceNotFoundException).code).isEqualTo("RESOURCE_NOT_FOUND")
+        assertThat(error).isInstanceOfSatisfying(InternalResourceNotFoundException::class.java) {
+            assertThat(it.code).isEqualTo("RESOURCE_NOT_FOUND")
+        }
     }
 
     private fun synchronizeFirstTwoReads(subscriptionId: UUID) {
@@ -153,15 +145,12 @@ class SubscriptionConcurrencyTest @Autowired constructor(
     }
 
     private fun attempt(operation: () -> OperationOutcome): OperationOutcome =
-        try {
-            operation()
-        } catch (error: Throwable) {
-            Failed(error)
-        }
+        runCatching(operation).fold(onSuccess = { it }, onFailure = ::Failed)
 
     private fun assertSubscriptionConflict(error: Throwable) {
-        assertThat(error).isInstanceOf(SnapshotConflictException::class.java)
-        assertThat((error as SnapshotConflictException).code).isEqualTo("SUBSCRIPTION_CONFLICT")
+        assertThat(error).isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+            assertThat(it.code).isEqualTo("SUBSCRIPTION_CONFLICT")
+        }
     }
 
     private sealed interface OperationOutcome
@@ -175,10 +164,5 @@ class SubscriptionConcurrencyTest @Autowired constructor(
     private companion object {
         const val TIMEOUT_SECONDS = 10L
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

@@ -1,5 +1,6 @@
 package io.baton.cal.persistence
 
+import kotlin.jvm.optionals.getOrNull
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -42,7 +43,7 @@ class SourceEventInboxRepository(
             .param("receivedAt", OffsetDateTime.ofInstant(row.receivedAt, ZoneOffset.UTC))
             .update() == 1
 
-    fun findPayloadHashByEventId(eventId: UUID): String? =
+    fun getPayloadHashByEventId(eventId: UUID): String =
         jdbcClient.sql(
             """
             SELECT payload_hash
@@ -52,12 +53,12 @@ class SourceEventInboxRepository(
         )
             .param("eventId", eventId)
             .query(String::class.java)
-            .optional()
-            .orElse(null)
+            .single()
 
     fun findPayloadHashBySourceItemIdAndRevision(
         sourceItemId: UUID,
         sourceRevision: Int,
+        excludingEventId: UUID,
     ): String? =
         jdbcClient.sql(
             """
@@ -65,12 +66,14 @@ class SourceEventInboxRepository(
             FROM source_event_inbox
             WHERE source_item_id = :sourceItemId
               AND source_revision = :sourceRevision
+              AND event_id <> :excludingEventId
             LIMIT 1
             """.trimIndent(),
         )
             .param("sourceItemId", sourceItemId)
             .param("sourceRevision", sourceRevision)
+            .param("excludingEventId", excludingEventId)
             .query(String::class.java)
             .optional()
-            .orElse(null)
+            .getOrNull()
 }

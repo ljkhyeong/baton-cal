@@ -29,21 +29,6 @@ class SnapshotIngestionService(
         val receivedAt = clock.instant().truncatedTo(ChronoUnit.MICROS)
         lockRepository.acquire(snapshot.seasonId)
 
-        inboxRepository.findPayloadHashByEventId(snapshot.eventId)?.let { existingHash ->
-            return classifyEventReplay(existingHash, payloadHash)
-        }
-
-        val existingRevisionHash = inboxRepository.findPayloadHashBySourceItemIdAndRevision(
-            snapshot.sourceItemId,
-            snapshot.revision,
-        )
-        if (existingRevisionHash != null && existingRevisionHash != payloadHash) {
-            throw SnapshotConflictException(
-                code = "SOURCE_REVISION_CONFLICT",
-                message = "source revision already represents different content",
-            )
-        }
-
         val inserted = inboxRepository.insert(
             SourceEventInboxRow(
                 eventId = snapshot.eventId,
@@ -57,12 +42,24 @@ class SnapshotIngestionService(
         )
 
         if (!inserted) {
-            val existingHash = checkNotNull(inboxRepository.findPayloadHashByEventId(snapshot.eventId)) {
-                "eventId conflict could not be classified"
-            }
-            return classifyEventReplay(existingHash, payloadHash)
+            return classifyEventReplay(
+                inboxRepository.getPayloadHashByEventId(snapshot.eventId),
+                payloadHash,
+            )
         }
-        if (existingRevisionHash != null) return SnapshotIngestionResult.DUPLICATE
+
+        val existingRevisionHash = inboxRepository.findPayloadHashBySourceItemIdAndRevision(
+            snapshot.sourceItemId,
+            snapshot.revision,
+            snapshot.eventId,
+        )
+        if (existingRevisionHash != null) {
+            if (existingRevisionHash == payloadHash) return SnapshotIngestionResult.DUPLICATE
+            throw SnapshotConflictException(
+                code = "SOURCE_REVISION_CONFLICT",
+                message = "source revision already represents different content",
+            )
+        }
 
         val acceptedAt = projectionService.nextAcceptedAtWhileLocked(snapshot.seasonId, receivedAt)
         return when (itemRepository.applyIfNewer(snapshot.toRow(acceptedAt))) {

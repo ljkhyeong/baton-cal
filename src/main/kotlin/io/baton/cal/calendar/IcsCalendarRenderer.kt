@@ -28,14 +28,12 @@ import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.HexFormat
 import java.util.UUID
 
 data class RenderedCalendar(
     val bytes: ByteArray,
     val etag: String,
     val lastModified: Instant,
-    val itemCount: Int,
 )
 
 @Component
@@ -59,9 +57,7 @@ class IcsCalendarRenderer {
         val bytes = ByteArrayOutputStream().also { output ->
             CalendarOutputter(false, UTF8_SAFE_FOLD_LENGTH).output(calendar, output)
         }.toByteArray()
-        val digest = HexFormat.of().formatHex(
-            MessageDigest.getInstance("SHA-256").digest(bytes),
-        )
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes).toHexString()
 
         return RenderedCalendar(
             bytes = bytes,
@@ -69,7 +65,6 @@ class IcsCalendarRenderer {
             lastModified = sortedItems.maxOfOrNull(CalendarItem::acceptedAt)
                 ?.truncatedTo(ChronoUnit.SECONDS)
                 ?: Instant.EPOCH,
-            itemCount = sortedItems.size,
         )
     }
 

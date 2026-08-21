@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.context.request.WebRequest
-import java.nio.charset.StandardCharsets
 
 @RestController
 class PublicCalendarController(
@@ -26,17 +25,16 @@ class PublicCalendarController(
             ?: run {
                 response.status = HttpServletResponse.SC_NOT_FOUND
                 return
-            }
-
-        response.setHeader(HttpHeaders.ETAG, projection.etag)
-        response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
-        response.setHeader(HttpHeaders.CACHE_CONTROL, FEED_CACHE_CONTROL.headerValue)
-        if (request.checkNotModified(projection.etag, projection.lastModified.toEpochMilli())) {
-            // Spring은 빈 피드의 기준 검증 값인 Unix epoch를 Last-Modified에서
-            // 생략하므로 이 경우에만 헤더를 직접 설정한다.
-            response.setDateHeader(HttpHeaders.LAST_MODIFIED, projection.lastModified.toEpochMilli())
-            return
         }
+
+        val lastModified = projection.lastModified.toEpochMilli()
+        response.setHeader(HttpHeaders.CACHE_CONTROL, FEED_CACHE_CONTROL.headerValue)
+        val notModified = request.checkNotModified(projection.etag, lastModified)
+        if (lastModified == 0L) {
+            // Spring은 빈 피드의 기준 검증 값인 Unix epoch만 Last-Modified에서 생략한다.
+            response.setDateHeader(HttpHeaders.LAST_MODIFIED, lastModified)
+        }
+        if (notModified) return
 
         response.contentType = CALENDAR_MEDIA_TYPE.toString()
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, CALENDAR_CONTENT_DISPOSITION.toString())
@@ -50,7 +48,7 @@ class PublicCalendarController(
 
     private companion object {
         val FEED_CACHE_CONTROL: CacheControl = CacheControl.noCache().cachePrivate()
-        val CALENDAR_MEDIA_TYPE = MediaType("text", "calendar", StandardCharsets.UTF_8)
+        val CALENDAR_MEDIA_TYPE = MediaType("text", "calendar", Charsets.UTF_8)
         val CALENDAR_CONTENT_DISPOSITION: ContentDisposition = ContentDisposition.inline()
             .filename("baton-calendar.ics")
             .build()

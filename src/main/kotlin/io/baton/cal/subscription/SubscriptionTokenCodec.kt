@@ -1,11 +1,9 @@
 package io.baton.cal.subscription
 
+import kotlin.io.encoding.Base64
 import org.springframework.stereotype.Component
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.Base64
-import java.util.HexFormat
 
 @Component
 class SubscriptionTokenCodec(
@@ -14,14 +12,15 @@ class SubscriptionTokenCodec(
     fun generate(): String {
         val entropy = ByteArray(TOKEN_ENTROPY_BYTES)
         secureRandom.nextBytes(entropy)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(entropy)
+        return TOKEN_ENCODER.encode(entropy)
     }
 
-    fun hash(token: String): String = HexFormat.of().formatHex(
-        MessageDigest.getInstance("SHA-256").digest(token.toByteArray(StandardCharsets.US_ASCII)),
-    )
+    fun hash(token: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(token.toByteArray(Charsets.US_ASCII))
+        .toHexString()
 
     private companion object {
         const val TOKEN_ENTROPY_BYTES = 32
+        val TOKEN_ENCODER: Base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
     }
 }

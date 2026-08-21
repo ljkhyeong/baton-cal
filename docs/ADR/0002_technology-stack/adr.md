@@ -23,6 +23,9 @@ BATON CAL MVP는 다음 특성을 가진다.
 ### 애플리케이션 실행 환경
 
 - Kotlin/JVM 2.3.21과 Gradle 9.6.1 Kotlin DSL을 쓴다.
+- 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수와 파일 편의 기능에는 Kotlin 표준
+  라이브러리를 우선한다. 시간, 암호화, URI, 네트워크와 UUID처럼 Kotlin 표준 라이브러리가
+  소유하지 않는 JVM 기능은 JDK API를 사용한다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
 - Spring Boot 4.1.0과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
@@ -62,6 +65,8 @@ BATON CAL MVP는 다음 특성을 가진다.
 - V4는 기존 행을 호환용 초기 세대로 승격하고 애플리케이션이 이후 세대를 명시해 쓰도록 열 기본값을
   남기지 않는다. pre-V4 쓰기·조회는 이 경계를 이해하지 못하므로 모든 구버전을 중지한 상태에서
   적용하며 V4 이후 pre-V4 롤백과 구·신 버전 공존을 허용하지 않는다.
+- V5는 더 이상 읽지 않는 `season_feed_projection.item_count`를 제거한다. 이 열을 참조하는 pre-V5
+  인스턴스를 모두 중지한 유지보수 배포로 적용하며, 이후 pre-V5 롤백·공존 대신 신버전으로 전진 수정한다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
 
@@ -76,9 +81,9 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 - CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.2.5의
   줄 접기는 UTF-8 옥텟이 아니라 UTF-16 문자를 세므로 줄 접기 길이를 25로 고정해 연속 줄
   공백을 포함한 모든 물리 줄이 75 옥텟 이하가 되게 한다.
-- `TimeZoneRegistryImpl`이 고정된 iCal4j 시간대 정의로 사용하는 TZID의 전체 `VTIMEZONE`을
-  만든다. JVM `ZoneRules`를 복제해 전환 컴포넌트를 직접 만들지 않는다.
-- SHA-256 소문자 16진수 변환에는 Java `MessageDigest`와 `HexFormat`을 쓴다.
+- iCal4j `TimeZoneRegistryFactory`가 만든 레지스트리에서 사용하는 TZID의 전체 `VTIMEZONE`을
+  가져온다. JVM `ZoneRules`를 복제해 전환 컴포넌트를 직접 만들지 않는다.
+- SHA-256은 JDK `MessageDigest`로 계산하고 소문자 16진수 변환에는 Kotlin `toHexString()`을 쓴다.
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
   `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
   보류 항목이다.
@@ -111,8 +116,8 @@ run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpac
 `contractsZip`은 이 값에서 `baton-cal-contracts-{version}.zip`을 만든다. ZIP은 `contracts/**`
 전체와 JSON Schema 밖의 필드 간 의미, HTTP 상태, 토큰·iCalendar 규칙을 소유하는 PRD-0002만
 포함한다. ZIP 내부 `contracts/VERSION`, 파일명의 버전과 `contracts-v{version}` 태그는 같은
-버전을 가리킨다. 파일 시각을 보존하지 않고 재현 가능한 항목 순서와 디렉터리 `0755`·파일 `0644`
-권한을 명시해 같은 입력에서 같은 ZIP 바이트를 만든다.
+버전을 가리킨다. Gradle 표준 아카이브 기본값이 파일 시각을 보존하지 않고 재현 가능한 항목 순서와
+디렉터리 `0755`·파일 `0644` 권한을 적용해 같은 입력에서 같은 ZIP 바이트를 만든다.
 
 GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` 보존을 요청하는 변경
 검토용 임시 배포 경계다. 실제 만료는 저장소·조직 정책을 따른다. 안정적인 생산자 의존성은 릴리스
@@ -175,8 +180,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   세대 변경 뒤 과거 토큰은 일반 `404`가 되는지 PostgreSQL 통합 테스트로 검증한다.
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
 - GitHub Actions는 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만든다. 실제
-  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V4, DB 포함 준비 상태,
-  비루트 실행과 SIGTERM 종료 코드 143을 스모크 검증한다.
+  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V5, DB 포함 준비 상태,
+  비루트 실행과 SIGTERM 종료 코드 143을 스모크 검증한다. 같은 외부 구독 세대로 컨테이너를
+  강제 재생성한 뒤 기존 공개 피드가 계속 `200`인지도 확인한다.
 - 같은 스모크는 세대 A의 데이터를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션을
   중지한 상태에서 세대 B로 먼저 바꾼 뒤 `pg_restore --clean --create --exit-on-error`로 실제
   복원한다. 복원 토큰의 본문 없는 일반 `404`, 대표 계약 픽스처의 최신 변경·취소 재전달,
@@ -216,8 +222,8 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 줄 접기 길이 25는 ASCII 줄도 일찍 접으므로 사람이 읽는 캘린더 피드는 다소 장황할 수 있다.
 - 고정된 iCal4j 시간대 데이터나 직렬화기를 올릴 때 캘린더 바이트와 ETag가 바뀌는지 검토해야 한다.
 - 동기식 재구축이 커지는 시점에는 작업 상태와 일괄 처리 전략을 새 계약으로 도입해야 한다.
-- V4는 복원 펜스를 모르는 구버전과 롤링 호환되지 않으므로 최초 한 번 유지보수 배포와 전진 수정
-  원칙이 필요하다.
+- V4는 복원 펜스를 모르는 구버전과, V5는 제거된 투영 열을 참조하는 구버전과 롤링 호환되지 않으므로
+  각각 최초 한 번 유지보수 배포와 전진 수정 원칙이 필요하다.
 - builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고 공급 이미지 갱신을 별도로
   검토해야 한다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤

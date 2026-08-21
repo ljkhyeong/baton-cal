@@ -8,6 +8,7 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
+import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -18,17 +19,15 @@ import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
 import java.time.Instant
 import java.util.UUID
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @SpringBootTest(
     properties = [
         "baton.cal.internal-token=transaction-recovery-test-token-0001",
@@ -53,31 +52,32 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThatThrownBy { ingestionService.ingest(SNAPSHOT) }
             .isInstanceOf(SimulatedRenderFailure::class.java)
 
-        assertDurableRowCounts(expected = 0L)
+        assertDurableRowCounts(expected = 0)
 
         assertThat(ingestionService.ingest(SNAPSHOT)).isEqualTo(SnapshotIngestionResult.APPLIED)
-        assertDurableRowCounts(expected = 1L)
+        assertDurableRowCounts(expected = 1)
 
-        val projection = projectionRepository.findBySeasonId(SEASON_ID)
-        assertThat(projection).isNotNull
-        assertThat(projection!!.itemCount).isEqualTo(1)
-        assertThat(projection.etag).matches("\"[0-9a-f]{64}\"")
-        val event = projection.representation.parseIcalendar().events().single()
+        assertThat(projectionRepository.findLastModifiedBySeasonId(SEASON_ID)).isNotNull()
+        val projection = jdbcClient.sql(
+            "SELECT representation, etag FROM season_feed_projection WHERE season_id = :seasonId",
+        )
+            .param("seasonId", SEASON_ID)
+            .query { resultSet, _ ->
+                resultSet.getBytes("representation") to resultSet.getString("etag")
+            }
+            .single()
+        assertThat(projection.second).matches("\"[0-9a-f]{64}\"")
+        val event = projection.first.parseIcalendar().events().single()
         assertThat(event.requiredPropertyValue(Property.UID)).isEqualTo("$SOURCE_ITEM_ID@cal.baton")
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
         verify(renderer, times(2)).render(eqArg(SEASON_ID), anyListArg<CalendarItem>())
     }
 
-    private fun assertDurableRowCounts(expected: Long) {
-        assertThat(rowCount("source_event_inbox")).isEqualTo(expected)
-        assertThat(rowCount("calendar_item")).isEqualTo(expected)
-        assertThat(rowCount("season_feed_projection")).isEqualTo(expected)
+    private fun assertDurableRowCounts(expected: Int) {
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "source_event_inbox")).isEqualTo(expected)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_item")).isEqualTo(expected)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_feed_projection")).isEqualTo(expected)
     }
-
-    private fun rowCount(table: String): Long = jdbcClient
-        .sql("SELECT COUNT(*) FROM $table")
-        .query(Long::class.java)
-        .single()
 
     private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
 
@@ -106,9 +106,5 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
             sourceUpdatedAt = Instant.parse("2026-08-13T00:30:00Z"),
         )
 
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

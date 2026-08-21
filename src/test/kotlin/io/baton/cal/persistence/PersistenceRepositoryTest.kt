@@ -2,6 +2,7 @@ package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleTimeType
+import io.baton.cal.support.PostgreSqlTestContainer
 import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
@@ -12,15 +13,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @SpringBootTest(
     properties = [
         "baton.cal.internal-token=persistence-test-internal-token-0001",
@@ -48,10 +46,14 @@ class PersistenceRepositoryTest @Autowired constructor(
         assertThat(inboxRepository.insert(row)).isTrue()
         assertThat(inboxRepository.insert(row.copy(payloadHash = HASH_B))).isFalse()
         assertThat(inboxRepository.insert(replay)).isTrue()
-        assertThat(inboxRepository.findPayloadHashByEventId(row.eventId)).isEqualTo(row.payloadHash)
-        assertThat(inboxRepository.findPayloadHashByEventId(replay.eventId)).isEqualTo(replay.payloadHash)
+        assertThat(inboxRepository.getPayloadHashByEventId(row.eventId)).isEqualTo(row.payloadHash)
+        assertThat(inboxRepository.getPayloadHashByEventId(replay.eventId)).isEqualTo(replay.payloadHash)
         assertThat(
-            inboxRepository.findPayloadHashBySourceItemIdAndRevision(row.sourceItemId, row.sourceRevision),
+            inboxRepository.findPayloadHashBySourceItemIdAndRevision(
+                row.sourceItemId,
+                row.sourceRevision,
+                replay.eventId,
+            ),
         ).isEqualTo(row.payloadHash)
     }
 
@@ -117,17 +119,23 @@ class PersistenceRepositoryTest @Autowired constructor(
             representation = "first".toByteArray(),
             etag = "\"$HASH_A\"",
             lastModified = Instant.parse("2026-08-11T01:00:00Z"),
-            itemCount = 1,
         )
         val rebuilt = initial.copy(
             representation = "second".toByteArray(),
             etag = "\"$HASH_B\"",
-            itemCount = 2,
         )
 
         feedRepository.upsert(initial)
+        val subscription = subscription()
+        subscriptionRepository.insert(subscription)
         feedRepository.upsert(rebuilt)
-        assertThat(feedRepository.findBySeasonId(SEASON_ID)).usingRecursiveComparison().isEqualTo(rebuilt)
+        assertThat(feedRepository.findLastModifiedBySeasonId(SEASON_ID)).isEqualTo(rebuilt.lastModified)
+        assertThat(
+            subscriptionRepository.findProjectionByActiveTokenHash(
+                subscription.tokenHash,
+                subscription.credentialGeneration,
+            ),
+        ).usingRecursiveComparison().isEqualTo(rebuilt)
     }
 
     @Test
@@ -138,16 +146,9 @@ class PersistenceRepositoryTest @Autowired constructor(
                 representation = "feed".toByteArray(),
                 etag = "\"$HASH_A\"",
                 lastModified = Instant.EPOCH,
-                itemCount = 0,
             ),
         )
-        val subscription = CalendarSubscriptionRow(
-            id = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
-            seasonId = SEASON_ID,
-            tokenHash = HASH_A,
-            credentialGeneration = INITIAL_CREDENTIAL_GENERATION,
-            status = CalendarSubscriptionStatus.ACTIVE,
-        )
+        val subscription = subscription()
 
         subscriptionRepository.insert(subscription)
         assertThat(subscriptionRepository.findById(subscription.id)).isEqualTo(subscription)
@@ -217,7 +218,7 @@ class PersistenceRepositoryTest @Autowired constructor(
                 HASH_B,
             ),
         )
-            .isFalse()
+            .isTrue()
     }
 
     @Test
@@ -316,6 +317,14 @@ class PersistenceRepositoryTest @Autowired constructor(
         acceptedAt = Instant.parse("2026-10-01T00:00:01Z"),
     )
 
+    private fun subscription() = CalendarSubscriptionRow(
+        id = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+        seasonId = SEASON_ID,
+        tokenHash = HASH_A,
+        credentialGeneration = INITIAL_CREDENTIAL_GENERATION,
+        status = CalendarSubscriptionStatus.ACTIVE,
+    )
+
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
         val OTHER_SEASON_ID: UUID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc")
@@ -326,12 +335,5 @@ class PersistenceRepositoryTest @Autowired constructor(
             UUID.fromString("20000000-0000-0000-0000-000000000002")
         const val HASH_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        const val HASH_C = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-        const val HASH_D = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

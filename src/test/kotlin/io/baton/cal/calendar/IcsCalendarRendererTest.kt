@@ -4,12 +4,11 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import net.fortuna.ical4j.model.Property
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import kotlin.io.encoding.Base64
+import kotlin.io.path.readText
 import java.nio.file.Path
 import java.time.Instant
 import java.time.LocalDateTime
-import java.util.Base64
 import java.util.UUID
 
 class IcsCalendarRendererTest {
@@ -22,7 +21,6 @@ class IcsCalendarRendererTest {
         val calendar = rendered.bytes.parseIcalendar()
 
         assertThat(rendered.bytes).isEqualTo(goldenFixture("season-empty.ics.b64"))
-        assertThat(rendered.itemCount).isZero()
         assertThat(rendered.lastModified).isEqualTo(Instant.EPOCH)
         assertThat(calendar.events()).isEmpty()
         assertThat(calendar.timeZones()).isEmpty()
@@ -33,7 +31,6 @@ class IcsCalendarRendererTest {
     fun `UTC snapshot is rendered deterministically with stable identity and revision`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            seasonId = seasonId,
             revision = 7,
             status = CalendarItemStatus.ACTIVE,
             summary = "개막전, A팀; B팀",
@@ -49,7 +46,7 @@ class IcsCalendarRendererTest {
 
         val first = renderer.render(seasonId, listOf(item))
         val rebuilt = renderer.render(seasonId, listOf(item))
-        val event = first.bytes.parseIcalendar().events().single()
+        val event = first.bytes.parseIcalendar().requiredEvent()
 
         assertThat(first.bytes).isEqualTo(goldenFixture("season-utc.ics.b64"))
         assertThat(first.bytes).isEqualTo(rebuilt.bytes)
@@ -71,7 +68,6 @@ class IcsCalendarRendererTest {
         val location = "실제 줄바꿈\n리터럴 \\n"
         val item = CalendarItem(
             sourceItemId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"),
-            seasonId = seasonId,
             revision = 11,
             status = CalendarItemStatus.ACTIVE,
             summary = summary,
@@ -86,8 +82,8 @@ class IcsCalendarRendererTest {
         )
 
         val rendered = renderer.render(seasonId, listOf(item))
-        val event = rendered.bytes.parseIcalendar().events().single()
-        val physicalLines = rendered.bytes.toString(StandardCharsets.UTF_8)
+        val event = rendered.bytes.parseIcalendar().requiredEvent()
+        val physicalLines = rendered.bytes.decodeToString()
             .split("\r\n")
             .dropLast(1)
 
@@ -97,7 +93,7 @@ class IcsCalendarRendererTest {
         assertThat(event.requiredPropertyValue(Property.DESCRIPTION)).isEqualTo(description)
         assertThat(event.requiredPropertyValue(Property.LOCATION)).isEqualTo(location)
         assertThat(physicalLines).allSatisfy { line ->
-            assertThat(line.toByteArray(StandardCharsets.UTF_8).size).isLessThanOrEqualTo(75)
+            assertThat(line.encodeToByteArray().size).isLessThanOrEqualTo(75)
         }
         assertCanonicalCrLf(rendered.bytes)
     }
@@ -106,7 +102,6 @@ class IcsCalendarRendererTest {
     fun `zoned local cancellation across DST and midnight matches canonical golden`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-            seasonId = seasonId,
             revision = 9,
             status = CalendarItemStatus.CANCELLED,
             summary = "DST midnight cancellation",
@@ -123,14 +118,13 @@ class IcsCalendarRendererTest {
 
         val rendered = renderer.render(seasonId, listOf(item))
         val calendar = rendered.bytes.parseIcalendar()
-        val event = calendar.events().single()
-        val timeZone = calendar.timeZones().single()
+        val event = calendar.requiredEvent()
+        val timeZone = calendar.requiredTimeZone()
         val start = event.requiredProperty(Property.DTSTART)
         val end = event.requiredProperty(Property.DTEND)
 
         assertThat(rendered.bytes)
             .isEqualTo(goldenFixture("season-zoned-midnight-cancellation.ics.b64"))
-        assertThat(rendered.itemCount).isOne()
         assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-10-31T12:34:56Z"))
         assertThat(timeZone.timeZoneId.value).isEqualTo("America/New_York")
         assertThat(timeZone.observances.map { it.name }).contains("DAYLIGHT", "STANDARD")
@@ -146,25 +140,20 @@ class IcsCalendarRendererTest {
     }
 
     @Test
-    fun `event order is stable and folded physical lines stay within 75 UTF-8 octets`() {
+    fun `입력 순서와 무관하게 이벤트 바이트 순서가 안정적이다`() {
         val laterId = item(
             sourceItemId = "ffffffff-ffff-ffff-ffff-ffffffffffff",
-            summary = "매우 긴 한글 일정 이름 ".repeat(12),
+            summary = "나중 일정",
         )
         val earlierId = item(
             sourceItemId = "00000000-0000-0000-0000-000000000001",
-            summary = "short",
+            summary = "먼저 일정",
         )
 
         val first = renderer.render(seasonId, listOf(laterId, earlierId))
         val second = renderer.render(seasonId, listOf(earlierId, laterId))
-        val lines = first.bytes.toString(StandardCharsets.UTF_8).split("\r\n").dropLast(1)
 
         assertThat(first.bytes).isEqualTo(second.bytes)
-        assertThat(lines).allSatisfy { line ->
-            assertThat(line.toByteArray(StandardCharsets.UTF_8).size).isLessThanOrEqualTo(75)
-        }
-        assertThat(lines).anySatisfy { line -> assertThat(line).startsWith(" ") }
     }
 
     @Test
@@ -197,7 +186,6 @@ class IcsCalendarRendererTest {
         summary: String,
     ): CalendarItem = CalendarItem(
         sourceItemId = UUID.fromString(sourceItemId),
-        seasonId = seasonId,
         revision = 0,
         status = CalendarItemStatus.ACTIVE,
         summary = summary,
@@ -211,12 +199,12 @@ class IcsCalendarRendererTest {
         acceptedAt = Instant.parse("2026-01-01T00:00:00Z"),
     )
 
-    private fun goldenFixture(name: String): ByteArray = Base64.getMimeDecoder().decode(
-        Files.readString(Path.of("contracts/golden", name)),
+    private fun goldenFixture(name: String): ByteArray = Base64.Mime.decode(
+        Path.of("contracts/golden", name).readText(),
     )
 
     private fun assertCanonicalCrLf(bytes: ByteArray) {
-        val text = bytes.toString(StandardCharsets.UTF_8)
+        val text = bytes.decodeToString()
 
         assertThat(text).endsWith("\r\n")
         assertThat(text.replace("\r\n", "")).doesNotContain("\r", "\n")

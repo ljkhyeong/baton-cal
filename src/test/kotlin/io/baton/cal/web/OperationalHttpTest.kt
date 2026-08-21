@@ -1,15 +1,17 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
+import io.baton.cal.support.PostgreSqlTestContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties
+import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -17,14 +19,13 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
-import java.nio.file.Files
+import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 import java.nio.file.Path
 
-@Testcontainers
+@ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
+@Sql("/reset-database.sql")
 @SpringBootTest(
     properties = [
         "spring.profiles.active=prod",
@@ -78,21 +79,41 @@ class OperationalHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `JSON 문서 상한을 넘는 내부 요청은 표준 오류 형식의 413을 반환한다`() {
-        val validSnapshot = Files.readString(
-            Path.of("contracts/examples/schedule-snapshot.utc-active.json"),
+    fun `JSON 문서 상한 경계는 허용하고 한 바이트 초과는 413을 반환한다`() {
+        mockMvc.perform(
+            authorizedPost("/internal/api/v1/schedule-snapshots")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH)),
         )
-        val oversizedJson = " ".repeat(MAX_JSON_DOCUMENT_LENGTH) + validSnapshot
+            .andExpect(status().isOk)
 
         mockMvc.perform(
             authorizedPost("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(oversizedJson),
+                .content(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH + 1)),
         )
             .andExpect(status().isContentTooLarge)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
             .andExpect(jsonPath("$.message").value("request body exceeds the maximum size"))
+    }
+
+    @Test
+    fun `문서 상한 안의 잘못된 숫자는 크기 초과가 아닌 잘못된 요청으로 분류한다`() {
+        val validSnapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readText()
+        val invalidSnapshot = validSnapshot.replace(
+            "\"revision\": 0",
+            "\"revision\": ${"9".repeat(1_001)}",
+        )
+
+        mockMvc.perform(
+            authorizedPost("/internal/api/v1/schedule-snapshots")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(invalidSnapshot),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
     }
 
     @Test
@@ -107,14 +128,14 @@ class OperationalHttpTest @Autowired constructor(
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
 
+    private fun snapshotDocumentOfSize(size: Int): ByteArray {
+        val snapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readBytes()
+        return ByteArray(size - snapshot.size) { ' '.code.toByte() } + snapshot
+    }
+
     companion object {
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val MAX_JSON_DOCUMENT_LENGTH = 131_072
-
-        @Container
-        @ServiceConnection
-        @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
     }
 }

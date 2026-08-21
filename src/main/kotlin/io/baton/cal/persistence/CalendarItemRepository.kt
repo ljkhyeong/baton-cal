@@ -1,8 +1,5 @@
 package io.baton.cal.persistence
 
-import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.calendar.ScheduleTimeType
-import java.sql.ResultSet
 import java.sql.Types
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -24,16 +21,11 @@ class CalendarItemRepository(
     fun applyIfNewer(candidate: CalendarItemRow): CalendarItemApplyOutcome {
         if (upsert(candidate)) return CalendarItemApplyOutcome.APPLIED
 
-        val current = checkNotNull(findRevisionState(candidate.sourceItemId)) {
-            "calendar item disappeared while classifying conditional apply"
-        }
+        val current = findRevisionState(candidate.sourceItemId)
         return when {
             candidate.seasonId != current.seasonId -> CalendarItemApplyOutcome.SCOPE_CONFLICT
             candidate.revision < current.revision -> CalendarItemApplyOutcome.STALE
-            candidate.revision == current.revision -> CalendarItemApplyOutcome.REVISION_CONFLICT
-            !candidate.sourceUpdatedAt.isAfter(current.sourceUpdatedAt) ->
-                CalendarItemApplyOutcome.REVISION_CONFLICT
-            else -> error("newer calendar item revision was not applied")
+            else -> CalendarItemApplyOutcome.REVISION_CONFLICT
         }
     }
 
@@ -46,8 +38,9 @@ class CalendarItemRepository(
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
-            .query(::mapRow)
+            .query(CalendarItemRow::class.java)
             .list()
+            .requireNoNulls()
 
     private fun upsert(candidate: CalendarItemRow): Boolean =
         bindCandidate(
@@ -109,24 +102,17 @@ class CalendarItemRepository(
         )
             .update() == 1
 
-    private fun findRevisionState(sourceItemId: UUID): RevisionState? =
+    private fun findRevisionState(sourceItemId: UUID): RevisionState =
         jdbcClient.sql(
             """
-            SELECT season_id, revision, source_updated_at
+            SELECT season_id, revision
             FROM calendar_item
             WHERE source_item_id = :sourceItemId
             """.trimIndent(),
         )
             .param("sourceItemId", sourceItemId)
-            .query { resultSet, _ ->
-                RevisionState(
-                    seasonId = resultSet.getObject("season_id", UUID::class.java),
-                    revision = resultSet.getInt("revision"),
-                    sourceUpdatedAt = resultSet.requiredInstant("source_updated_at"),
-                )
-            }
-            .optional()
-            .orElse(null)
+            .query(RevisionState::class.java)
+            .single()
 
     private fun bindCandidate(
         statement: JdbcClient.StatementSpec,
@@ -157,25 +143,6 @@ class CalendarItemRepository(
             .param("sourceUpdatedAt", OffsetDateTime.ofInstant(row.sourceUpdatedAt, ZoneOffset.UTC))
             .param("acceptedAt", OffsetDateTime.ofInstant(row.acceptedAt, ZoneOffset.UTC))
 
-    private fun mapRow(resultSet: ResultSet, @Suppress("UNUSED_PARAMETER") rowNumber: Int) =
-        CalendarItemRow(
-            sourceItemId = resultSet.getObject("source_item_id", UUID::class.java),
-            seasonId = resultSet.getObject("season_id", UUID::class.java),
-            revision = resultSet.getInt("revision"),
-            status = CalendarItemStatus.valueOf(resultSet.getString("status")),
-            summary = resultSet.getString("summary"),
-            description = resultSet.getString("description"),
-            location = resultSet.getString("location"),
-            timeType = ScheduleTimeType.valueOf(resultSet.getString("time_type")),
-            startsAtInstant = resultSet.nullableInstant("starts_at_instant"),
-            endsAtInstant = resultSet.nullableInstant("ends_at_instant"),
-            startsAtLocal = resultSet.getObject("starts_at_local", java.time.LocalDateTime::class.java),
-            endsAtLocal = resultSet.getObject("ends_at_local", java.time.LocalDateTime::class.java),
-            zoneId = resultSet.getString("zone_id"),
-            sourceUpdatedAt = resultSet.requiredInstant("source_updated_at"),
-            acceptedAt = resultSet.requiredInstant("accepted_at"),
-        )
-
     private companion object {
         const val COLUMNS = """
             source_item_id,
@@ -198,7 +165,6 @@ class CalendarItemRepository(
         data class RevisionState(
             val seasonId: UUID,
             val revision: Int,
-            val sourceUpdatedAt: java.time.Instant,
         )
     }
 }

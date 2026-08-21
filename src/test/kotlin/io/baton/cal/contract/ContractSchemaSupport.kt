@@ -6,7 +6,7 @@ import com.networknt.schema.SchemaRegistry
 import com.networknt.schema.SchemaRegistryConfig
 import com.networknt.schema.SpecificationVersion
 import org.assertj.core.api.Assertions.assertThat
-import java.nio.file.Files
+import kotlin.io.path.inputStream
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
@@ -15,7 +15,7 @@ internal object ContractSchemaSupport {
     val schemaDirectory: Path = Path.of("contracts/schemas")
 
     fun loadSchema(fileName: String): Schema = schemas.computeIfAbsent(fileName) {
-        Files.newInputStream(schemaDirectory.resolve(it))
+        schemaDirectory.resolve(it).inputStream()
             .use(schemaRegistry::getSchema)
             .also(Schema::initializeValidators)
     }

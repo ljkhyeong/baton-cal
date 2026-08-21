@@ -59,9 +59,6 @@ class SubscriptionService(
             return SubscriptionCredential(subscriptionId, token, feedUri(token))
         }
 
-        if (repository.findById(subscriptionId) == null) {
-            throw InternalResourceNotFoundException("active subscription was not found")
-        }
         throw SnapshotConflictException(
             code = "SUBSCRIPTION_CONFLICT",
             message = "subscription was changed concurrently",
@@ -74,13 +71,6 @@ class SubscriptionService(
             ?: throw InternalResourceNotFoundException("subscription was not found")
         if (current.status == CalendarSubscriptionStatus.REVOKED) return
         if (!repository.revoke(subscriptionId, current.tokenHash)) {
-            val latest = repository.findById(subscriptionId)
-                ?: throw InternalResourceNotFoundException("subscription was not found")
-            if (latest.status == CalendarSubscriptionStatus.REVOKED &&
-                latest.tokenHash == current.tokenHash
-            ) {
-                return
-            }
             throw SnapshotConflictException(
                 code = "SUBSCRIPTION_CONFLICT",
                 message = "subscription was changed concurrently",

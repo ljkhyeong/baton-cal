@@ -1,7 +1,7 @@
 package io.baton.cal.calendar
 
 import net.fortuna.ical4j.model.TimeZone
-import net.fortuna.ical4j.model.TimeZoneRegistryImpl
+import net.fortuna.ical4j.model.TimeZoneRegistryFactory
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -24,9 +24,7 @@ sealed interface ScheduleWindow {
         val end: Instant,
     ) : ScheduleWindow {
         init {
-            require(end.truncatedTo(ChronoUnit.SECONDS).isAfter(start.truncatedTo(ChronoUnit.SECONDS))) {
-                "end must be after start at iCalendar second precision"
-            }
+            requirePositiveSecondRange(start.truncatedTo(ChronoUnit.SECONDS), end.truncatedTo(ChronoUnit.SECONDS))
         }
     }
 
@@ -38,9 +36,7 @@ sealed interface ScheduleWindow {
         internal val calendarTimeZone: TimeZone
 
         init {
-            require(end.truncatedTo(ChronoUnit.SECONDS).isAfter(start.truncatedTo(ChronoUnit.SECONDS))) {
-                "end must be after start at iCalendar second precision"
-            }
+            requirePositiveSecondRange(start.truncatedTo(ChronoUnit.SECONDS), end.truncatedTo(ChronoUnit.SECONDS))
             require(zoneId in ZoneId.getAvailableZoneIds()) { "zoneId must be an IANA timezone" }
             calendarTimeZone = requireNotNull(CalendarTimeZones.findExact(zoneId)) {
                 "zoneId must be preserved exactly by the calendar renderer"
@@ -52,8 +48,12 @@ sealed interface ScheduleWindow {
     }
 }
 
+private fun <T : Comparable<T>> requirePositiveSecondRange(start: T, end: T) {
+    require(end > start) { "end must be after start at iCalendar second precision" }
+}
+
 private object CalendarTimeZones {
-    private val registry = TimeZoneRegistryImpl()
+    private val registry = TimeZoneRegistryFactory.getInstance().createRegistry()
 
     fun findExact(zoneId: String): TimeZone? = registry
         .getTimeZone(zoneId)
@@ -62,7 +62,6 @@ private object CalendarTimeZones {
 
 data class CalendarItem(
     val sourceItemId: UUID,
-    val seasonId: UUID,
     val revision: Int,
     val status: CalendarItemStatus,
     val summary: String,
