@@ -136,8 +136,8 @@ assert_flyway_versions() {
   local successful_versions
   successful_versions=$(database_scalar \
     "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "1,2,3,4" ]] \
-    || fail "성공한 Flyway 버전이 정확히 1,2,3,4가 아닙니다: '${successful_versions:-<비어 있음>}'"
+  [[ "$successful_versions" == "1,2,3,4,5" ]] \
+    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5가 아닙니다: '${successful_versions:-<비어 있음>}'"
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 
@@ -249,6 +249,15 @@ token_t1=$(printf '%s' "$initial_credential" | jq --exit-status --raw-output '.t
 initial_credential=
 assert_public_ok "$token_t1"
 echo "세대 A 구독과 공개 피드 HTTP 200을 확인했습니다."
+
+container_id_before_restart=$container_id
+echo "같은 세대 A 설정으로 애플리케이션 컨테이너를 강제 재생성합니다."
+"${compose[@]}" up --detach --force-recreate app
+wait_for_readiness
+[[ "$container_id" != "$container_id_before_restart" ]] \
+  || fail "같은 세대 재시작 검증에서 애플리케이션 컨테이너가 교체되지 않았습니다."
+assert_public_ok "$token_t1"
+echo "같은 세대 A 재시작 뒤 기존 공개 피드 HTTP 200 유지를 확인했습니다."
 
 echo "PostgreSQL 사용자 지정 형식 논리 백업을 생성하고 아카이브를 검증합니다."
 "${compose[@]}" exec --no-TTY postgres \
