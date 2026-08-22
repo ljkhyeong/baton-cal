@@ -3,11 +3,14 @@ package io.baton.cal.calendar
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import net.fortuna.ical4j.model.Parameter
 import net.fortuna.ical4j.model.Property
+import net.fortuna.ical4j.model.parameter.Value
 import kotlin.io.encoding.Base64
 import kotlin.io.path.readText
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -136,6 +139,77 @@ class IcsCalendarRendererTest {
         assertThat(end.requiredTimeZoneId()).isEqualTo("America/New_York")
         assertThat(start.value).isEqualTo("20261031T233000")
         assertThat(end.value).isEqualTo("20261101T023000")
+        assertCanonicalCrLf(rendered.bytes)
+    }
+
+    @Test
+    fun `시점 일정과 종일 일정은 원본 시간 의미를 보존한다`() {
+        val utcPoint = CalendarItem(
+            sourceItemId = UUID.fromString("10000000-0000-0000-0000-000000000001"),
+            revision = 1,
+            status = CalendarItemStatus.ACTIVE,
+            summary = "UTC 시점",
+            description = null,
+            location = null,
+            schedule = ScheduleWindow.UtcPoint(Instant.parse("2026-09-01T01:02:03Z")),
+            sourceUpdatedAt = Instant.parse("2026-08-20T01:00:00Z"),
+            acceptedAt = Instant.parse("2026-08-20T01:00:00Z"),
+        )
+        val zonedPoint = CalendarItem(
+            sourceItemId = UUID.fromString("20000000-0000-0000-0000-000000000002"),
+            revision = 2,
+            status = CalendarItemStatus.ACTIVE,
+            summary = "서울 시점",
+            description = null,
+            location = "서울",
+            schedule = ScheduleWindow.ZonedLocalPoint(
+                at = LocalDateTime.parse("2026-09-02T18:30:00"),
+                zoneId = "Asia/Seoul",
+            ),
+            sourceUpdatedAt = Instant.parse("2026-08-20T02:00:00Z"),
+            acceptedAt = Instant.parse("2026-08-20T02:00:00Z"),
+        )
+        val allDay = CalendarItem(
+            sourceItemId = UUID.fromString("30000000-0000-0000-0000-000000000003"),
+            revision = 3,
+            status = CalendarItemStatus.ACTIVE,
+            summary = "종일 일정",
+            description = null,
+            location = null,
+            schedule = ScheduleWindow.AllDay(
+                startDate = LocalDate.parse("2026-09-03"),
+                endDate = LocalDate.parse("2026-09-05"),
+            ),
+            sourceUpdatedAt = Instant.parse("2026-08-20T03:00:00Z"),
+            acceptedAt = Instant.parse("2026-08-20T03:00:00Z"),
+        )
+
+        val rendered = renderer.render(seasonId, listOf(allDay, utcPoint))
+        val zonedRendered = renderer.render(seasonId, listOf(zonedPoint))
+        val calendar = rendered.bytes.parseIcalendar()
+        val zonedCalendar = zonedRendered.bytes.parseIcalendar()
+        val eventsByUid = calendar.events().associateBy { it.requiredPropertyValue(Property.UID) }
+        val utcEvent = eventsByUid.getValue("${utcPoint.sourceItemId}@cal.baton")
+        val zonedEvent = zonedCalendar.requiredEvent()
+        val allDayEvent = eventsByUid.getValue("${allDay.sourceItemId}@cal.baton")
+
+        assertThat(rendered.bytes).isEqualTo(goldenFixture("season-point-and-all-day.ics.b64"))
+        assertThat(calendar.events()).hasSize(2)
+        assertThat(calendar.timeZones()).isEmpty()
+        assertThat(zonedCalendar.timeZones()).hasSize(1)
+        assertThat(utcEvent.requiredPropertyValue(Property.DTSTART)).isEqualTo("20260901T010203Z")
+        assertThat(utcEvent.propertyList.get<Property>(Property.DTEND)).isEmpty()
+        assertThat(zonedEvent.requiredPropertyValue(Property.DTSTART)).isEqualTo("20260902T183000")
+        assertThat(zonedEvent.requiredProperty(Property.DTSTART).requiredTimeZoneId()).isEqualTo("Asia/Seoul")
+        assertThat(zonedEvent.propertyList.get<Property>(Property.DTEND)).isEmpty()
+        assertThat(allDayEvent.requiredPropertyValue(Property.DTSTART)).isEqualTo("20260903")
+        assertThat(allDayEvent.requiredPropertyValue(Property.DTEND)).isEqualTo("20260905")
+        assertThat(
+            allDayEvent.requiredProperty(Property.DTSTART)
+                .getRequiredParameter<Value>(Parameter.VALUE)
+                .value,
+        ).isEqualTo("DATE")
+        assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-08-20T03:00:00Z"))
         assertCanonicalCrLf(rendered.bytes)
     }
 

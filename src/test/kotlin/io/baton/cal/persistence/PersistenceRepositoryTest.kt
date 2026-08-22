@@ -4,6 +4,7 @@ import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.support.PostgreSqlTestContainer
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -110,6 +111,35 @@ class PersistenceRepositoryTest @Autowired constructor(
         applyWithSeasonLock(earlier)
 
         assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactlyInAnyOrder(earlier, later)
+    }
+
+    @Test
+    fun `시점 일정과 종일 일정 행을 원본 형태로 읽고 쓴다`() {
+        val rows = listOf(
+            utcItem(revision = 0).copy(
+                sourceItemId = UUID.fromString("10000000-0000-0000-0000-000000000001"),
+                timeType = ScheduleTimeType.UTC_POINT,
+                startsAtInstant = Instant.parse("2026-09-01T01:02:03Z"),
+                endsAtInstant = null,
+            ),
+            zonedItem(UUID.fromString("20000000-0000-0000-0000-000000000002")).copy(
+                timeType = ScheduleTimeType.ZONED_LOCAL_POINT,
+                startsAtLocal = LocalDateTime.parse("2026-09-02T18:30:00"),
+                endsAtLocal = null,
+            ),
+            utcItem(revision = 0).copy(
+                sourceItemId = UUID.fromString("30000000-0000-0000-0000-000000000003"),
+                timeType = ScheduleTimeType.ALL_DAY,
+                startsAtInstant = null,
+                endsAtInstant = null,
+                startsOnDate = LocalDate.parse("2026-09-03"),
+                endsOnDate = LocalDate.parse("2026-09-05"),
+            ),
+        )
+
+        rows.forEach(::applyWithSeasonLock)
+
+        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactlyInAnyOrderElementsOf(rows)
     }
 
     @Test
@@ -293,6 +323,8 @@ class PersistenceRepositoryTest @Autowired constructor(
         startsAtLocal = null,
         endsAtLocal = null,
         zoneId = null,
+        startsOnDate = null,
+        endsOnDate = null,
         sourceUpdatedAt = Instant.parse("2026-08-11T00:30:00Z"),
         acceptedAt = Instant.parse("2026-08-11T01:00:00Z"),
     )
@@ -313,6 +345,8 @@ class PersistenceRepositoryTest @Autowired constructor(
         startsAtLocal = LocalDateTime.parse("2026-11-01T01:30:00"),
         endsAtLocal = LocalDateTime.parse("2026-11-01T02:30:00"),
         zoneId = "America/New_York",
+        startsOnDate = null,
+        endsOnDate = null,
         sourceUpdatedAt = Instant.parse("2026-10-01T00:00:00Z"),
         acceptedAt = Instant.parse("2026-10-01T00:00:01Z"),
     )

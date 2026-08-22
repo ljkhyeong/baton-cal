@@ -1,0 +1,17 @@
+{
+  "eventId": "c1000000-0000-4000-8000-000000000001",
+  "occurredAt": "2026-08-11T04:00:05Z",
+  "sourceItemId": "c2000000-0000-4000-8000-000000000001",
+  "seasonId": "f5316f93-d49e-4230-b1d0-9e9c2d079819",
+  "revision": 0,
+  "status": "ACTIVE",
+  "summary": "수동 운영 회차",
+  "description": "시각을 정하지 않은 날짜 단위 회차입니다.",
+  "location": null,
+  "time": {
+    "type": "ALL_DAY",
+    "startDate": "2026-08-22",
+    "endDate": "2026-08-23"
+  },
+  "sourceUpdatedAt": "2026-08-11T04:00:00Z"
+}

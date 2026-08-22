@@ -60,6 +60,8 @@ class CalendarItemRepository(
                     starts_at_local,
                     ends_at_local,
                     zone_id,
+                    starts_on_date,
+                    ends_on_date,
                     source_updated_at,
                     accepted_at
                 ) VALUES (
@@ -76,6 +78,8 @@ class CalendarItemRepository(
                     :startsAtLocal,
                     :endsAtLocal,
                     :zoneId,
+                    :startsOnDate,
+                    :endsOnDate,
                     :sourceUpdatedAt,
                     :acceptedAt
                 )
@@ -91,6 +95,8 @@ class CalendarItemRepository(
                     starts_at_local = EXCLUDED.starts_at_local,
                     ends_at_local = EXCLUDED.ends_at_local,
                     zone_id = EXCLUDED.zone_id,
+                    starts_on_date = EXCLUDED.starts_on_date,
+                    ends_on_date = EXCLUDED.ends_on_date,
                     source_updated_at = EXCLUDED.source_updated_at,
                     accepted_at = EXCLUDED.accepted_at
                 WHERE calendar_item.season_id = EXCLUDED.season_id
@@ -140,6 +146,8 @@ class CalendarItemRepository(
             .param("startsAtLocal", row.startsAtLocal, Types.TIMESTAMP)
             .param("endsAtLocal", row.endsAtLocal, Types.TIMESTAMP)
             .param("zoneId", row.zoneId, Types.VARCHAR)
+            .param("startsOnDate", row.startsOnDate, Types.DATE)
+            .param("endsOnDate", row.endsOnDate, Types.DATE)
             .param("sourceUpdatedAt", OffsetDateTime.ofInstant(row.sourceUpdatedAt, ZoneOffset.UTC))
             .param("acceptedAt", OffsetDateTime.ofInstant(row.acceptedAt, ZoneOffset.UTC))
 
@@ -158,6 +166,8 @@ class CalendarItemRepository(
             starts_at_local,
             ends_at_local,
             zone_id,
+            starts_on_date,
+            ends_on_date,
             source_updated_at,
             accepted_at
         """

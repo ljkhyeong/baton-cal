@@ -14,7 +14,7 @@ import java.util.UUID
 @Testcontainers
 class SchemaMigrationTest {
     @Test
-    fun `V3부터 V5까지 기존 구독을 보존하고 중복 투영 상태를 제거한다`() {
+    fun `V3부터 V6까지 기존 구독과 일정 표현을 보존한다`() {
         val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
         val jdbcClient = JdbcClient.create(dataSource)
         val seasonId = UUID.fromString(SEASON_ID)
@@ -85,6 +85,7 @@ class SchemaMigrationTest {
 
         Flyway.configure()
             .dataSource(dataSource)
+            .target("5")
             .load()
             .migrate()
 
@@ -123,6 +124,45 @@ class SchemaMigrationTest {
             .single()
         assertThat(itemCountColumnCount).isZero()
 
+        jdbcClient.sql(
+            """
+            INSERT INTO calendar_item
+                (source_item_id, season_id, revision, status, summary, description, location,
+                 time_type, starts_at_instant, ends_at_instant, starts_at_local, ends_at_local,
+                 zone_id, source_updated_at, accepted_at)
+            VALUES
+                (:sourceItemId, :seasonId, 4, 'ACTIVE', '기존 구간 일정', NULL, NULL,
+                 'UTC_INSTANT', '2026-09-01T01:00:00Z', '2026-09-01T02:00:00Z', NULL, NULL,
+                 NULL, '2026-08-13T00:00:00Z', '2026-08-13T00:00:01Z')
+            """.trimIndent(),
+        )
+            .param("sourceItemId", UUID.fromString(SOURCE_ITEM_ID))
+            .param("seasonId", seasonId)
+            .update()
+
+        Flyway.configure()
+            .dataSource(dataSource)
+            .load()
+            .migrate()
+
+        val migratedItem = jdbcClient.sql(
+            """
+            SELECT time_type, starts_on_date, ends_on_date
+            FROM calendar_item
+            WHERE source_item_id = :sourceItemId
+            """.trimIndent(),
+        )
+            .param("sourceItemId", UUID.fromString(SOURCE_ITEM_ID))
+            .query { resultSet, _ ->
+                Triple(
+                    resultSet.getString("time_type"),
+                    resultSet.getObject("starts_on_date"),
+                    resultSet.getObject("ends_on_date"),
+                )
+            }
+            .single()
+        assertThat(migratedItem).isEqualTo(Triple("UTC_INSTANT", null, null))
+
         val migratedRepository = CalendarSubscriptionRepository(
             jdbcClient,
         )
@@ -137,6 +177,7 @@ class SchemaMigrationTest {
     private companion object {
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         const val SUBSCRIPTION_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         const val TOKEN_HASH = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
         @Container

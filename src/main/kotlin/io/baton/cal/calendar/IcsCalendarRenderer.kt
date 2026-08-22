@@ -69,10 +69,10 @@ class IcsCalendarRenderer {
     }
 
     private fun timeZones(items: List<CalendarItem>): List<CalendarComponent> = items
-        .mapNotNull { it.schedule as? ScheduleWindow.ZonedLocal }
-        .distinctBy(ScheduleWindow.ZonedLocal::zoneId)
-        .sortedBy(ScheduleWindow.ZonedLocal::zoneId)
-        .map { it.calendarTimeZone.vTimeZone }
+        .mapNotNull { it.schedule.calendarTimeZoneOrNull() }
+        .distinctBy { it.id }
+        .sortedBy { it.id }
+        .map { it.vTimeZone }
 
     private fun event(item: CalendarItem): VEvent {
         val timeProperties: List<Property> = when (val schedule = item.schedule) {
@@ -81,6 +81,8 @@ class IcsCalendarRenderer {
                 DtEnd(schedule.end),
             )
 
+            is ScheduleWindow.UtcPoint -> listOf(DtStart(schedule.at))
+
             is ScheduleWindow.ZonedLocal -> {
                 val parameters = ParameterList(listOf(TzId(schedule.zoneId)))
                 listOf(
@@ -88,6 +90,15 @@ class IcsCalendarRenderer {
                     DtEnd(parameters, schedule.end),
                 )
             }
+
+            is ScheduleWindow.ZonedLocalPoint -> listOf(
+                DtStart(ParameterList(listOf(TzId(schedule.zoneId))), schedule.at),
+            )
+
+            is ScheduleWindow.AllDay -> listOf(
+                DtStart(schedule.startDate),
+                DtEnd(schedule.endDate),
+            )
         }
 
         return VEvent(
@@ -119,4 +130,13 @@ class IcsCalendarRenderer {
         // 연속 줄의 공백을 포함해 RFC 5545의 75 옥텟 권고를 지킬 수 있다.
         const val UTF8_SAFE_FOLD_LENGTH = 25
     }
+}
+
+private fun ScheduleWindow.calendarTimeZoneOrNull() = when (this) {
+    is ScheduleWindow.ZonedLocal -> calendarTimeZone
+    is ScheduleWindow.ZonedLocalPoint -> calendarTimeZone
+    is ScheduleWindow.UtcInstant,
+    is ScheduleWindow.UtcPoint,
+    is ScheduleWindow.AllDay,
+    -> null
 }

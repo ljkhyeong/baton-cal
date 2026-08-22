@@ -164,6 +164,18 @@ class SnapshotInputContractTest @Autowired constructor(
         assertInvalid(zonedSnapshot(zoneId = "+09:00"))
     }
 
+    @Test
+    fun `시점과 종일 일정은 각 시간 형태의 경계를 지킨다`() {
+        listOf(
+            snapshotWithTime("""{"type":"UTC_POINT","atInstant":"2026-08-17T12:00Z"}"""),
+            snapshotWithTime(
+                """{"type":"ZONED_LOCAL_POINT","atLocal":"2026-03-08T02:30:00","zoneId":"America/New_York"}""",
+            ),
+            snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-02-30","endDate":"2026-03-01"}"""),
+            snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-08-22","endDate":"2026-08-22"}"""),
+        ).forEach(::assertInvalid)
+    }
+
     private fun assertInvalid(payload: String) {
         mockMvc.perform(
             post(SNAPSHOT_PATH)
@@ -239,6 +251,23 @@ class SnapshotInputContractTest @Autowired constructor(
             "endLocal": "$endLocal",
             "zoneId": "$zoneId"
           }
+        }
+        """.trimIndent()
+
+    private fun snapshotWithTime(time: String): String =
+        """
+        {
+          "eventId": "${UUID.randomUUID()}",
+          "occurredAt": "2026-08-11T01:00:05Z",
+          "sourceItemId": "${UUID.randomUUID()}",
+          "seasonId": "$SEASON_ID",
+          "revision": 0,
+          "status": "ACTIVE",
+          "summary": "시간 형태 검증",
+          "description": null,
+          "location": null,
+          "sourceUpdatedAt": "2026-08-11T01:00:00Z",
+          "time": $time
         }
         """.trimIndent()
 

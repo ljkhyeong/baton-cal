@@ -50,11 +50,28 @@ object SnapshotFingerprint {
                     output.writeString(schedule.end.toString())
                 }
 
+                is ScheduleWindow.UtcPoint -> {
+                    output.writeString("UTC_POINT")
+                    output.writeString(schedule.at.toString())
+                }
+
                 is ScheduleWindow.ZonedLocal -> {
                     output.writeString("ZONED_LOCAL")
                     output.writeString(schedule.start.toString())
                     output.writeString(schedule.end.toString())
                     output.writeString(schedule.zoneId)
+                }
+
+                is ScheduleWindow.ZonedLocalPoint -> {
+                    output.writeString("ZONED_LOCAL_POINT")
+                    output.writeString(schedule.at.toString())
+                    output.writeString(schedule.zoneId)
+                }
+
+                is ScheduleWindow.AllDay -> {
+                    output.writeString("ALL_DAY")
+                    output.writeString(schedule.startDate.toString())
+                    output.writeString(schedule.endDate.toString())
                 }
             }
         }

@@ -13,6 +13,9 @@ import io.baton.cal.web.SnapshotConflictException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
 @Service
@@ -91,9 +94,9 @@ private fun classifyEventReplay(existingHash: String, payloadHash: String): Snap
 }
 
 private fun ScheduleSnapshot.toRow(
-    acceptedAt: java.time.Instant,
+    acceptedAt: Instant,
 ): CalendarItemRow {
-    val schedule = schedule
+    val scheduleColumns = schedule.toColumns()
     return CalendarItemRow(
         sourceItemId = sourceItemId,
         seasonId = seasonId,
@@ -102,16 +105,58 @@ private fun ScheduleSnapshot.toRow(
         summary = summary,
         description = description,
         location = location,
-        timeType = when (schedule) {
-            is ScheduleWindow.UtcInstant -> ScheduleTimeType.UTC_INSTANT
-            is ScheduleWindow.ZonedLocal -> ScheduleTimeType.ZONED_LOCAL
-        },
-        startsAtInstant = (schedule as? ScheduleWindow.UtcInstant)?.start,
-        endsAtInstant = (schedule as? ScheduleWindow.UtcInstant)?.end,
-        startsAtLocal = (schedule as? ScheduleWindow.ZonedLocal)?.start,
-        endsAtLocal = (schedule as? ScheduleWindow.ZonedLocal)?.end,
-        zoneId = (schedule as? ScheduleWindow.ZonedLocal)?.zoneId,
+        timeType = scheduleColumns.timeType,
+        startsAtInstant = scheduleColumns.startsAtInstant,
+        endsAtInstant = scheduleColumns.endsAtInstant,
+        startsAtLocal = scheduleColumns.startsAtLocal,
+        endsAtLocal = scheduleColumns.endsAtLocal,
+        zoneId = scheduleColumns.zoneId,
+        startsOnDate = scheduleColumns.startsOnDate,
+        endsOnDate = scheduleColumns.endsOnDate,
         sourceUpdatedAt = sourceUpdatedAt,
         acceptedAt = acceptedAt,
     )
 }
+
+private fun ScheduleWindow.toColumns(): ScheduleColumns = when (this) {
+    is ScheduleWindow.UtcInstant -> ScheduleColumns(
+        timeType = ScheduleTimeType.UTC_INSTANT,
+        startsAtInstant = start,
+        endsAtInstant = end,
+    )
+
+    is ScheduleWindow.UtcPoint -> ScheduleColumns(
+        timeType = ScheduleTimeType.UTC_POINT,
+        startsAtInstant = at,
+    )
+
+    is ScheduleWindow.ZonedLocal -> ScheduleColumns(
+        timeType = ScheduleTimeType.ZONED_LOCAL,
+        startsAtLocal = start,
+        endsAtLocal = end,
+        zoneId = zoneId,
+    )
+
+    is ScheduleWindow.ZonedLocalPoint -> ScheduleColumns(
+        timeType = ScheduleTimeType.ZONED_LOCAL_POINT,
+        startsAtLocal = at,
+        zoneId = zoneId,
+    )
+
+    is ScheduleWindow.AllDay -> ScheduleColumns(
+        timeType = ScheduleTimeType.ALL_DAY,
+        startsOnDate = startDate,
+        endsOnDate = endDate,
+    )
+}
+
+private data class ScheduleColumns(
+    val timeType: ScheduleTimeType,
+    val startsAtInstant: Instant? = null,
+    val endsAtInstant: Instant? = null,
+    val startsAtLocal: LocalDateTime? = null,
+    val endsAtLocal: LocalDateTime? = null,
+    val zoneId: String? = null,
+    val startsOnDate: LocalDate? = null,
+    val endsOnDate: LocalDate? = null,
+)
