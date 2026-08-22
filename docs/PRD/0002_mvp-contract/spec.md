@@ -19,7 +19,8 @@ iCalendar 식별자, 취소, 조건부 요청 검증 값과 재구축의 관측 
 - 하나의 구독은 정확히 하나의 `seasonId`만 조회한다.
 - 같은 시즌에 여러 구독을 만들 수 있다.
 - 팀, 계정 또는 여러 시즌을 합친 피드는 MVP에 포함하지 않는다.
-- 시간 지정 이벤트만 지원한다. 종일 일정용 날짜, 반복 규칙과 고정 시간대가 없는 현지 시각은 지원하지 않는다.
+- UTC·시간대 지정 구간, UTC·시간대 지정 단일 시점과 종일 날짜 구간을 지원한다. 반복 규칙과
+  고정 시간대가 없는 현지 시각은 지원하지 않는다.
 - BATON은 권한, 시즌, 일정, 반복 규칙, 회차, 마감과 시간 의미를 확정한다.
 - CAL은 BATON이 보낸 완전한 항목 스냅샷을 저장하고 iCalendar로 투영할 뿐 값을 다시
   계산하지 않는다.
@@ -48,7 +49,7 @@ iCalendar 식별자, 취소, 조건부 요청 검증 값과 재구축의 관측 
 | `description` | 선택 설명. 문자열이면 Unicode 코드 포인트 기준 1자 이상 4,096자 이하다. 필드가 없거나 JSON `null`이면 캘린더 속성을 생략한다. |
 | `location` | 선택 장소. 문자열이면 Unicode 코드 포인트 기준 1자 이상 512자 이하다. 필드가 없거나 JSON `null`이면 캘린더 속성을 생략한다. |
 | `sourceUpdatedAt` | 이 개정 번호를 만든 RFC 3339 시각. 같은 항목의 개정 번호가 전진할 때 반드시 전진한다. |
-| `time` | `UTC_INSTANT`의 `startInstant/endInstant` 또는 `ZONED_LOCAL`의 `startLocal/endLocal/zoneId`로 구분하는 합 타입. |
+| `time` | `UTC_INSTANT`, `UTC_POINT`, `ZONED_LOCAL`, `ZONED_LOCAL_POINT`, `ALL_DAY`로 구분하는 합 타입. |
 
 모든 문자열은 Unicode NFC여야 한다. `summary`, `description`, `location`은 LF(`U+000A`),
 HTAB(`U+0009`)과 유효한 보조 평면 Unicode를 허용한다. `U+0000..U+0008`,
@@ -94,15 +95,20 @@ CAL은 이를 보강하거나 BATON 원본을 조회하지 않는다. 시각/현
 
 ## 시간 계약
 
-모든 종료 시각은 미포함 경계이며 시작 시각보다 엄격히 뒤에 있어야 한다. 소수점 이하 초를 받아도 비교와
-저장은 마이크로초, 정규 iCalendar DATE-TIME은 초 단위로 내림한다. 내림 후 시작/종료 시각이
-같아지면 유효하지 않은 범위다.
+구간의 종료 시각·날짜는 미포함 경계이며 시작보다 엄격히 뒤에 있어야 한다. 소수점 이하 초를 받아도
+비교와 저장은 마이크로초, 정규 iCalendar DATE-TIME은 초 단위로 내림한다. 내림 후 구간의
+시작·종료 시각이 같아지면 유효하지 않다. 단일 시점에는 임의 지속 시간을 만들지 않는다.
 
 ### `UTC_INSTANT`
 
 `startInstant`와 `endInstant`는 명시적인 오프셋이 있는 RFC 3339 시각이다. 초는 `00`부터
 `59`까지만 허용하며 윤초는 지원하지 않는다. CAL은 같은 시각을 UTC로 정규화해
 `DTSTART:...Z`, `DTEND:...Z`로 투영한다.
+
+### `UTC_POINT`
+
+`atInstant`는 명시적인 오프셋이 있는 RFC 3339 시각이며 `UTC_INSTANT`와 같은 초·윤초 규칙을
+따른다. CAL은 같은 시각을 UTC로 정규화한 `DTSTART:...Z`만 투영하고 `DTEND`를 만들지 않는다.
 
 ### `ZONED_LOCAL`
 
@@ -111,8 +117,20 @@ CAL은 이를 보강하거나 BATON 원본을 조회하지 않는다. 시각/현
 식별자다. `+09:00` 같은 숫자 오프셋과 다른 정식 식별자로 변환되는 별칭은 허용하지 않는다.
 CAL은 현지 시각 필드를 UTC 시각으로 바꾸지 않고 동일한 `TZID` 매개변수로 투영한다.
 
+### `ZONED_LOCAL_POINT`
+
+`atLocal`과 `zoneId`는 `ZONED_LOCAL`과 같은 현지 시각·시간대 규칙을 따른다. CAL은 동일한
+`TZID`가 붙은 `DTSTART`만 투영하고 `DTEND`를 만들지 않는다.
+
+### `ALL_DAY`
+
+`startDate`와 `endDate`는 네 자리 연도를 쓰는 ISO 날짜다. `endDate`는 미포함 경계이고
+`startDate`보다 뒤에 있어야 한다. CAL은 둘을 `VALUE=DATE`인 `DTSTART`와 `DTEND`로 투영하며 자정 시각이나
+시간대를 임의로 만들지 않는다.
+
 BATON은 시간대의 DST 공백에 들어가지 않는 현지 시각 값을 보내야 한다. 중첩 구간에서 특정 시각이
-중요하면 `ZONED_LOCAL`을 쓰지 않고 `UTC_INSTANT`를 쓴다. CAL은 시간대 정책, 지속 시간 또는
+중요하면 `ZONED_LOCAL`·`ZONED_LOCAL_POINT`를 쓰지 않고 UTC 형태를 쓴다. CAL은 시간대 정책,
+지속 시간 또는
 오프셋을 다시 선택하지 않는다. 피드에는 사용하는 시간대마다 iCal4j 4.2.5
 `TimeZoneRegistryFactory`가 만든 레지스트리의 전체 `VTIMEZONE` 하나를 TZID 오름차순으로
 포함한다. 같은
@@ -147,6 +165,8 @@ BATON은 시간대의 DST 공백에 들어가지 않는 현지 시각 값을 보
 - `SUMMARY`, `DESCRIPTION`, `LOCATION`은 iCalendar TEXT 이스케이프 후 투영한다. 값이 없을 수 있는
   속성은 `null`일 때 생략한다.
 - 반복 규칙, 주최자, 참석자, 알람, 제공자 URL과 BATON 비공개 위치 식별자는 만들지 않는다.
+- 구간 형태는 `DTSTART`와 `DTEND`, 시점 형태는 `DTSTART`만 사용한다. 종일 형태는 두 속성에
+  `VALUE=DATE`를 사용한다.
 
 VCALENDAR의 고정 속성은 아래 순서다.
 
@@ -220,6 +240,10 @@ BATON이 최종 사용자 권한과 시즌 범위를 먼저 승인한 뒤 내부
 V5는 더 이상 읽지 않는 `season_feed_projection.item_count`를 제거한다. 모든 pre-V5 CAL
 인스턴스를 중지한 뒤 신버전만 시작하는 유지보수 배포로 적용하고, 이후 pre-V5 롤백과 구·신 버전
 공존은 금지한다. 실패하면 신버전으로 전진 수정한다.
+
+V6는 시점·종일 일정 열과 시간 형태를 추가한다. 기존 두 구간 형태의 행은 그대로 유효하지만,
+pre-V6 인스턴스는 새 열거형을 읽을 수 없다. 모든 pre-V6 인스턴스가 종료되기 전에는 BATON이
+새 시간 형태를 보내지 않으며, 새 형태를 수신한 뒤에는 pre-V6 롤백과 구·신 버전 공존을 금지한다.
 
 과거 DB 백업을 복원할 때는 CAL 또는 복원 DB를 서비스하기 전에 외부 설정부터 이전에 사용하지 않은
 새 세대로 바꿔야 한다. 이전 세대를 재사용하면 복원된 토큰이 다시 유효해질 수 있으므로 금지한다.
@@ -336,36 +360,38 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
 
 1. UTC 확정 일정 생성, 더 높은 개정 번호의 시간/텍스트 갱신과 정확히 같은 중복.
 2. 시간대가 있는 현지 시각의 DST 경계와 자정을 지나는 이벤트. 공백 구간 거부와 UTC 시각/현지 시각 비변환 확인.
-3. 보지 못한 더 낮은 개정 번호의 `STALE`, 같은 개정 번호의 다른 내용에 대한 `409`, 개정 번호 간격 적용.
-4. 전체 취소, 안정적인 UID, 정확한 SEQUENCE와 무기한 취소 표식.
-5. 쉼표/세미콜론/역슬래시/줄 바꿈 이스케이프, UTF-8 NFC, 75 옥텟 줄 접기와 CRLF.
-6. 같은 입력에서 항상 같은 시간대/이벤트/속성 순서, 바이트가 안정적인 재구축, ETag와 Last-Modified.
-7. `If-None-Match` 우선순위, 본문 없는 `304`, 빈 피드와 공개 경로의 구분 없는 `404`.
-8. 토큰 원문의 일회성 노출, 다이제스트만 저장, 로그 비노출 처리, 원자적 회전과
+3. UTC·시간대 지정 시점은 `DTSTART`만, 종일 일정은 배타적 종료 날짜와 `VALUE=DATE`를 사용하고
+   임의 지속 시간이나 자정 시각을 만들지 않는다.
+4. 보지 못한 더 낮은 개정 번호의 `STALE`, 같은 개정 번호의 다른 내용에 대한 `409`, 개정 번호 간격 적용.
+5. 전체 취소, 안정적인 UID, 정확한 SEQUENCE와 무기한 취소 표식.
+6. 쉼표/세미콜론/역슬래시/줄 바꿈 이스케이프, UTF-8 NFC, 75 옥텟 줄 접기와 CRLF.
+7. 같은 입력에서 항상 같은 시간대/이벤트/속성 순서, 바이트가 안정적인 재구축, ETag와 Last-Modified.
+8. `If-None-Match` 우선순위, 본문 없는 `304`, 빈 피드와 공개 경로의 구분 없는 `404`.
+9. 토큰 원문의 일회성 노출, 다이제스트만 저장, 로그 비노출 처리, 원자적 회전과
    즉시 폐기.
-9. 외부 구독 세대를 유지한 정상 재시작, 새 세대의 생성·회전, 과거 세대 토큰의 일반 `404`와
+10. 외부 구독 세대를 유지한 정상 재시작, 새 세대의 생성·회전, 과거 세대 토큰의 일반 `404`와
    현재 세대 토큰 재발급.
-10. BATON 커밋 이후 전달, CAL 트랜잭션 실패, 재시도와 복구.
-11. DTO·JSON Schema의 필드 제약 위반과 JSON 전체 문서 128 KiB 초과를 구분하고, 초과 문서에
+11. BATON 커밋 이후 전달, CAL 트랜잭션 실패, 재시도와 복구.
+12. DTO·JSON Schema의 필드 제약 위반과 JSON 전체 문서 128 KiB 초과를 구분하고, 초과 문서에
     고정된 `413 REQUEST_TOO_LARGE` 오류를 반환한다.
-12. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 시작 실패를 검증하고, Tomcat 접근 로그의
+13. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 시작 실패를 검증하고, Tomcat 접근 로그의
     기본 비활성·안전 패턴, `prod`의 `StatementCreatorUtils` 비활성과 공개 경로 `http.url`의
     토큰 비노출을 고정한다.
-13. GitHub Actions가 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만들고,
-    `prod` 프로필·PostgreSQL·Flyway V1~V5·DB 포함 준비 상태·비루트 실행·SIGTERM 종료 코드 143을
+14. GitHub Actions가 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만들고,
+    `prod` 프로필·PostgreSQL·Flyway V1~V6·DB 포함 준비 상태·비루트 실행·SIGTERM 종료 코드 143을
     실제 컨테이너로 검증한다. 같은 외부 구독 세대로 컨테이너를 강제 재생성한 뒤에도 기존 공개
     피드가 `200`인지 검증한다.
-14. 같은 OCI 스모크가 세대 A의 DB를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션이
+15. 같은 OCI 스모크가 세대 A의 DB를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션이
     중지된 상태에서 세대 B를 먼저 설정한 뒤 `pg_restore --clean --create --exit-on-error`로 복원한다.
     복원된 토큰은 본문 없는 일반 `404`이며, 대표 최신 변경·취소 픽스처를 다시 받은 뒤에만 기존
     구독을 rotate한다. 새 토큰은 `200`과 `STATUS:CANCELLED`·`SEQUENCE:3`을 반환한다.
-15. 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답 JSON을 각
+16. 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답 JSON을 각
     Draft 2020-12 응답 스키마에 직접 대조한다. 예제뿐 아니라 실제 직렬화 결과의 필드 누락과
     예고 없는 추가도 실패로 처리한다.
-16. `contracts/VERSION`의 `1.0.0-rc.1`을 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
+17. `contracts/VERSION`의 `1.0.0-rc.2`를 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
     작업이 `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
-    `baton-cal-contracts-1.0.0-rc.1.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과 예정
-    태그 `contracts-v1.0.0-rc.1`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
+    `baton-cal-contracts-1.0.0-rc.2.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과 예정
+    태그 `contracts-v1.0.0-rc.2`는 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
     않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
     업로드하며, 실제 만료는 저장소·조직 정책을 따른다.
 
@@ -375,33 +401,34 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 구현되어 있다. CAL 저장소는 JSON Schema와 모든 예시를 자동 검증하고 실제 MockMvc 응답을 각
 응답 스키마에 직접 대조한다. 시간대 일정의
 `ACTIVE` 개정 번호 0 → `ACTIVE` 개정 번호 2 → `CANCELLED` 개정 번호 3 생명주기를 실제
-수신 경로로 실행한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의 정규 `.ics` 골든,
+수신 경로로 실행한다. UTC·시간대 지정 시점과 종일 일정도 같은 경로로 수신하고 PostgreSQL 왕복과
+정규 iCalendar 표현을 검증한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의 정규 `.ics` 골든,
 의존성 잠금과 골든 검토 절차도 갖춘다. JSON 전체 문서의 128 KiB 파서 상한과 고정 `413` 오류,
 공개 기준 URL의 HTTPS·루프백 규칙, `prod` 시작 검증과 안전한 애플리케이션 로그 기본값도
 구현되어 있다. 내부 Bearer는 현재 값과 회전 창의 선택적 이전 값만 허용하고, 공개 캘린더 경로의
 고카디널리티 `http.url`은 토큰이 없는 템플릿으로 기록한다. 공개 구독은 현재 외부 런타임 세대와
 일치해야 하므로 과거 DB 복원으로 이전 토큰이 되살아나지 않는다. GitHub Actions는 Java 25로
-테스트와 OCI 이미지를 만들고 실제 `prod` 컨테이너의 PostgreSQL 연결, Flyway V1~V5, 준비 상태,
+테스트와 OCI 이미지를 만들고 실제 `prod` 컨테이너의 PostgreSQL 연결, Flyway V1~V6, 준비 상태,
 비루트 실행과 종료, 같은 구독 세대의 컨테이너 재생성 뒤 기존 공개 피드 유지를 검증한다. 같은
 스모크는 `pg_dump -Fc` 아카이브와
 `pg_restore --clean --create --exit-on-error` 실제 복원, 시작 전 세대 교체, 복원 토큰의 일반
 `404`, 대표 최신 변경·취소 재전달 뒤 새 토큰의 취소 피드까지 실행한다. Gradle은
-`contracts/VERSION`의 `1.0.0-rc.1`을 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
-같은 바이트가 되는 `baton-cal-contracts-1.0.0-rc.1.zip`으로 만들며, GitHub Actions는
+`contracts/VERSION`의 `1.0.0-rc.2`를 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
+같은 바이트가 되는 `baton-cal-contracts-1.0.0-rc.2.zip`으로 만들며, GitHub Actions는
 `retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
 이 임시 산출물은 안정적인 BATON 의존성이 아니다. BATON 생산자 검증 전이므로 이 버전은 RC다.
 
 이는 실제 BATON 생산자 연동이나 운영 준비 완료를 뜻하지 않는다. 다음은 BATON 연동 또는
 공개 배포 전에 해결해야 하는 보류 항목이다.
 
-- 공식 RC는 아직 게시하지 않았다. 게시 전 MVP 변경을 검토해 풀 리퀘스트의 CI를 통과시켜 `main`에
-  반영하고, `main`의 깨끗한 체크아웃에서 `Enable release immutability`를 활성화한다.
-  `contracts-v1.0.0-rc.1` 초안 릴리스에 같은 버전의 ZIP을 첨부해 사전 릴리스로 게시한다. 이어
-  `gh release verify`, `gh release verify-asset`으로 확인한 RC를 BATON 생산자가 고정해 실제
+- 불변 `contracts-v1.0.0-rc.1`은 게시됐지만 BATON 원본에 필요한 시점·종일 표현이 없어 변경하지
+  않는다. 새 계약은 풀 리퀘스트의 CI를 통과시켜 `main`에 반영한 뒤 깨끗한 체크아웃에서
+  `contracts-v1.0.0-rc.2` 초안 릴리스에 같은 버전의 ZIP을 첨부해 사전 릴리스로 게시한다. 이어
+  `gh release verify`, `gh release verify-asset`으로 확인한 `rc.2`를 BATON 생산자가 고정해 실제
   직렬화기, 전역 `sourceItemId` 비재사용, 개정 번호·원본 갱신 시각 전진, 명시적인 취소와 원본
   커밋 이후 발행을 검증하는 생산자 테스트. 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면
-  동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 기존 RC를 교체하지 않고
-  `1.0.0-rc.2`를 만든다.
+  동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 게시된 RC를 교체하지 않고
+  다음 RC를 만든다.
 - 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 위의 두 값 회전 절차를 배포 환경에서 훈련하는
   작업과 실제 운영 HTTPS 인증서·종단 설정.
 - 실제 BATON 전체 시즌의 매니페스트·재전달 완료 신호와 필요 시 재생 전 create·rotate 자동 차단

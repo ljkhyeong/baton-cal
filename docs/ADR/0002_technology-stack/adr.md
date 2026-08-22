@@ -67,6 +67,9 @@ BATON CAL MVP는 다음 특성을 가진다.
   적용하며 V4 이후 pre-V4 롤백과 구·신 버전 공존을 허용하지 않는다.
 - V5는 더 이상 읽지 않는 `season_feed_projection.item_count`를 제거한다. 이 열을 참조하는 pre-V5
   인스턴스를 모두 중지한 유지보수 배포로 적용하며, 이후 pre-V5 롤백·공존 대신 신버전으로 전진 수정한다.
+- V6는 UTC·시간대 지정 시점과 종일 날짜 구간을 위한 열과 제약을 추가한다. 기존 구간 행은 그대로
+  유효하지만 pre-V6 애플리케이션은 새 열거형을 읽을 수 없으므로, 모든 pre-V6 인스턴스가 종료된 뒤
+  BATON이 새 시간 형태를 보내며 이후에는 pre-V6와 공존하거나 롤백하지 않는다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
 
@@ -87,9 +90,11 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
   `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
   보류 항목이다.
-- 원본 `ZONED_LOCAL` 필드는 Java `ZoneId.getAvailableZoneIds()`의 이름 있는 TZDB ID로 검증하고
-  원본 로컬 일시를 CAL이 UTC로 변환하지 않는다.
-- 원본 `UTC_INSTANT` 필드는 같은 시점의 UTC DATE-TIME 초 단위로 정규화해 투영한다.
+- 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 Java `ZoneId.getAvailableZoneIds()`의 이름 있는
+  TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다.
+- `UTC_INSTANT`·`ZONED_LOCAL` 구간은 `DTSTART`와 `DTEND`, `UTC_POINT`·`ZONED_LOCAL_POINT`
+  단일 시점은 `DTSTART`만 투영한다. `ALL_DAY`는 `VALUE=DATE`인 배타적 시작·종료 날짜를 사용한다.
+  CAL은 시점에 임의 지속 시간을, 종일 일정에 자정 시각이나 시간대를 만들지 않는다.
 
 ### 패키징
 
@@ -180,7 +185,7 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   세대 변경 뒤 과거 토큰은 일반 `404`가 되는지 PostgreSQL 통합 테스트로 검증한다.
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
 - GitHub Actions는 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만든다. 실제
-  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V5, DB 포함 준비 상태,
+  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V6, DB 포함 준비 상태,
   비루트 실행과 SIGTERM 종료 코드 143을 스모크 검증한다. 같은 외부 구독 세대로 컨테이너를
   강제 재생성한 뒤 기존 공개 피드가 계속 `200`인지도 확인한다.
 - 같은 스모크는 세대 A의 데이터를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션을
@@ -222,8 +227,8 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 줄 접기 길이 25는 ASCII 줄도 일찍 접으므로 사람이 읽는 캘린더 피드는 다소 장황할 수 있다.
 - 고정된 iCal4j 시간대 데이터나 직렬화기를 올릴 때 캘린더 바이트와 ETag가 바뀌는지 검토해야 한다.
 - 동기식 재구축이 커지는 시점에는 작업 상태와 일괄 처리 전략을 새 계약으로 도입해야 한다.
-- V4는 복원 펜스를 모르는 구버전과, V5는 제거된 투영 열을 참조하는 구버전과 롤링 호환되지 않으므로
-  각각 최초 한 번 유지보수 배포와 전진 수정 원칙이 필요하다.
+- V4는 복원 펜스를 모르는 구버전과, V5는 제거된 투영 열을 참조하는 구버전과 롤링 호환되지 않는다.
+  V6의 새 시간 형태도 pre-V6가 해석하지 못하므로 각 호환성 관문과 전진 수정 원칙이 필요하다.
 - builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고 공급 이미지 갱신을 별도로
   검토해야 한다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤
