@@ -78,7 +78,7 @@ openssl rand -hex 32
 CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
 토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다.
 
-### V4·V5 최초 배포
+### V4~V6 최초 배포
 
 구독 세대를 처음 도입하는 V4는 유지보수 배포다. 모든 pre-V4 CAL 인스턴스를 먼저 중지하고
 `BATON_CAL_SUBSCRIPTION_GENERATION=00000000-0000-0000-0000-000000000001`로 신버전만 시작한다.
@@ -91,6 +91,10 @@ V4 적용 뒤에는 세대를 검사하지 않는 pre-V4 바이너리를 다시 
 V5는 더 이상 읽지 않는 `season_feed_projection.item_count`를 제거한다. 이 열을 계속 읽고 쓰는
 pre-V5 인스턴스를 모두 중지한 뒤 신버전만 시작하고, 적용 뒤 pre-V5 롤백이나 구·신 버전 공존은
 금지한다. 문제가 생기면 신버전으로 전진 수정한다.
+
+V6는 UTC·시간대 지정 시점과 종일 날짜 구간을 추가한다. 기존 구간 행은 그대로 유지되지만
+pre-V6 인스턴스는 새 시간 형태를 읽지 못하므로, 모든 pre-V6 인스턴스를 종료한 뒤 BATON이 새
+형태를 보내야 한다. 새 형태를 수신한 뒤에는 pre-V6 롤백이나 구·신 버전 공존을 금지한다.
 
 ### 과거 DB 백업 복원
 
@@ -179,9 +183,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 ./gradlew --no-daemon contractsZip
 ```
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.1`이다. 따라서 결과는
-`build/distributions/baton-cal-contracts-1.0.0-rc.1.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 게시된 릴리스 태그는 `contracts-v1.0.0-rc.1`이며 파일명, ZIP 내부
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.2`다. 따라서 결과는
+`build/distributions/baton-cal-contracts-1.0.0-rc.2.zip`이고, ZIP 안에도 같은
+`contracts/VERSION`이 들어간다. 예정 릴리스 태그는 `contracts-v1.0.0-rc.2`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
@@ -190,15 +194,18 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 현재 계약은 BATON 생산자 구현으로 아직
-검증하지 않았으므로 정식 버전이 아닌 `1.0.0-rc.1`이다. 생산자 검증 결과 버전 표식 외 계약 의미를
+검증하지 않았으므로 정식 버전이 아닌 `1.0.0-rc.2`다. 생산자 검증 결과 버전 표식 외 계약 의미를
 바꿀 필요가 없으면 동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 기존
-RC를 교체하지 않고 `1.0.0-rc.2`를 만든다.
+RC를 교체하지 않고 다음 RC를 만든다.
 
 [불변 사전 릴리스 `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)은
 `main` 커밋 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리킨다. 첨부 ZIP의 SHA-256은
 `0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`이며,
-`gh release verify`와 `gh release verify-asset` 검증을 통과했다. BATON 생산자는 이 버전을 고정해
-실제 직렬화기·개정 번호·취소·커밋 후 발행 테스트를 통과해야 연동 완료로 본다.
+`gh release verify`와 `gh release verify-asset` 검증을 통과했다. 이 값은 게시 이력을 보존하기 위한
+근거이며 새 BATON 연동은 `rc.2` 게시·검증 뒤 그 버전을 고정한다.
+
+`rc.1`에는 BATON의 날짜 단위 회차와 단일 마감 시각을 손실 없이 표현하는 형태가 없으므로 그대로
+보존한다. `rc.2`는 UTC·시간대 지정 시점과 종일 날짜 구간을 추가한 새 불변 사전 릴리스 후보다.
 
 ## OCI 이미지 검증
 
@@ -216,7 +223,7 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ./scripts/smoke-oci-image.sh baton-cal:smoke
 ```
 
-스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V5 적용, DB를 포함한 준비 상태,
+스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V6 적용, DB를 포함한 준비 상태,
 SIGTERM 종료 코드 143을 확인한다. 세대 A를 유지한 채 애플리케이션 컨테이너를 실제로 재생성해
 기존 공개 피드가 계속 `200`인지 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고
 아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔

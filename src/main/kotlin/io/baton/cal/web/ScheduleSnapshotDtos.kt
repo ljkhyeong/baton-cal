@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Pattern
 import org.hibernate.validator.constraints.Normalized
 import java.text.Normalizer
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -70,7 +71,10 @@ data class ScheduleSnapshotRequest(
 )
 @JsonSubTypes(
     JsonSubTypes.Type(value = UtcInstantTimeRequest::class, name = "UTC_INSTANT"),
+    JsonSubTypes.Type(value = UtcPointTimeRequest::class, name = "UTC_POINT"),
     JsonSubTypes.Type(value = ZonedLocalTimeRequest::class, name = "ZONED_LOCAL"),
+    JsonSubTypes.Type(value = ZonedLocalPointTimeRequest::class, name = "ZONED_LOCAL_POINT"),
+    JsonSubTypes.Type(value = AllDayTimeRequest::class, name = "ALL_DAY"),
 )
 sealed interface ScheduleTimeRequest {
     fun toDomain(): ScheduleWindow
@@ -86,6 +90,12 @@ data class UtcInstantTimeRequest(
     )
 }
 
+data class UtcPointTimeRequest(
+    val atInstant: String,
+) : ScheduleTimeRequest {
+    override fun toDomain(): ScheduleWindow = ScheduleWindow.UtcPoint(parseInstant(atInstant))
+}
+
 data class ZonedLocalTimeRequest(
     val startLocal: String,
     val endLocal: String,
@@ -98,6 +108,34 @@ data class ZonedLocalTimeRequest(
     )
 }
 
+data class ZonedLocalPointTimeRequest(
+    val atLocal: String,
+    val zoneId: String,
+) : ScheduleTimeRequest {
+    override fun toDomain(): ScheduleWindow = ScheduleWindow.ZonedLocalPoint(
+        parseLocalDateTime(atLocal),
+        zoneId,
+    )
+}
+
+data class AllDayTimeRequest(
+    val startDate: String,
+    val endDate: String,
+) : ScheduleTimeRequest {
+    override fun toDomain(): ScheduleWindow = ScheduleWindow.AllDay(
+        parseLocalDate(startDate),
+        parseLocalDate(endDate),
+    )
+}
+
+private val LOCAL_DATE_FORMATTER = DateTimeFormatterBuilder()
+    .appendValue(ChronoField.YEAR, 4)
+    .appendLiteral('-')
+    .appendValue(ChronoField.MONTH_OF_YEAR, 2)
+    .appendLiteral('-')
+    .appendValue(ChronoField.DAY_OF_MONTH, 2)
+    .toFormatter(Locale.ROOT)
+    .withResolverStyle(ResolverStyle.STRICT)
 private val LOCAL_DATE_TIME_FORMATTER = strictDateTimeFormatter(caseInsensitive = false)
 private val OFFSET_DATE_TIME_FORMATTER = strictDateTimeFormatter(caseInsensitive = true, withOffset = true)
 
@@ -129,6 +167,8 @@ private fun parseInstant(value: String): Instant = OffsetDateTime
     .parse(value, OFFSET_DATE_TIME_FORMATTER)
     .toInstant()
     .truncatedTo(ChronoUnit.MICROS)
+
+private fun parseLocalDate(value: String): LocalDate = LocalDate.parse(value, LOCAL_DATE_FORMATTER)
 
 private fun parseLocalDateTime(value: String): LocalDateTime = LocalDateTime
     .parse(value, LOCAL_DATE_TIME_FORMATTER)

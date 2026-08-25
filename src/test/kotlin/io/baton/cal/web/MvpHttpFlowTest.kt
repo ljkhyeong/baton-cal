@@ -316,6 +316,9 @@ class MvpHttpFlowTest @Autowired constructor(
     @Test
     fun `문서화한 일정 예시는 실제 수신 경로에서 생명주기를 따른다`() {
         ingest(Path.of("contracts/examples/schedule-snapshot.utc-active.json").readText(), "APPLIED")
+        ingest(Path.of("contracts/examples/schedule-snapshot.utc-point-active.json").readText(), "APPLIED")
+        ingest(Path.of("contracts/examples/schedule-snapshot.zoned-point-active.json").readText(), "APPLIED")
+        ingest(Path.of("contracts/examples/schedule-snapshot.all-day-active.json").readText(), "APPLIED")
         ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r0.json").readText(), "APPLIED")
         ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json").readText(), "APPLIED")
         val cancelled = Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json").readText()

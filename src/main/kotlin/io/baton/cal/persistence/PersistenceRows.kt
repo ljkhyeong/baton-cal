@@ -3,6 +3,7 @@ package io.baton.cal.persistence
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleTimeType
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -30,6 +31,8 @@ data class CalendarItemRow(
     val startsAtLocal: LocalDateTime?,
     val endsAtLocal: LocalDateTime?,
     val zoneId: String?,
+    val startsOnDate: LocalDate?,
+    val endsOnDate: LocalDate?,
     val sourceUpdatedAt: Instant,
     val acceptedAt: Instant,
 )

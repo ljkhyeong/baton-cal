@@ -141,10 +141,13 @@ class ContractArtifactsTest {
                 "schedule-snapshot-result.stale.json",
             ),
             "schedule-snapshot.v1.schema.json" to listOf(
+                "schedule-snapshot.all-day-active.json",
                 "schedule-snapshot.utc-active.json",
+                "schedule-snapshot.utc-point-active.json",
                 "schedule-snapshot.zoned-active-r0.json",
                 "schedule-snapshot.zoned-active-r2.json",
                 "schedule-snapshot.zoned-cancelled.json",
+                "schedule-snapshot.zoned-point-active.json",
             ),
             "subscription-create.v1.schema.json" to listOf(
                 "subscription-create.json",

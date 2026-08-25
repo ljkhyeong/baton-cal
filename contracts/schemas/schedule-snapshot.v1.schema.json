@@ -85,7 +85,16 @@
           "$ref": "#/$defs/utcInstantTime"
         },
         {
+          "$ref": "#/$defs/utcPointTime"
+        },
+        {
           "$ref": "#/$defs/zonedLocalTime"
+        },
+        {
+          "$ref": "#/$defs/zonedLocalPointTime"
+        },
+        {
+          "$ref": "#/$defs/allDayTime"
         }
       ]
     }
@@ -99,6 +108,11 @@
     "localSecond": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\\.[0-9]{1,9})?$"
+    },
+    "localDate": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
     },
     "utcInstantTime": {
       "type": "object",
@@ -116,6 +130,22 @@
           "$ref": "#/$defs/instant"
         },
         "endInstant": {
+          "$ref": "#/$defs/instant"
+        }
+      }
+    },
+    "utcPointTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "atInstant"
+      ],
+      "properties": {
+        "type": {
+          "const": "UTC_POINT"
+        },
+        "atInstant": {
           "$ref": "#/$defs/instant"
         }
       }
@@ -141,6 +171,46 @@
         },
         "endLocal": {
           "$ref": "#/$defs/localSecond"
+        }
+      }
+    },
+    "zonedLocalPointTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "zoneId",
+        "atLocal"
+      ],
+      "properties": {
+        "type": {
+          "const": "ZONED_LOCAL_POINT"
+        },
+        "zoneId": {
+          "type": "string"
+        },
+        "atLocal": {
+          "$ref": "#/$defs/localSecond"
+        }
+      }
+    },
+    "allDayTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "startDate",
+        "endDate"
+      ],
+      "properties": {
+        "type": {
+          "const": "ALL_DAY"
+        },
+        "startDate": {
+          "$ref": "#/$defs/localDate"
+        },
+        "endDate": {
+          "$ref": "#/$defs/localDate"
         }
       }
     }

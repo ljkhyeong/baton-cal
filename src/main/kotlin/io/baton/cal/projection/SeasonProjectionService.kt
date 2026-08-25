@@ -88,10 +88,24 @@ private fun CalendarItemRow.toDomain(): CalendarItem = CalendarItem(
             end = requireNotNull(endsAtInstant),
         )
 
+        ScheduleTimeType.UTC_POINT -> ScheduleWindow.UtcPoint(
+            at = requireNotNull(startsAtInstant),
+        )
+
         ScheduleTimeType.ZONED_LOCAL -> ScheduleWindow.ZonedLocal(
             start = requireNotNull(startsAtLocal),
             end = requireNotNull(endsAtLocal),
             zoneId = requireNotNull(zoneId),
+        )
+
+        ScheduleTimeType.ZONED_LOCAL_POINT -> ScheduleWindow.ZonedLocalPoint(
+            at = requireNotNull(startsAtLocal),
+            zoneId = requireNotNull(zoneId),
+        )
+
+        ScheduleTimeType.ALL_DAY -> ScheduleWindow.AllDay(
+            startDate = requireNotNull(startsOnDate),
+            endDate = requireNotNull(endsOnDate),
         )
     },
     sourceUpdatedAt = sourceUpdatedAt,

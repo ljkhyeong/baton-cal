@@ -1,0 +1,16 @@
+{
+  "eventId": "a1000000-0000-4000-8000-000000000001",
+  "occurredAt": "2026-08-11T02:00:05Z",
+  "sourceItemId": "a2000000-0000-4000-8000-000000000001",
+  "seasonId": "f5316f93-d49e-4230-b1d0-9e9c2d079819",
+  "revision": 0,
+  "status": "ACTIVE",
+  "summary": "발표 자료 제출 마감",
+  "description": "BATON이 확정한 루틴 마감입니다.",
+  "location": null,
+  "time": {
+    "type": "UTC_POINT",
+    "atInstant": "2026-08-17T12:00:00Z"
+  },
+  "sourceUpdatedAt": "2026-08-11T02:00:00Z"
+}
