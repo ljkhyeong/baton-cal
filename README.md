@@ -185,7 +185,7 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 
 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.2`다. 따라서 결과는
 `build/distributions/baton-cal-contracts-1.0.0-rc.2.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 예정 릴리스 태그는 `contracts-v1.0.0-rc.2`이며 파일명, ZIP 내부
+`contracts/VERSION`이 들어간다. 릴리스 태그는 `contracts-v1.0.0-rc.2`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
@@ -202,10 +202,14 @@ RC를 교체하지 않고 다음 RC를 만든다.
 `main` 커밋 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리킨다. 첨부 ZIP의 SHA-256은
 `0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`이며,
 `gh release verify`와 `gh release verify-asset` 검증을 통과했다. 이 값은 게시 이력을 보존하기 위한
-근거이며 새 BATON 연동은 `rc.2` 게시·검증 뒤 그 버전을 고정한다.
+근거이며 새 BATON 연동은 아래 `rc.2`를 고정한다.
 
 `rc.1`에는 BATON의 날짜 단위 회차와 단일 마감 시각을 손실 없이 표현하는 형태가 없으므로 그대로
-보존한다. `rc.2`는 UTC·시간대 지정 시점과 종일 날짜 구간을 추가한 새 불변 사전 릴리스 후보다.
+보존한다. [불변 사전 릴리스 `contracts-v1.0.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.2)는
+UTC·시간대 지정 시점과 종일 날짜 구간을 추가한다. 태그는 병합 커밋
+`730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`를 가리키고, 첨부 ZIP의 SHA-256은
+`75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`이다.
+`gh release verify`와 `gh release verify-asset` 검증을 통과했다.
 
 ## OCI 이미지 검증
 

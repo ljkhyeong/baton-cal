@@ -390,7 +390,7 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
     예고 없는 추가도 실패로 처리한다.
 17. `contracts/VERSION`의 `1.0.0-rc.2`를 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
     작업이 `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
-    `baton-cal-contracts-1.0.0-rc.2.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과 예정
+    `baton-cal-contracts-1.0.0-rc.2.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
     태그 `contracts-v1.0.0-rc.2`는 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
     않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
     업로드하며, 실제 만료는 저장소·조직 정책을 따른다.
@@ -422,11 +422,12 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 공개 배포 전에 해결해야 하는 보류 항목이다.
 
 - 불변 `contracts-v1.0.0-rc.1`은 게시됐지만 BATON 원본에 필요한 시점·종일 표현이 없어 변경하지
-  않는다. 새 계약은 풀 리퀘스트의 CI를 통과시켜 `main`에 반영한 뒤 깨끗한 체크아웃에서
-  `contracts-v1.0.0-rc.2` 초안 릴리스에 같은 버전의 ZIP을 첨부해 사전 릴리스로 게시한다. 이어
-  `gh release verify`, `gh release verify-asset`으로 확인한 `rc.2`를 BATON 생산자가 고정해 실제
+  않는다. 불변 `contracts-v1.0.0-rc.2`는 병합 커밋
+  `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`와 자산 SHA-256
+  `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`에 고정되어 있고,
+  `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON 생산자가 이 버전을 고정해 실제
   직렬화기, 전역 `sourceItemId` 비재사용, 개정 번호·원본 갱신 시각 전진, 명시적인 취소와 원본
-  커밋 이후 발행을 검증하는 생산자 테스트. 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면
+  커밋 이후 발행을 검증하는 생산자 테스트를 통과해야 한다. 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면
   동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 게시된 RC를 교체하지 않고
   다음 RC를 만든다.
 - 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 위의 두 값 회전 절차를 배포 환경에서 훈련하는
