@@ -89,7 +89,7 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과 GitHub Actions가 제공하는
 artifact digest를 사용한다.
 
-ZIP 내부의 `contracts/VERSION`, 파일명과 예정 태그 `contracts-v1.0.0-rc.2`는 모두 같은 버전을
+ZIP 내부의 `contracts/VERSION`, 파일명과 태그 `contracts-v1.0.0-rc.2`는 모두 같은 버전을
 가리켜야 한다. BATON 생산자 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면 동일한 계약
 의미의 안정 버전 `1.0.0`으로 승격한다. 의미 변경이 필요하면 게시된 RC 파일을 덮어쓰지 않고
 다음 RC의 새 파일과 태그를 만든다.
@@ -99,10 +99,11 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 임시 CI 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
 
 불변 `contracts-v1.0.0-rc.1`은 게시됐지만 BATON 원본에 필요한 시점·종일 표현이 없어 변경하지
-않는다. `rc.2`는 변경 검토 → 풀 리퀘스트와 CI → `main` 반영 → 깨끗한 체크아웃 →
-`contracts-v1.0.0-rc.2` 초안 릴리스에 같은 ZIP 첨부 → 사전 릴리스 게시 순서로 진행한다. 게시 뒤
-릴리스 증명과 자산을 `gh release verify`, `gh release verify-asset`으로 확인하고, BATON이 확인한
-`rc.2`를 고정해 실제 직렬화기와 발행 계약 테스트를 통과해야 생산자 연동이 완료된다.
+않는다. [불변 `contracts-v1.0.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.2)는
+병합 커밋 `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`와 자산 SHA-256
+`75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`에 고정되어 있다.
+릴리스 증명과 자산은 `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON이 이
+버전을 고정해 실제 직렬화기와 발행 계약 테스트를 통과해야 생산자 연동이 완료된다.
 
 ## 비밀정보 처리
 
