@@ -3,8 +3,8 @@
 BATON CAL은 BATON이 확정한 시즌 일정, 운영 회차와 마감을 읽기 전용 iCalendar 피드로
 투영하는 독립 서비스다.
 
-> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있다. BATON 발행 측 연동과
-> 공개 배포는 아직 하지 않았다. 공개 저장소는
+> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 BATON 생산자 계약 검증을
+> 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
 ## 서비스 경계
@@ -183,9 +183,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 ./gradlew --no-daemon contractsZip
 ```
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.2`다. 따라서 결과는
-`build/distributions/baton-cal-contracts-1.0.0-rc.2.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 릴리스 태그는 `contracts-v1.0.0-rc.2`이며 파일명, ZIP 내부
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0`이다. 따라서 결과는
+`build/distributions/baton-cal-contracts-1.0.0.zip`이고, ZIP 안에도 같은
+`contracts/VERSION`이 들어간다. 릴리스 태그는 `contracts-v1.0.0`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
@@ -193,10 +193,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
-산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 현재 계약은 BATON 생산자 구현으로 아직
-검증하지 않았으므로 정식 버전이 아닌 `1.0.0-rc.2`다. 생산자 검증 결과 버전 표식 외 계약 의미를
-바꿀 필요가 없으면 동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 기존
-RC를 교체하지 않고 다음 RC를 만든다.
+산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 불변 `rc.2` 계약은 BATON의 실제 운영
+직렬화기와 CAL 컨테이너 교차 서비스 테스트에서 계약 의미 변경 없이 검증됐고, 현재 버전을 안정
+`1.0.0`으로 승격했다. 게시된 RC는 교체하지 않는다.
 
 [불변 사전 릴리스 `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)은
 `main` 커밋 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리킨다. 첨부 ZIP의 SHA-256은
@@ -210,6 +209,11 @@ UTC·시간대 지정 시점과 종일 날짜 구간을 추가한다. 태그는 
 `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`를 가리키고, 첨부 ZIP의 SHA-256은
 `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`이다.
 `gh release verify`와 `gh release verify-asset` 검증을 통과했다.
+
+BATON은 `rc.2`를 고정해 수동 회차·자동 회차·루틴 마감의 직렬화, 원본 변경과 같은 트랜잭션의
+아웃박스 적재, 커밋 후 전달, 변경·취소·응답 유실 중복·역순 전달을 실제 CAL 컨테이너에 검증했다.
+동일한 계약 의미의 안정 릴리스는 `contracts-v1.0.0` 태그와
+`baton-cal-contracts-1.0.0.zip`으로 별도 게시한다.
 
 ## OCI 이미지 검증
 

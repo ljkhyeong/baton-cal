@@ -388,10 +388,10 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
 16. 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답 JSON을 각
     Draft 2020-12 응답 스키마에 직접 대조한다. 예제뿐 아니라 실제 직렬화 결과의 필드 누락과
     예고 없는 추가도 실패로 처리한다.
-17. `contracts/VERSION`의 `1.0.0-rc.2`를 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
+17. `contracts/VERSION`의 `1.0.0`을 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
     작업이 `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
-    `baton-cal-contracts-1.0.0-rc.2.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
-    태그 `contracts-v1.0.0-rc.2`는 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
+    `baton-cal-contracts-1.0.0.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
+    태그 `contracts-v1.0.0`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
     않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
     업로드하며, 실제 만료는 저장소·조직 정책을 따른다.
 
@@ -413,23 +413,24 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 스모크는 `pg_dump -Fc` 아카이브와
 `pg_restore --clean --create --exit-on-error` 실제 복원, 시작 전 세대 교체, 복원 토큰의 일반
 `404`, 대표 최신 변경·취소 재전달 뒤 새 토큰의 취소 피드까지 실행한다. Gradle은
-`contracts/VERSION`의 `1.0.0-rc.2`를 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
-같은 바이트가 되는 `baton-cal-contracts-1.0.0-rc.2.zip`으로 만들며, GitHub Actions는
+`contracts/VERSION`의 `1.0.0`을 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
+같은 바이트가 되는 `baton-cal-contracts-1.0.0.zip`으로 만들며, GitHub Actions는
 `retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
-이 임시 산출물은 안정적인 BATON 의존성이 아니다. BATON 생산자 검증 전이므로 이 버전은 RC다.
+이 임시 산출물은 안정적인 BATON 의존성이 아니다. 불변 `rc.2` 계약을 고정한 BATON 운영
+직렬화기와 실제 CAL 컨테이너 교차 서비스 테스트가 계약 의미 변경 없이 통과해 안정 버전으로
+승격했다.
 
-이는 실제 BATON 생산자 연동이나 운영 준비 완료를 뜻하지 않는다. 다음은 BATON 연동 또는
-공개 배포 전에 해결해야 하는 보류 항목이다.
+이는 실제 운영 활성화나 운영 준비 완료를 뜻하지 않는다. 다음은 공개 배포 전에 해결해야 하는
+보류 항목이다.
 
 - 불변 `contracts-v1.0.0-rc.1`은 게시됐지만 BATON 원본에 필요한 시점·종일 표현이 없어 변경하지
   않는다. 불변 `contracts-v1.0.0-rc.2`는 병합 커밋
   `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`와 자산 SHA-256
   `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`에 고정되어 있고,
-  `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON 생산자가 이 버전을 고정해 실제
+  `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON은 이 버전을 고정해 실제
   직렬화기, 전역 `sourceItemId` 비재사용, 개정 번호·원본 갱신 시각 전진, 명시적인 취소와 원본
-  커밋 이후 발행을 검증하는 생산자 테스트를 통과해야 한다. 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면
-  동일한 계약 의미의 안정 버전 `1.0.0`으로 승격하고, 의미 변경이 필요하면 게시된 RC를 교체하지 않고
-  다음 RC를 만든다.
+  커밋 이후 발행을 생산자 테스트와 실제 CAL 컨테이너로 검증했다. 동일한 계약 의미의 안정
+  `contracts-v1.0.0` 릴리스 게시와 BATON의 안정 자산 고정은 아직 남아 있다.
 - 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 위의 두 값 회전 절차를 배포 환경에서 훈련하는
   작업과 실제 운영 HTTPS 인증서·종단 설정.
 - 실제 BATON 전체 시즌의 매니페스트·재전달 완료 신호와 필요 시 재생 전 create·rotate 자동 차단
