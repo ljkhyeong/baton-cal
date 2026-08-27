@@ -134,6 +134,7 @@ BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자
 - [마이크로서비스 경계](docs/ADR/0001_microservice-boundary/adr.md)
 - [기술 스택 결정](docs/ADR/0002_technology-stack/adr.md)
 - [기계 판독형 계약](contracts/README.md)
+- [계약 릴리스 현황](docs/contract-release-history.md)
 - [다음 작업](HANDOFF.md)
 
 ## 기술 스택
@@ -193,27 +194,15 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
-산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 불변 `rc.2` 계약은 BATON의 실제 운영
-직렬화기와 CAL 컨테이너 교차 서비스 테스트에서 계약 의미 변경 없이 검증됐고, 현재 버전을 안정
-`1.0.0`으로 승격했다. 게시된 RC는 교체하지 않는다.
+산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
 
-[불변 사전 릴리스 `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)은
-`main` 커밋 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리킨다. 첨부 ZIP의 SHA-256은
-`0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`이며,
-`gh release verify`와 `gh release verify-asset` 검증을 통과했다. 이 값은 게시 이력을 보존하기 위한
-근거이며 새 BATON 연동은 아래 `rc.2`를 고정한다.
-
-`rc.1`에는 BATON의 날짜 단위 회차와 단일 마감 시각을 손실 없이 표현하는 형태가 없으므로 그대로
-보존한다. [불변 사전 릴리스 `contracts-v1.0.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.2)는
-UTC·시간대 지정 시점과 종일 날짜 구간을 추가한다. 태그는 병합 커밋
-`730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`를 가리키고, 첨부 ZIP의 SHA-256은
-`75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`이다.
-`gh release verify`와 `gh release verify-asset` 검증을 통과했다.
-
-BATON은 `rc.2`를 고정해 수동 회차·자동 회차·루틴 마감의 직렬화, 원본 변경과 같은 트랜잭션의
-아웃박스 적재, 커밋 후 전달, 변경·취소·응답 유실 중복·역순 전달을 실제 CAL 컨테이너에 검증했다.
-동일한 계약 의미의 안정 릴리스는 `contracts-v1.0.0` 태그와
-`baton-cal-contracts-1.0.0.zip`으로 별도 게시한다.
+현재 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산
+`baton-cal-contracts-1.0.0.zip`의 SHA-256은
+`b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
+릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 생산자 계약 테스트를
+완료했다. 사전 릴리스 이력과 다음 버전 규칙은 [계약 릴리스 현황](docs/contract-release-history.md)에
+정리한다.
 
 ## OCI 이미지 검증
 
