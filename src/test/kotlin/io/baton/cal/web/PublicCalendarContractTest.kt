@@ -53,7 +53,6 @@ class PublicCalendarContractTest @Autowired constructor(
     @Test
     fun `empty season feed preserves canonical bytes validators and conditional responses across rebuild`() {
         val credential = createSubscription()
-        val subscriptionId: String = JsonPath.read(credential, "$.subscriptionId")
         val token: String = JsonPath.read(credential, "$.token")
         val golden = emptyFeedGolden()
         val expectedEtag = "\"${MessageDigest.getInstance("SHA-256").digest(golden).toHexString()}\""
