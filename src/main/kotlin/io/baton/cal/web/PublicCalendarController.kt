@@ -6,6 +6,7 @@ import org.springframework.http.CacheControl
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
@@ -42,9 +43,7 @@ class PublicCalendarController(
     }
 
     @GetMapping("/calendars/v1/**")
-    fun rejectMalformedCalendarPath(response: HttpServletResponse) {
-        response.status = HttpServletResponse.SC_NOT_FOUND
-    }
+    fun rejectMalformedCalendarPath(): ResponseEntity<Void> = ResponseEntity.notFound().build()
 
     private companion object {
         val FEED_CACHE_CONTROL: CacheControl = CacheControl.noCache().cachePrivate()

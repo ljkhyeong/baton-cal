@@ -62,7 +62,8 @@ val contractsVersion = providers
 tasks.register<Zip>("contractsZip") {
     group = "distribution"
     description = "BATON CAL 계약 팩 ZIP을 생성합니다."
-    archiveFileName.set(contractsVersion.map { "baton-cal-contracts-$it.zip" })
+    archiveBaseName.set("baton-cal-contracts")
+    archiveVersion.set(contractsVersion)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
 
     from(layout.projectDirectory.dir("contracts")) {
