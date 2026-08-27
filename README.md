@@ -3,8 +3,8 @@
 BATON CAL은 BATON이 확정한 시즌 일정, 운영 회차와 마감을 읽기 전용 iCalendar 피드로
 투영하는 독립 서비스다.
 
-> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 BATON 생산자 계약 검증을
-> 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
+> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 안정 계약 `1.0.0`의
+> BATON 생산자 검증을 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
 ## 서비스 경계
@@ -43,11 +43,15 @@ CAL이 소유하지 않는다.
 
 ## 운영 안전 기본값
 
-- JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트)까지만
-  파싱한다. 이를 넘으면 `413`과 `REQUEST_TOO_LARGE` 고정 오류를 반환한다.
+- JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트),
+  필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 256개까지 파싱한다. 이 자원 경계를 하나라도
+  넘으면 기존 계약과 같은 `413`, `REQUEST_TOO_LARGE`,
+  `request body exceeds the maximum size`를 반환한다.
 - 공개 피드 기준 URL은 외부 또는 비루프백 주소에서 HTTPS만 허용한다. 루프백 HTTP는 로컬
   개발에서만 허용하며 `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시하지 않거나 HTTPS가
   아니면 시작에 실패한다.
+- 로컬 실행은 `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`의 개발 기본값을 제공한다.
+  `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
 - 공개 `/calendars/v1/**` 요청의 고카디널리티 `http.url` 관측값은 실제 토큰 대신
@@ -184,9 +188,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 ./gradlew --no-daemon contractsZip
 ```
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0`이다. 따라서 결과는
-`build/distributions/baton-cal-contracts-1.0.0.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 릴리스 태그는 `contracts-v1.0.0`이며 파일명, ZIP 내부
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 따라서 결과는
+`build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`이고, ZIP 안에도 같은
+`contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.1`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
@@ -203,6 +207,10 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 생산자 계약 테스트를
 완료했다. 사전 릴리스 이력과 다음 버전 규칙은 [계약 릴리스 현황](docs/contract-release-history.md)에
 정리한다.
+
+`1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
+로컬 기본값을 상속하지 않게 하는 다음 검토 후보다. 아직 게시하거나 BATON 생산자 기준으로
+고정하지 않았으므로 현재 운영 기준은 계속 `1.0.0`이다.
 
 ## OCI 이미지 검증
 

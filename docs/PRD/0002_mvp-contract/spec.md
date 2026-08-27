@@ -225,6 +225,12 @@ BATON이 최종 사용자 권한과 시즌 범위를 먼저 승인한 뒤 내부
 - DELETE는 구독과 모든 토큰을 폐기하는 멱등 연산이다. 응답 이후 이전
   URL은 성공할 수 없다.
 
+### 운영 데이터베이스 설정
+
+로컬 프로필은 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
+`DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 외부 환경에서 모두 명시하지 않으면
+시작을 거부한다. 로컬 기본값을 운영 연결로 승격하지 않는다.
+
 ### 복원 펜스
 
 `BATON_CAL_SUBSCRIPTION_GENERATION`은 비밀이 아닌 외부 런타임 UUID다. 정상 재시작과 일반
@@ -278,10 +284,11 @@ BATON 최종 사용자 Bearer 토큰, 워크스페이스 키 또는 세션을 �
 오류는 달리 명시하지 않으면 `application/json`과 `api-error.v1`의 `{code, message}`를 쓴다.
 응답과 애플리케이션 로그에는 토큰이나 피드 URL을 넣지 않는다.
 
-JSON 요청의 전체 문서는 공백과 구조를 포함해 128 KiB(131,072바이트) 이하여야 한다. 이 제한은
-DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 적용한다. 초과하면
-`{"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}`로 고정한
-오류 본문을 반환한다.
+JSON 요청은 공백과 구조를 포함한 전체 문서 128 KiB(131,072바이트), 필드명 64자, 중첩 16단계,
+숫자 10자리와 토큰 256개 이하여야 한다. 이 제한은 DTO·JSON Schema의 개별 필드 제약과 별도로
+Jackson 파서에서 먼저 적용한다. 어느 자원 상한이든 초과하면
+기존 계약과 같은 `{"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}`
+고정 오류 본문을 반환한다.
 
 | 상태 | 코드 | 의미 |
 | --- | --- | --- |
@@ -292,12 +299,12 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
 | `409` | `SOURCE_REVISION_CONFLICT` | 같은 항목/개정 번호가 다른 원본 내용을 가리킴 |
 | `409` | `SOURCE_ITEM_SCOPE_CONFLICT` | 같은 원본 항목을 다른 시즌에 재사용함 |
 | `409` | `SUBSCRIPTION_CONFLICT` | 회전/폐기 원자적 비교 후 설정(CAS)의 동시성 충돌 |
-| `413` | `REQUEST_TOO_LARGE` | JSON 전체 문서가 128 KiB(131,072바이트) 상한을 넘음 |
+| `413` | `REQUEST_TOO_LARGE` | JSON 문서 크기·필드명·중첩·숫자·토큰 자원 상한을 넘음 |
 | `500` | `INTERNAL_ERROR` | 호출자에게 내부 세부 정보를 노출하지 않는 예상 밖 실패 |
 
 스냅샷 전달은 네트워크 실패나 `5xx`만 재시도 간격을 두고 재시도하며 `4xx`는 계약/설정
-오류로 처리한다. `413`은 요청을 상한 이하로 줄이기 전에는 재시도하지 않는다. 보류한 요청
-제한을 도입하면 `429`도 재시도 가능한 상태에 추가한다.
+오류로 처리한다. `413`은 생산자 직렬화나 요청을 자원 상한 안으로 고치기 전에는 재시도하지
+않는다. 보류한 요청 제한을 도입하면 `429`도 재시도 가능한 상태에 추가한다.
 
 ### `POST /internal/api/v1/schedule-snapshots`
 
@@ -372,9 +379,11 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
 10. 외부 구독 세대를 유지한 정상 재시작, 새 세대의 생성·회전, 과거 세대 토큰의 일반 `404`와
    현재 세대 토큰 재발급.
 11. BATON 커밋 이후 전달, CAL 트랜잭션 실패, 재시도와 복구.
-12. DTO·JSON Schema의 필드 제약 위반과 JSON 전체 문서 128 KiB 초과를 구분하고, 초과 문서에
-    고정된 `413 REQUEST_TOO_LARGE` 오류를 반환한다.
-13. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 시작 실패를 검증하고, Tomcat 접근 로그의
+12. DTO·JSON Schema의 필드 제약 위반과 JSON 파서 자원 제한을 구분하고, 문서 128 KiB·필드명
+    64자·중첩 16단계·숫자 10자리·토큰 256개 중 어느 상한이든 넘으면 고정된
+    `413 REQUEST_TOO_LARGE` 오류를 반환한다.
+13. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 데이터베이스 설정이 로컬 기본값을 상속하지 않는
+    구성을 검증하고, Tomcat 접근 로그의
     기본 비활성·안전 패턴, `prod`의 `StatementCreatorUtils` 비활성과 공개 경로 `http.url`의
     토큰 비노출을 고정한다.
 14. GitHub Actions가 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만들고,
@@ -388,10 +397,10 @@ DTO·JSON Schema의 개별 필드 제약과 별도로 JSON 파서에서 먼저 �
 16. 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답 JSON을 각
     Draft 2020-12 응답 스키마에 직접 대조한다. 예제뿐 아니라 실제 직렬화 결과의 필드 누락과
     예고 없는 추가도 실패로 처리한다.
-17. `contracts/VERSION`의 `1.0.0`을 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
+17. `contracts/VERSION`의 `1.1.0-rc.1`을 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
     작업이 `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
-    `baton-cal-contracts-1.0.0.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
-    태그 `contracts-v1.0.0`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
+    `baton-cal-contracts-1.1.0-rc.1.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
+    후보 태그 `contracts-v1.1.0-rc.1`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
     않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
     업로드하며, 실제 만료는 저장소·조직 정책을 따른다.
 
@@ -403,8 +412,9 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 `ACTIVE` 개정 번호 0 → `ACTIVE` 개정 번호 2 → `CANCELLED` 개정 번호 3 생명주기를 실제
 수신 경로로 실행한다. UTC·시간대 지정 시점과 종일 일정도 같은 경로로 수신하고 PostgreSQL 왕복과
 정규 iCalendar 표현을 검증한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의 정규 `.ics` 골든,
-의존성 잠금과 골든 검토 절차도 갖춘다. JSON 전체 문서의 128 KiB 파서 상한과 고정 `413` 오류,
-공개 기준 URL의 HTTPS·루프백 규칙, `prod` 시작 검증과 안전한 애플리케이션 로그 기본값도
+의존성 잠금과 골든 검토 절차도 갖춘다. JSON 문서·구조 자원 상한과 고정 `413` 오류,
+공개 기준 URL의 HTTPS·루프백 규칙, `prod` 공개 URL 시작 검증, 데이터베이스의 로컬 기본값 상속
+차단과 안전한 애플리케이션 로그 기본값도
 구현되어 있다. 내부 Bearer는 현재 값과 회전 창의 선택적 이전 값만 허용하고, 공개 캘린더 경로의
 고카디널리티 `http.url`은 토큰이 없는 템플릿으로 기록한다. 공개 구독은 현재 외부 런타임 세대와
 일치해야 하므로 과거 DB 복원으로 이전 토큰이 되살아나지 않는다. GitHub Actions는 Java 25로
@@ -413,24 +423,21 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 스모크는 `pg_dump -Fc` 아카이브와
 `pg_restore --clean --create --exit-on-error` 실제 복원, 시작 전 세대 교체, 복원 토큰의 일반
 `404`, 대표 최신 변경·취소 재전달 뒤 새 토큰의 취소 피드까지 실행한다. Gradle은
-`contracts/VERSION`의 `1.0.0`을 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
-같은 바이트가 되는 `baton-cal-contracts-1.0.0.zip`으로 만들며, GitHub Actions는
+`contracts/VERSION`의 `1.1.0-rc.1`을 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
+같은 바이트가 되는 `baton-cal-contracts-1.1.0-rc.1.zip`으로 만들며, GitHub Actions는
 `retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
-이 임시 산출물은 안정적인 BATON 의존성이 아니다. 불변 `rc.2` 계약을 고정한 BATON 운영
-직렬화기와 실제 CAL 컨테이너 교차 서비스 테스트가 계약 의미 변경 없이 통과해 안정 버전으로
-승격했다.
+이 임시 산출물은 안정적인 BATON 의존성이 아니다. 안정 버전 `1.0.0`은 불변
+`1.0.0-rc.2` 계약을 고정한 BATON 운영 직렬화기와 실제 CAL 컨테이너 교차 서비스 테스트가
+계약 의미 변경 없이 통과한 뒤 승격했다.
 
 이는 실제 운영 활성화나 운영 준비 완료를 뜻하지 않는다. 다음은 공개 배포 전에 해결해야 하는
 보류 항목이다.
 
-- 불변 `contracts-v1.0.0-rc.1`은 게시됐지만 BATON 원본에 필요한 시점·종일 표현이 없어 변경하지
-  않는다. 불변 `contracts-v1.0.0-rc.2`는 병합 커밋
-  `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`와 자산 SHA-256
-  `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`에 고정되어 있고,
-  `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON은 이 버전을 고정해 실제
-  직렬화기, 전역 `sourceItemId` 비재사용, 개정 번호·원본 갱신 시각 전진, 명시적인 취소와 원본
-  커밋 이후 발행을 생산자 테스트와 실제 CAL 컨테이너로 검증했다. 동일한 계약 의미의 안정
-  `contracts-v1.0.0` 릴리스 게시와 BATON의 안정 자산 고정은 아직 남아 있다.
+- 현재 BATON 생산자 기준은 불변 안정 릴리스 `contracts-v1.0.0`이다. `1.1.0-rc.1`은 기존
+  128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가 로컬 기본값을 상속하지
+  않게 하는 다음 검토 후보이며, 아직 게시하거나 BATON 생산자에 고정하지 않았다.
+- 운영에서 허용할 시간대·날짜 범위 또는 단일 TZDB 기반 `VTIMEZONE` 생성 방식을 확정하고,
+  시간대 데이터 버전 차이가 있는 입력을 공개 운영에서 처리하는 기준을 검증한다.
 - 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 위의 두 값 회전 절차를 배포 환경에서 훈련하는
   작업과 실제 운영 HTTPS 인증서·종단 설정.
 - 실제 BATON 전체 시즌의 매니페스트·재전달 완료 신호와 필요 시 재생 전 create·rotate 자동 차단

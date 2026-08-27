@@ -24,6 +24,18 @@ gh release download contracts-v1.0.0 --pattern baton-cal-contracts-1.0.0.zip
 gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 ```
 
+## 다음 검토 후보
+
+| 항목 | 값 |
+| --- | --- |
+| 버전 | `1.1.0-rc.1` |
+| 예정 태그 | `contracts-v1.1.0-rc.1` |
+| 자산 | `baton-cal-contracts-1.1.0-rc.1.zip` |
+| 변경 의미 | 기존 128 KiB 문서 상한에 JSON 구조 제한 추가, `prod` 데이터베이스의 로컬 기본값 상속 차단 |
+| 상태 | 로컬 전체 테스트·실행 JAR·계약 ZIP 검증 완료, 미게시, BATON 미고정 |
+
+이 후보가 게시되고 BATON 교차 서비스 테스트를 통과하기 전까지 생산자 기준은 `1.0.0`이다.
+
 ## 게시 이력
 
 | 버전 | 태그 커밋 | 자산 SHA-256 | 결과 |

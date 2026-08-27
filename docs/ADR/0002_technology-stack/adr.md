@@ -29,9 +29,10 @@ BATON CAL MVP는 다음 특성을 가진다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
 - Spring Boot 4.1.0과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
-- Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트)로 제한한다. 이는 DTO와
-  JSON Schema의 개별 필드 제약과 다른 파서 자원 경계이며, Spring MVC 오류 어댑터가 초과를
-  고정된 `413 REQUEST_TOO_LARGE` API 오류로 변환한다.
+- Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
+  16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
+  다른 단일 파서 자원 경계이며, Spring MVC 오류 어댑터가 어느 상한의 초과든 고정된
+  `413 REQUEST_TOO_LARGE` API 오류로 변환한다. 별도 요청 본문 필터나 자체 JSON 파서는 두지 않는다.
 - 내부 API 인증은 배포 비밀값으로 주입한 CAL 전용 Bearer 토큰을 Spring MVC 필터에서 비교한다.
   필수 현재 값과 회전 창에서만 쓰는 선택적 이전 값으로 최대 두 개를 구성하고, 제시된 값은
   일치 여부와 관계없이 설정된 모든 값과 `MessageDigest.isEqual`로 비교한다. BATON이 새 값으로
@@ -90,6 +91,13 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
   `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
   보류 항목이다.
+- Java `ZoneRules`와 iCal4j 내장 `VTIMEZONE`의 데이터 버전은 다를 수 있다. iCal4j 4.2.5의
+  `ZoneRulesBuilder`, `Observance.getLatestOnset()`과 `TimeZone.getOffset()`은 만료된 반복 규칙이나
+  전환 시각을 정상 지역에도 잘못 적용할 수 있어 런타임 교차 검증에 쓰지 않는다. CAL이 RRULE을
+  직접 해석하는 대체 구현도 두지 않는다.
+- 운영 시간대 범위를 확정할 때는 승인한 시간대·날짜 범위를 계약으로 제한하거나, 하나의 TZDB로
+  `VTIMEZONE`까지 생성하는 별도 결정을 채택한다. 후자를 선택하면 기존 골든 바이트와 ETag 변경을
+  새 계약 버전에서 검토한다.
 - 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 Java `ZoneId.getAvailableZoneIds()`의 이름 있는
   TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다.
 - `UTC_INSTANT`·`ZONED_LOCAL` 구간은 `DTSTART`와 `DTEND`, `UTC_POINT`·`ZONED_LOCAL_POINT`
@@ -142,6 +150,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 
 ### 운영 프로필과 로그 경계
 
+- 로컬 실행에는 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
+  `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 모두 외부에서 명시하도록 요구해
+  개발 연결값으로 운영 애플리케이션이 시작되는 경로를 닫는다.
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
