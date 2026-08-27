@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.catchThrowable
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
@@ -100,10 +100,10 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         assertThat(firstRevokedState?.status).isEqualTo(CalendarSubscriptionStatus.REVOKED)
         assertThat(service.findFeed(initial.token)).isNull()
 
-        val error = catchThrowable { service.rotate(initial.subscriptionId) }
-        assertThat(error).isInstanceOfSatisfying(InternalResourceNotFoundException::class.java) {
-            assertThat(it.code).isEqualTo("RESOURCE_NOT_FOUND")
-        }
+        assertThatThrownBy { service.rotate(initial.subscriptionId) }
+            .isInstanceOfSatisfying(InternalResourceNotFoundException::class.java) {
+                assertThat(it.code).isEqualTo("RESOURCE_NOT_FOUND")
+            }
     }
 
     private fun synchronizeFirstTwoReads(subscriptionId: UUID) {

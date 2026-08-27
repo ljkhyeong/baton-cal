@@ -1,6 +1,7 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
+import io.baton.cal.calendar.goldenIcalendarFixture
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.micrometer.observation.tck.TestObservationRegistry
 import io.micrometer.observation.tck.TestObservationRegistryAssert
@@ -27,9 +28,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import kotlin.io.encoding.Base64
-import kotlin.io.path.readText
-import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -54,7 +52,7 @@ class PublicCalendarContractTest @Autowired constructor(
     fun `empty season feed preserves canonical bytes validators and conditional responses across rebuild`() {
         val credential = createSubscription()
         val token: String = JsonPath.read(credential, "$.token")
-        val golden = emptyFeedGolden()
+        val golden = goldenIcalendarFixture("season-empty.ics.b64")
         val expectedEtag = "\"${MessageDigest.getInstance("SHA-256").digest(golden).toHexString()}\""
 
         mockMvc.perform(get("/calendars/v1/{token}.ics", token))
@@ -225,10 +223,6 @@ class PublicCalendarContractTest @Autowired constructor(
 
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
-
-    private fun emptyFeedGolden(): ByteArray = Base64.Mime.decode(
-        Path.of("contracts/golden/season-empty.ics.b64").readText(),
-    )
 
     companion object {
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"

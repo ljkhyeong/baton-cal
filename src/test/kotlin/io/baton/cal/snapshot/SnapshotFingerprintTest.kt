@@ -26,11 +26,12 @@ class SnapshotFingerprintTest {
     @Test
     fun `source revision and content change the fingerprint`() {
         val original = snapshot()
+        val originalHash = SnapshotFingerprint.sha256(original)
 
         assertThat(SnapshotFingerprint.sha256(original.copy(revision = 4)))
-            .isNotEqualTo(SnapshotFingerprint.sha256(original))
+            .isNotEqualTo(originalHash)
         assertThat(SnapshotFingerprint.sha256(original.copy(summary = "changed")))
-            .isNotEqualTo(SnapshotFingerprint.sha256(original))
+            .isNotEqualTo(originalHash)
     }
 
     private fun snapshot(

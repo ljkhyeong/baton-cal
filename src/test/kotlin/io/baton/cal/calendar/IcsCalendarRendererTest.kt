@@ -6,9 +6,6 @@ import org.junit.jupiter.api.Test
 import net.fortuna.ical4j.model.Parameter
 import net.fortuna.ical4j.model.Property
 import net.fortuna.ical4j.model.parameter.Value
-import kotlin.io.encoding.Base64
-import kotlin.io.path.readText
-import java.nio.file.Path
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -23,7 +20,7 @@ class IcsCalendarRendererTest {
         val rendered = renderer.render(seasonId, emptyList())
         val calendar = rendered.bytes.parseIcalendar()
 
-        assertThat(rendered.bytes).isEqualTo(goldenFixture("season-empty.ics.b64"))
+        assertThat(rendered.bytes).isEqualTo(goldenIcalendarFixture("season-empty.ics.b64"))
         assertThat(rendered.lastModified).isEqualTo(Instant.EPOCH)
         assertThat(calendar.events()).isEmpty()
         assertThat(calendar.timeZones()).isEmpty()
@@ -51,7 +48,7 @@ class IcsCalendarRendererTest {
         val rebuilt = renderer.render(seasonId, listOf(item))
         val event = first.bytes.parseIcalendar().requiredEvent()
 
-        assertThat(first.bytes).isEqualTo(goldenFixture("season-utc.ics.b64"))
+        assertThat(first.bytes).isEqualTo(goldenIcalendarFixture("season-utc.ics.b64"))
         assertThat(first.bytes).isEqualTo(rebuilt.bytes)
         assertThat(first.etag).isEqualTo(rebuilt.etag)
         assertThat(first.lastModified).isEqualTo(Instant.parse("2026-08-11T12:34:56Z"))
@@ -91,7 +88,7 @@ class IcsCalendarRendererTest {
             .dropLast(1)
 
         assertThat(rendered.bytes)
-            .isEqualTo(goldenFixture("season-unicode-fold-boundaries.ics.b64"))
+            .isEqualTo(goldenIcalendarFixture("season-unicode-fold-boundaries.ics.b64"))
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo(summary)
         assertThat(event.requiredPropertyValue(Property.DESCRIPTION)).isEqualTo(description)
         assertThat(event.requiredPropertyValue(Property.LOCATION)).isEqualTo(location)
@@ -127,7 +124,7 @@ class IcsCalendarRendererTest {
         val end = event.requiredProperty(Property.DTEND)
 
         assertThat(rendered.bytes)
-            .isEqualTo(goldenFixture("season-zoned-midnight-cancellation.ics.b64"))
+            .isEqualTo(goldenIcalendarFixture("season-zoned-midnight-cancellation.ics.b64"))
         assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-10-31T12:34:56Z"))
         assertThat(timeZone.timeZoneId.value).isEqualTo("America/New_York")
         assertThat(timeZone.observances.map { it.name }).contains("DAYLIGHT", "STANDARD")
@@ -193,7 +190,7 @@ class IcsCalendarRendererTest {
         val zonedEvent = zonedCalendar.requiredEvent()
         val allDayEvent = eventsByUid.getValue("${allDay.sourceItemId}@cal.baton")
 
-        assertThat(rendered.bytes).isEqualTo(goldenFixture("season-point-and-all-day.ics.b64"))
+        assertThat(rendered.bytes).isEqualTo(goldenIcalendarFixture("season-point-and-all-day.ics.b64"))
         assertThat(calendar.events()).hasSize(2)
         assertThat(calendar.timeZones()).isEmpty()
         assertThat(zonedCalendar.timeZones()).hasSize(1)
@@ -271,10 +268,6 @@ class IcsCalendarRendererTest {
         ),
         sourceUpdatedAt = Instant.parse("2026-01-01T00:00:00Z"),
         acceptedAt = Instant.parse("2026-01-01T00:00:00Z"),
-    )
-
-    private fun goldenFixture(name: String): ByteArray = Base64.Mime.decode(
-        Path.of("contracts/golden", name).readText(),
     )
 
     private fun assertCanonicalCrLf(bytes: ByteArray) {

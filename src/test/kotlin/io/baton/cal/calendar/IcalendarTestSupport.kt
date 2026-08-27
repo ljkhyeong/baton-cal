@@ -1,5 +1,8 @@
 package io.baton.cal.calendar
 
+import kotlin.io.encoding.Base64
+import kotlin.io.path.Path
+import kotlin.io.path.readText
 import net.fortuna.ical4j.data.CalendarBuilder
 import net.fortuna.ical4j.model.Calendar
 import net.fortuna.ical4j.model.Component
@@ -12,6 +15,10 @@ import net.fortuna.ical4j.model.parameter.TzId
 internal fun ByteArray.parseIcalendar(): Calendar = inputStream().use { input ->
     CalendarBuilder().build(input)
 }
+
+internal fun goldenIcalendarFixture(name: String): ByteArray = Base64.Mime.decode(
+    Path("contracts/golden", name).readText(),
+)
 
 internal fun Calendar.events(): List<VEvent> = componentList.get(Component.VEVENT)
 

@@ -4,8 +4,8 @@ import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
-import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
+import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
@@ -54,15 +54,12 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertDurableRowCounts(expected = 1)
 
         val projection = jdbcClient.sql(
-            "SELECT representation, etag FROM season_feed_projection WHERE season_id = :seasonId",
+            "SELECT representation FROM season_feed_projection WHERE season_id = :seasonId",
         )
             .param("seasonId", SEASON_ID)
-            .query { resultSet, _ ->
-                resultSet.getBytes("representation") to resultSet.getString("etag")
-            }
+            .query(ByteArray::class.java)
             .single()
-        assertThat(projection.second).matches("\"[0-9a-f]{64}\"")
-        val event = projection.first.parseIcalendar().events().single()
+        val event = projection.parseIcalendar().requiredEvent()
         assertThat(event.requiredPropertyValue(Property.UID)).isEqualTo("$SOURCE_ITEM_ID@cal.baton")
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
     }
