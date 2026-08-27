@@ -65,13 +65,11 @@ class SeasonProjectionService(
         seasonId: UUID,
         observedAt: Instant,
     ): Instant {
-        val lastModified = projectionRepository.findLastModifiedBySeasonId(seasonId)
         val observedSecond = observedAt.truncatedTo(ChronoUnit.SECONDS)
-        return if (lastModified == null || observedSecond.isAfter(lastModified)) {
-            observedSecond
-        } else {
-            lastModified.plusSeconds(1)
-        }
+        return projectionRepository.findLastModifiedBySeasonId(seasonId)
+            ?.plusSeconds(1)
+            ?.coerceAtLeast(observedSecond)
+            ?: observedSecond
     }
 }
 

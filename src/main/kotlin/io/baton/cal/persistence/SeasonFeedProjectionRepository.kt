@@ -2,7 +2,6 @@ package io.baton.cal.persistence
 
 import kotlin.jvm.optionals.getOrNull
 import java.time.Instant
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -35,7 +34,7 @@ class SeasonFeedProjectionRepository(
             .param("seasonId", row.seasonId)
             .param("representation", row.representation)
             .param("etag", row.etag)
-            .param("lastModified", OffsetDateTime.ofInstant(row.lastModified, ZoneOffset.UTC))
+            .param("lastModified", row.lastModified.atOffset(ZoneOffset.UTC))
             .update()
     }
 

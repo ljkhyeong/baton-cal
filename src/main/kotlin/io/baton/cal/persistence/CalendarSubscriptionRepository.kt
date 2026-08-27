@@ -105,7 +105,6 @@ class CalendarSubscriptionRepository(
             UPDATE calendar_subscription
             SET status = 'REVOKED'
             WHERE id = :id
-              AND status IN ('ACTIVE', 'REVOKED')
               AND token_hash = :expectedTokenHash
             """.trimIndent(),
         )

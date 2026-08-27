@@ -1,7 +1,6 @@
 package io.baton.cal.persistence
 
 import kotlin.jvm.optionals.getOrNull
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -39,8 +38,8 @@ class SourceEventInboxRepository(
             .param("sourceItemId", row.sourceItemId)
             .param("seasonId", row.seasonId)
             .param("sourceRevision", row.sourceRevision)
-            .param("occurredAt", OffsetDateTime.ofInstant(row.occurredAt, ZoneOffset.UTC))
-            .param("receivedAt", OffsetDateTime.ofInstant(row.receivedAt, ZoneOffset.UTC))
+            .param("occurredAt", row.occurredAt.atOffset(ZoneOffset.UTC))
+            .param("receivedAt", row.receivedAt.atOffset(ZoneOffset.UTC))
             .update() == 1
 
     fun getPayloadHashByEventId(eventId: UUID): String =
