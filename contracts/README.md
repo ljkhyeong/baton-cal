@@ -1,7 +1,7 @@
 # BATON CAL MVP 계약
 
-이 디렉터리는 PRD-0002의 언어 중립적 JSON 계약과 예시를 보관한다. 현재 경로는
-MVP 애플리케이션 골격에 구현되어 있지만 BATON 생산자 연동이나 운영 준비 완료를 뜻하지 않는다.
+이 디렉터리는 PRD-0002의 언어 중립적 JSON 계약과 예시를 보관한다. BATON 생산자 계약 검증은
+완료했지만 실제 운영 활성화나 운영 준비 완료를 뜻하지 않는다.
 
 ## 계약 목록
 
@@ -63,22 +63,21 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
 유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다.
 
-이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 실제 BATON 직렬화기,
-전역 `sourceItemId` 비재사용, 원본 트랜잭션 커밋 이후 발행과 삭제·보관 시 완전한
-`CANCELLED` 발행은 BATON 저장소가 이 버전의 계약 팩을 고정해 생산자 테스트로 실행한 뒤에만
-검증된 것으로 본다.
+이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. BATON 저장소는 불변 `rc.2`
+계약 팩을 고정한 생산자 테스트와 실제 CAL 컨테이너 교차 서비스 테스트로 운영 직렬화기,
+`sourceItemId` 비재사용, 원본 트랜잭션 커밋 이후 발행, 변경·취소·중복·역순 전달을 검증했다.
 
 ## 계약 팩 생성과 배포
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0-rc.2`다. BATON 생산자 구현이
-이 계약을 아직 검증하지 않았으므로 정식 `1.0.0`이 아닌 RC로 둔다. 계약 팩은 Gradle 표준 `Zip`
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 `1.0.0`이다. `rc.2`의 계약 의미가
+BATON 생산자 구현에서 변경 없이 검증되어 안정 버전으로 승격했다. 계약 팩은 Gradle 표준 `Zip`
 작업으로 생성한다.
 
 ```shell
 ./gradlew --no-daemon contractsZip
 ```
 
-`build/distributions/baton-cal-contracts-1.0.0-rc.2.zip`에는 다음 기준만 들어간다.
+`build/distributions/baton-cal-contracts-1.0.0.zip`에는 다음 기준만 들어간다.
 
 - `contracts/**`: JSON Schema, 예시, 정규 iCalendar 골든과 이 안내서
 - `docs/PRD/0002_mvp-contract/spec.md`: JSON Schema로 표현하지 못하는 필드 간 의미, HTTP 상태,
@@ -89,10 +88,8 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과 GitHub Actions가 제공하는
 artifact digest를 사용한다.
 
-ZIP 내부의 `contracts/VERSION`, 파일명과 태그 `contracts-v1.0.0-rc.2`는 모두 같은 버전을
-가리켜야 한다. BATON 생산자 검증 결과 버전 표식 외 계약 의미를 바꿀 필요가 없으면 동일한 계약
-의미의 안정 버전 `1.0.0`으로 승격한다. 의미 변경이 필요하면 게시된 RC 파일을 덮어쓰지 않고
-다음 RC의 새 파일과 태그를 만든다.
+ZIP 내부의 `contracts/VERSION`, 파일명과 태그 `contracts-v1.0.0`은 모두 같은 버전을 가리켜야
+한다. 안정 버전은 새 ZIP과 태그로 게시하며, 게시된 RC 파일과 태그를 덮어쓰지 않는다.
 
 GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료 시점은 저장소·조직의 보존 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한
@@ -102,8 +99,9 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 않는다. [불변 `contracts-v1.0.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.2)는
 병합 커밋 `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`와 자산 SHA-256
 `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`에 고정되어 있다.
-릴리스 증명과 자산은 `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON이 이
-버전을 고정해 실제 직렬화기와 발행 계약 테스트를 통과해야 생산자 연동이 완료된다.
+릴리스 증명과 자산은 `gh release verify`, `gh release verify-asset` 검증을 통과했다. BATON은 이
+버전을 고정해 실제 직렬화기와 발행 계약 테스트를 통과했고, 같은 계약 의미의 안정
+`contracts-v1.0.0` 게시를 준비한다.
 
 ## 비밀정보 처리
 
