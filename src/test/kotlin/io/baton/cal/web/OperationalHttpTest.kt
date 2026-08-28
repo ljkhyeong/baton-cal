@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties
+import org.springframework.boot.transaction.autoconfigure.TransactionProperties
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -22,6 +24,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import java.nio.file.Path
+import java.time.Duration
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
@@ -37,7 +40,16 @@ import java.nio.file.Path
 class OperationalHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val tomcatServerProperties: TomcatServerProperties,
+    private val jdbcClient: JdbcClient,
+    private val transactionProperties: TransactionProperties,
 ) {
+    @Test
+    fun `데이터베이스 잠금과 실행 및 트랜잭션은 제한 시간 안에서 끝나야 한다`() {
+        assertThat(jdbcClient.sql("SHOW lock_timeout").query(String::class.java).single()).isEqualTo("5s")
+        assertThat(jdbcClient.sql("SHOW statement_timeout").query(String::class.java).single()).isEqualTo("30s")
+        assertThat(transactionProperties.defaultTimeout).isEqualTo(Duration.ofSeconds(30))
+    }
+
     @Test
     fun `one-time subscription credentials cannot be stored by clients`() {
         val created = mockMvc.perform(

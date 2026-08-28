@@ -130,6 +130,7 @@ class ContractArtifactsTest {
 
         private val EXAMPLES_BY_SCHEMA = linkedMapOf(
             "api-error.v1.schema.json" to listOf(
+                "api-error.service-busy.json",
                 "api-error.source-revision-conflict.json",
             ),
             "projection-rebuild-result.v1.schema.json" to listOf(

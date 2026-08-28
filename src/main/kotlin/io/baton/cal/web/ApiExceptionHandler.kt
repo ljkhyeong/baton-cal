@@ -1,6 +1,8 @@
 package io.baton.cal.web
 
 import org.slf4j.LoggerFactory
+import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import org.springframework.transaction.TransactionTimedOutException
 import tools.jackson.core.exc.StreamConstraintsException
 
 @RestControllerAdvice
@@ -19,6 +22,16 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     fun handleApiException(exception: ApiException): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(exception.status)
         .body(ApiErrorResponse(exception.code, exception.message))
+
+    @ExceptionHandler(
+        CannotAcquireLockException::class,
+        QueryTimeoutException::class,
+        TransactionTimedOutException::class,
+    )
+    fun handleTemporaryDatabaseContention(): ResponseEntity<ApiErrorResponse> = ResponseEntity
+        .status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+        .body(ApiErrorResponse("SERVICE_BUSY", "service is temporarily busy"))
 
     override fun handleHttpMessageNotReadable(
         exception: HttpMessageNotReadableException,
@@ -67,6 +80,7 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     }
 
     companion object {
+        const val RETRY_AFTER_SECONDS = "1"
         private val applicationLogger = LoggerFactory.getLogger(ApiExceptionHandler::class.java)
     }
 }
