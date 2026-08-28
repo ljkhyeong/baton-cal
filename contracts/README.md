@@ -25,8 +25,9 @@
   PRD-0002가 정식 기준이다.
 - 예시는 스키마와 의미를 설명하지만 새로운 규칙을 만들지 않는다.
 - `schedule-snapshot.zoned-active-r0.json`, `schedule-snapshot.zoned-active-r2.json`,
-  `schedule-snapshot.zoned-cancelled.json`은 한 항목의 `ACTIVE` 개정 번호 0, 개정 번호 간격이 있는
-  `ACTIVE` 개정 번호 2, `CANCELLED` 개정 번호 3 생명주기를 구성한다.
+  `schedule-snapshot.zoned-cancelled.json`, `schedule-snapshot.zoned-reactivated.json`은 한 항목의
+  `ACTIVE` 개정 번호 0, 개정 번호 간격이 있는 `ACTIVE` 개정 번호 2, `CANCELLED` 개정 번호 3,
+  다시 활성화된 `ACTIVE` 개정 번호 4 생명주기를 구성한다.
 - `schedule-snapshot.utc-point-active.json`, `schedule-snapshot.zoned-point-active.json`,
   `schedule-snapshot.all-day-active.json`은 임의 지속 시간을 만들지 않는 UTC·시간대 지정 시점과
   `VALUE=DATE`를 사용하는 종일 날짜 구간을 설명한다.
@@ -58,11 +59,14 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 `ContractSchemaSupport`가 Draft 2020-12 스키마 로딩과 검증 결과 보고를 한 곳에서 맡는다.
 `ContractArtifactsTest`는 이를 사용해 Docker 없이 모든 JSON 예시를 검증하고, UUID, RFC 3339
 시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 일정 생명주기 예시는 실제 CAL
-내부 HTTP 경로에서 개정·취소·정확한 재전달 순서로 검증하고, 세 시점·종일 예시도 같은 수신 경로로
+내부 HTTP 경로에서 개정·취소·재활성화·정확한 재전달 순서로 검증하고, 최종 피드의 같은 UID가
+`SEQUENCE:4`, `STATUS:CONFIRMED`로 복원되는지 확인한다. 세 시점·종일 예시도 같은 수신 경로로
 실행한다. 기존 전체 HTTP 흐름을 실행하는 `MvpHttpFlowTest`는 같은 스키마 지원 코드를 재사용해
 MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을 각 응답 스키마에
 직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
-유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다.
+유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다. 예상 밖
+`500`은 고정 오류 응답을 반환하고 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는지
+별도 MVC 회귀 테스트로 확인한다.
 
 이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 안정 버전 `1.0.0`은 사전 릴리스
 `1.0.0-rc.2`를 고정한 BATON 생산자 테스트와 실제 CAL 컨테이너 교차 서비스 테스트로 운영
@@ -98,7 +102,8 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
-로컬 기본값을 상속하지 않게 하는 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
+로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화 픽스처와
+예상 밖 `500` 비밀 비노출 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력은
 [계약 릴리스 현황](../docs/contract-release-history.md)이 관리한다.
 
