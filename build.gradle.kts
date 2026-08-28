@@ -53,6 +53,23 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("load")
+    }
+}
+
+tasks.register<Test>("projectionLoadTest") {
+    group = "verification"
+    description = "시즌 항목 수에 따른 전체 투영 재구축 시간을 측정합니다."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform {
+        includeTags("load")
+    }
+    shouldRunAfter(tasks.test)
+}
+
 val contractsVersion = providers
     .fileContents(layout.projectDirectory.file("contracts/VERSION"))
     .asText
