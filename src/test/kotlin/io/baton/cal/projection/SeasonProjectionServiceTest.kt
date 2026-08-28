@@ -8,6 +8,7 @@ import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
@@ -23,12 +24,14 @@ class SeasonProjectionServiceTest {
     private val itemRepository = mock(CalendarItemRepository::class.java)
     private val projectionRepository = mock(SeasonFeedProjectionRepository::class.java)
     private val renderer = mock(IcsCalendarRenderer::class.java)
+    private val meterRegistry = SimpleMeterRegistry()
     private val service = SeasonProjectionService(
         lockRepository = mock(SeasonProjectionLockRepository::class.java),
         itemRepository = itemRepository,
         projectionRepository = projectionRepository,
         renderer = renderer,
         clock = Clock.fixed(NOW, ZoneOffset.UTC),
+        meterRegistry = meterRegistry,
     )
 
     @Test
@@ -82,6 +85,10 @@ class SeasonProjectionServiceTest {
         service.rebuildWhileLocked(SEASON_ID)
 
         assertThat(savedProjection().lastModified).isEqualTo(existing.lastModified)
+        assertThat(meterRegistry.get("baton.cal.projection.rebuild").timer().count()).isEqualTo(1)
+        assertThat(meterRegistry.get("baton.cal.projection.items").summary().totalAmount()).isZero()
+        assertThat(meterRegistry.get("baton.cal.projection.bytes").summary().totalAmount())
+            .isEqualTo("calendar".encodeToByteArray().size.toDouble())
     }
 
     @Test
