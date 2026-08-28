@@ -92,8 +92,8 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
   가져온다. JVM `ZoneRules`를 복제해 전환 컴포넌트를 직접 만들지 않는다.
 - SHA-256은 JDK `MessageDigest`로 계산하고 소문자 16진수 변환에는 Kotlin `toHexString()`을 쓴다.
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
-  `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
-  보류 항목이다.
+  `gradle.lockfile`에서 고정한다. iCal4j 또는 내장 Olson 데이터를 올릴 때는 의존성 잠금과
+  캘린더 골든 바이트·ETag를 같은 변경에서 검토하고, 의도하지 않은 표현 변경을 자동 승인하지 않는다.
 - iCal4j 4.3.0은 만료된 RRULE의 미래 전이 적용, 비반복 전이 누락과 JVM 기본 시간대에 따라 달라지던
   `ZoneRulesBuilder` 동작을 수정했다. CAL은 내장 Olson `2025a` 레지스트리가 원문 TZID를 제공하는지
   한 번 확인하고, 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 DST 공백을 판정한다. Java 런타임 TZDB와
