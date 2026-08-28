@@ -51,6 +51,11 @@ data class SeasonFeedProjectionRow(
     val lastModified: Instant,
 )
 
+data class SeasonFeedProjectionMetadata(
+    val etag: String,
+    val lastModified: Instant,
+)
+
 enum class CalendarSubscriptionStatus {
     ACTIVE,
     REVOKED,

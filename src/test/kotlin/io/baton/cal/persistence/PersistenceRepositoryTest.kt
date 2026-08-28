@@ -159,7 +159,12 @@ class PersistenceRepositoryTest @Autowired constructor(
         val subscription = subscription()
         subscriptionRepository.insert(subscription)
         feedRepository.upsert(rebuilt)
-        assertThat(feedRepository.findLastModifiedBySeasonId(SEASON_ID)).isEqualTo(rebuilt.lastModified)
+        assertThat(feedRepository.findMetadataBySeasonId(SEASON_ID)).isEqualTo(
+            SeasonFeedProjectionMetadata(
+                etag = rebuilt.etag,
+                lastModified = rebuilt.lastModified,
+            ),
+        )
         assertThat(
             subscriptionRepository.findProjectionByActiveTokenHash(
                 subscription.tokenHash,
