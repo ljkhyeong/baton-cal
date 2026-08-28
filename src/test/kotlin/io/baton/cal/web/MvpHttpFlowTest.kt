@@ -323,7 +323,31 @@ class MvpHttpFlowTest @Autowired constructor(
         ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json").readText(), "APPLIED")
         val cancelled = Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json").readText()
         ingest(cancelled, "APPLIED")
-        ingest(cancelled, "DUPLICATE")
+        val reactivated = Path.of("contracts/examples/schedule-snapshot.zoned-reactivated.json").readText()
+        ingest(reactivated, "APPLIED")
+        ingest(reactivated, "DUPLICATE")
+
+        val credential = mockMvc.perform(
+            authorizedPost("/internal/api/v1/subscriptions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"f5316f93-d49e-4230-b1d0-9e9c2d079819"}"""),
+        )
+            .andExpect(status().isCreated)
+            .andReturn()
+            .response
+            .contentAsString
+        val token = credentialToken(credential)
+        val event = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+            .andReturn()
+            .response
+            .contentAsByteArray
+            .parseIcalendar()
+            .events()
+            .single { it.requiredPropertyValue(Property.UID) == "b8ca471a-b228-42fa-8d41-28f05ee90d40@cal.baton" }
+
+        assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("4")
+        assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CONFIRMED")
     }
 
     @Test
