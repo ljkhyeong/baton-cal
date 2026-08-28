@@ -11,7 +11,7 @@
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
-| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json` |
+| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json` |
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
@@ -68,6 +68,11 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 `500`은 고정 오류 응답을 반환하고 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는지
 별도 MVC 회귀 테스트로 확인한다.
 
+데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
+`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 호출자는 같은 요청을 즉시 반복하지 않고
+`Retry-After` 이후 재시도한다. 스냅샷 수신의 이벤트 식별자와 원본 개정 번호 계약은 이 재시도가
+중복으로 도착해도 같은 결과를 보장한다.
+
 이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 안정 버전 `1.0.0`은 사전 릴리스
 `1.0.0-rc.2`를 고정한 BATON 생산자 테스트와 실제 CAL 컨테이너 교차 서비스 테스트로 운영
 직렬화기, `sourceItemId` 비재사용, 원본 트랜잭션 커밋 이후 발행, 변경·취소·중복·역순 전달을
@@ -102,8 +107,9 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
-로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화 픽스처와
-예상 밖 `500` 비밀 비노출 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
+로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화 픽스처,
+예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀 검증도 포함한 다음
+검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력은
 [계약 릴리스 현황](../docs/contract-release-history.md)이 관리한다.
 

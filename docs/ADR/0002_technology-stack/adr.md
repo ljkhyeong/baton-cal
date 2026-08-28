@@ -169,10 +169,18 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   포함하지 않아, 나중에 접근 로그를 켜더라도 피드 토큰을 기본 형식으로 남기지 않는다.
 - JDBC 값 바인딩을 TRACE에서 노출할 수 있는 `StatementCreatorUtils` 로거는 `prod`에서 `OFF`로
   고정한다.
+- Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
+  설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
+  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 예외는 Spring 예외 계층에서
+  `503 SERVICE_BUSY`와 `Retry-After: 1`로 변환한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
   `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
   기본 동작을 유지한다.
+- Micrometer로 일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·표현 바이트와 시즌 잠금
+  획득 시간을 기록한다. 태그는 `applied`·`duplicate`·`stale`, `current`·`previous`·`unauthorized`
+  처럼 값의 종류가 제한된 결과만 사용하고 토큰·시즌·항목 식별자는 넣지 않는다. 표준 HTTP 서버
+  지표로 이미 구분할 수 있는 공개 피드 상태를 별도 카운터로 중복 구현하지 않는다.
 - 애플리케이션 설정은 실제 역방향 프록시와 추적 내보내기의 동작을 증명하지 않는다. 두 경계에서
   경로·쿼리·헤더 삭제 처리를 확인하는 실제 환경 검증은 공개 배포 조건으로 남긴다.
 
@@ -198,6 +206,13 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 내부 Bearer의 현재 값·이전 값 허용과 그 밖의 값 거부를 HTTP 테스트로 검증한다. 공개 캘린더의
   정상 경로와 대체 `404` 경로를 실제 서버 요청 관측으로 실행해 고카디널리티 `http.url`에 토큰이
   없고 템플릿만 남는지 검증한다.
+- 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
+  확인하고, Spring의 쿼리 제한 시간 예외가 고정된 `503 SERVICE_BUSY`와 `Retry-After: 1`로
+  변환되는지 검증한다. Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
+  증가량만 확인해 같은 도메인 흐름을 중복 구현하지 않는다.
+- JUnit `load` 태그의 `projectionLoadTest`는 기본 `test`에서 제외하고, 실제 PostgreSQL에서
+  500·1,000·5,000·10,000개 시즌의 전체 투영 재구축 시간과 표현 크기를 필요할 때 반복 측정한다.
+  개발 기준과 운영 SLO를 구분하며 런타임·DB·iCal4j가 바뀌면 다시 측정한다.
 - 구독 생성·회전이 현재 런타임 세대를 저장하고, 정상 재시작의 같은 세대는 기존 토큰을 유지하며,
   세대 변경 뒤 과거 토큰은 일반 `404`가 되는지 PostgreSQL 통합 테스트로 검증한다.
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
@@ -231,6 +246,10 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - iCal4j 모델/직렬화기가 RFC 표현을 맡고 CAL이 정렬과 고정된 출력기 설정을 맡아 수동
   이스케이프, DATE-TIME, 시간대 직렬화기를 유지하지 않는다.
 - Java 25와 Spring Boot 4.1의 단일 실행 환경 기준선으로 운영 조합을 줄인다.
+- PostgreSQL과 Spring이 제공하는 제한 시간 및 예외 추상화를 사용해 자체 취소·감시 코드를 두지
+  않으면서도 내부 호출자에게 재시도 가능한 일시 실패를 일관되게 알린다.
+- 저카디널리티 지표로 중복·역순 수신, 이전 내부 Bearer 잔존과 투영 비용을 식별자 노출 없이
+  확인할 수 있다.
 - Cloud Native Buildpacks가 JRE 선택, 계층화와 non-root 이미지를 맡아 수동 Dockerfile과 JRE 조립
   책임을 두지 않는다.
 - Gradle 표준 아카이브가 재현 가능한 계약 팩 생성을 맡고 JSON Schema가 언어 중립 경계를 유지해,

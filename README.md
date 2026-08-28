@@ -52,10 +52,19 @@ CAL이 소유하지 않는다.
   아니면 시작에 실패한다.
 - 로컬 실행은 `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`의 개발 기본값을 제공한다.
   `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
+- PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
+  `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
+  맞게 조정한다. 잠금·SQL·트랜잭션 제한 시간을 넘으면 `503 SERVICE_BUSY`와 `Retry-After: 1`을
+  반환하므로 내부 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
 - 공개 `/calendars/v1/**` 요청의 고카디널리티 `http.url` 관측값은 실제 토큰 대신
   `/calendars/v1/{token}.ics`로 기록한다.
+- 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·표현 크기는
+  `baton.cal.projection.rebuild`, `baton.cal.projection.items`, `baton.cal.projection.bytes`, 시즌
+  잠금 획득 시간은 `baton.cal.projection.lock.acquire`로 기록한다. 내부 인증 결과는
+  `baton.cal.internal.authentication`의 `current`, `previous`, `unauthorized` 세 값만 사용한다.
+  토큰·시즌·항목 식별자는 메트릭 태그에 넣지 않는다.
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
   하며, 선택적 값을 빈 문자열로 설정하면 시작에 실패한다.
@@ -80,7 +89,8 @@ openssl rand -hex 32
 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`으로 넣어 CAL을 먼저 배포한다. 그다음 BATON 호출자를 새 값으로
 전환하고, 이전 값을 쓰는 요청이 없음을 확인한 즉시 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 제거해
 CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
-토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다.
+토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다. 외부 메트릭 수집기를 연결한 환경에서는
+`baton.cal.internal.authentication{result="previous"}` 증가가 멈춘 것을 제거 판단의 근거로 쓴다.
 
 ### V4~V6 최초 배포
 
@@ -139,6 +149,7 @@ BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자
 - [기술 스택 결정](docs/ADR/0002_technology-stack/adr.md)
 - [기계 판독형 계약](contracts/README.md)
 - [계약 릴리스 현황](docs/contract-release-history.md)
+- [시즌 투영 성능 기준](docs/performance-baseline.md)
 - [다음 작업](HANDOFF.md)
 
 ## 기술 스택
@@ -174,7 +185,11 @@ Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로
 
 ```shell
 ./gradlew --no-daemon test bootJar
+./gradlew --no-daemon projectionLoadTest
 ```
+
+`projectionLoadTest`는 기본 `test`에서 제외한 수동 부하 측정이다. 로컬 Docker PostgreSQL에서 시즌
+전체 재구축의 현재 기준을 확인하며 운영 SLO로 사용하지 않는다.
 
 ## 계약 팩 검증과 배포
 
@@ -211,9 +226,10 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 정리한다.
 
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
-로컬 기본값을 상속하지 않게 한다. 또한 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화
-픽스처와 예상 밖 `500` 비밀 비노출 회귀 검증을 포함한 다음 검토 후보다. 아직 게시하거나 BATON
-생산자 기준으로 고정하지 않았으므로 현재 운영 기준은 계속 `1.0.0`이다.
+로컬 기본값을 상속하지 않게 한다. 또한 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화,
+예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀 검증을 포함한 다음
+검토 후보다. 아직 게시하거나 BATON 생산자 기준으로 고정하지 않았으므로 현재 운영 기준은 계속
+`1.0.0`이다.
 
 ## OCI 이미지 검증
 

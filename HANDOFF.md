@@ -11,12 +11,18 @@
   `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이며 BATON 고정을 완료했다.
 - 다음 작업 후보 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod`
   데이터베이스가 로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진,
-  취소 뒤 재활성화 픽스처와 예상 밖 `500` 비밀 비노출 회귀 검증도 포함한다. 아직 게시하지 않았고
-  BATON 생산자 기준은 계속 `1.0.0`이다. 로컬 전체 테스트·실행 JAR·계약 ZIP 검증은 통과했다.
+  취소 뒤 재활성화, 예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀
+  검증도 포함한다. 아직 게시하지 않았고 BATON 생산자 기준은 계속 `1.0.0`이다. 로컬 76개 기본
+  테스트, 실행 JAR, 계약 ZIP과 별도 투영 부하 테스트가 통과했다.
 - 공개 구독은 `ACTIVE` 상태·토큰 해시·구독 세대가 모두 일치할 때만 조회된다. V4~V6 최초 적용은
   구버전을 모두 중지한 유지보수 배포이며, 적용 뒤 이전 버전 롤백과 구·신 버전 공존을 금지한다.
 - OCI 스모크는 Java 25 비루트 이미지, Flyway V1~V6, 준비 상태, SIGTERM 종료, 동일 세대 재시작,
   PostgreSQL 논리 백업·복원과 복원 세대 펜스를 검증한다.
+- 일정 수신·내부 인증·투영 재구축·시즌 잠금은 식별자와 비밀값이 없는 Micrometer 지표를 남긴다.
+  PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초이며, 제한 시간 초과는
+  `503 SERVICE_BUSY`와 `Retry-After: 1`로 반환한다.
+- 시즌 전체 투영 수동 부하 측정은 PostgreSQL 18.4에서 500~10,000개를 각 4회 실행했다. 10,000개는
+  676~689밀리초, 2,459,060바이트였으며 [성능 기준](docs/performance-baseline.md)에 기록했다.
 - 구현 계약과 운영 절차는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md), 기술 선택은
   [ADR-0002](docs/ADR/0002_technology-stack/adr.md), 계약 게시 이력은
   [계약 릴리스 현황](docs/contract-release-history.md)을 기준으로 한다.
@@ -25,9 +31,12 @@
 
 ```shell
 ./gradlew --no-daemon test bootJar contractsZip
+./gradlew --no-daemon projectionLoadTest
 ./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
 ./scripts/smoke-oci-image.sh baton-cal:smoke
 ```
+
+`projectionLoadTest`는 기본 테스트에서 제외한 수동 성능 회귀 측정이다.
 
 안정 계약 자산은 다음 명령으로 확인한다.
 
@@ -41,8 +50,8 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 1. 운영에서 허용할 시간대·날짜 범위를 정하거나 단일 TZDB 기반 `VTIMEZONE` 생성 방식을 별도
    계약으로 결정하고, 변경되는 골든 바이트와 ETag를 검토한다.
 2. 내부 Bearer를 실제 비밀 관리 시스템에 연결하고 현재 값·이전 값 회전을 운영 환경에서 훈련한다.
-3. 운영 HTTPS 인증서와 종단 구성을 확정하고, 역방향 프록시와 추적 내보내기에서 토큰 경로·쿼리·
-   헤더가 남지 않는지 검증한다.
+3. 운영 HTTPS 인증서와 종단 구성을 확정하고 관측 백엔드·메트릭 내보내기를 연결한다. 역방향
+   프록시와 추적 내보내기에서 토큰 경로·쿼리·헤더가 남지 않는지도 검증한다.
 4. 공개 요청 제한 수치와 접근 감사 기록 보존 정책을 정한다.
 5. BATON 전체 시즌 재전달 매니페스트와 완료 신호를 정하고, 필요하면 복구 중 구독 생성·회전을
    차단하는 복구 모드를 추가한다.
