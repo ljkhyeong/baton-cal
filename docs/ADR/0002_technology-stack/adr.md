@@ -82,10 +82,10 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 
 ### iCalendar
 
-- iCal4j 4.2.5의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
+- iCal4j 4.3.0의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
   캘린더 모델을 만들고 `CalendarOutputter`로 TEXT 이스케이프, DATE-TIME, UTF-8, CRLF와 마지막
   CRLF를 직렬화한다. 생성 결과를 다시 파싱하는 실행 중 검증은 하지 않는다.
-- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.2.5의
+- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.3.0의
   줄 접기는 UTF-8 옥텟이 아니라 UTF-16 문자를 세므로 줄 접기 길이를 25로 고정해 연속 줄
   공백을 포함한 모든 물리 줄이 75 옥텟 이하가 되게 한다.
 - iCal4j `TimeZoneRegistryFactory`가 만든 레지스트리에서 사용하는 TZID의 전체 `VTIMEZONE`을
@@ -94,15 +94,14 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
   `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
   보류 항목이다.
-- Java `ZoneRules`와 iCal4j 내장 `VTIMEZONE`의 데이터 버전은 다를 수 있다. iCal4j 4.2.5의
-  `ZoneRulesBuilder`, `Observance.getLatestOnset()`과 `TimeZone.getOffset()`은 만료된 반복 규칙이나
-  전환 시각을 정상 지역에도 잘못 적용할 수 있어 런타임 교차 검증에 쓰지 않는다. CAL이 RRULE을
-  직접 해석하는 대체 구현도 두지 않는다.
-- 운영 시간대 범위를 확정할 때는 승인한 시간대·날짜 범위를 계약으로 제한하거나, 하나의 TZDB로
-  `VTIMEZONE`까지 생성하는 별도 결정을 채택한다. 후자를 선택하면 기존 골든 바이트와 ETag 변경을
-  새 계약 버전에서 검토한다.
-- 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 Java `ZoneId.getAvailableZoneIds()`의 이름 있는
-  TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다.
+- iCal4j 4.3.0은 만료된 RRULE의 미래 전이 적용, 비반복 전이 누락과 JVM 기본 시간대에 따라 달라지던
+  `ZoneRulesBuilder` 동작을 수정했다. CAL은 내장 Olson `2025a` 레지스트리가 원문 TZID를 제공하는지
+  한 번 확인하고, 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 DST 공백을 판정한다. Java 런타임 TZDB와
+  별도로 교차 검증하거나 RRULE을 직접 해석하지 않는다. 계산한 규칙은 TZID별로 캐시한다.
+- 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 iCal4j 내장 Olson `2025a`의 이름 있는 원문
+  TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다. 별칭과 숫자 오프셋은 거부한다.
+  내장 데이터보다 새로운 TZID와 규칙은 iCal4j 갱신, 의존성 잠금과 골든·ETag 검토를 거친 새 계약
+  후보에서 지원한다.
 - `UTC_INSTANT`·`ZONED_LOCAL` 구간은 `DTSTART`와 `DTEND`, `UTC_POINT`·`ZONED_LOCAL_POINT`
   단일 시점은 `DTSTART`만 투영한다. `ALL_DAY`는 `VALUE=DATE`인 배타적 시작·종료 날짜를 사용한다.
   CAL은 시점에 임의 지속 시간을, 종일 일정에 자정 시각이나 시간대를 만들지 않는다.

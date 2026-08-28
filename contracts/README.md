@@ -108,8 +108,8 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화 픽스처,
-예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀 검증도 포함한 다음
-검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
+예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
+시간대 규칙 권위 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력은
 [계약 릴리스 현황](../docs/contract-release-history.md)이 관리한다.
 
@@ -133,6 +133,7 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
   iCal4j 줄 접기 경계에 놓이는 UTC 활성 항목
 - `golden/season-point-and-all-day.ics.b64`: `DTEND`가 없는 UTC 시점과 `VALUE=DATE`인 종일 날짜 구간
 
+iCal4j 4.3.0은 내장 Olson `2025a`를 시간대 지정 입력 검증과 `VTIMEZONE` 출력의 단일 권위로 쓴다.
 iCal4j 또는 시간대 데이터를 올려 픽스처 바이트가 바뀌면 자동 갱신하지 않고 변경점과 캘린더
 호환성 영향을 먼저 검토한다.
 
