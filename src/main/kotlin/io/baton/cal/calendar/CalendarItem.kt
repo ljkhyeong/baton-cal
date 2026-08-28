@@ -7,6 +7,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.time.zone.ZoneRulesProvider
 import java.util.UUID
 
 enum class CalendarItemStatus {
@@ -80,7 +81,7 @@ private fun <T : Comparable<T>> requirePositiveSecondRange(start: T, end: T) {
 }
 
 private fun requireCalendarZone(zoneId: String): CalendarZone {
-    require(zoneId in ZoneId.getAvailableZoneIds()) { "zoneId must be an IANA timezone" }
+    require(zoneId in ZoneRulesProvider.getAvailableZoneIds()) { "zoneId must be an IANA timezone" }
     return CalendarZone(
         zoneId = ZoneId.of(zoneId),
         calendarTimeZone = requireNotNull(CalendarTimeZones.findExact(zoneId)) {

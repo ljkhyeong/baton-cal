@@ -75,17 +75,16 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         when (repository.findById(initial.subscriptionId)?.status) {
             CalendarSubscriptionStatus.ACTIVE -> {
                 val winner = outcomes.filterIsInstance<Rotated>().single()
-                assertThat(service.findFeed(initial.token)).isNull()
                 assertThat(service.findFeed(winner.credential.token)).isNotNull()
             }
 
             CalendarSubscriptionStatus.REVOKED -> {
                 assertThat(outcomes).anyMatch { it is Revoked }
-                assertThat(service.findFeed(initial.token)).isNull()
             }
 
             null -> throw AssertionError("subscription disappeared during the race")
         }
+        assertThat(service.findFeed(initial.token)).isNull()
     }
 
     @Test
