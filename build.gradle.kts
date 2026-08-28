@@ -33,7 +33,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
-    implementation("org.mnode.ical4j:ical4j:4.2.5")
+    implementation("org.mnode.ical4j:ical4j:4.3.0")
 
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")

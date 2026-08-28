@@ -158,7 +158,7 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
-    fun `zone must be supported by both Java and the calendar renderer`() {
+    fun `시간대는 iCal4j가 원문 식별자로 보존하는 IANA 지역만 허용한다`() {
         assertInvalid(zonedSnapshot(zoneId = "America/Coyhaique"))
         assertInvalid(zonedSnapshot(zoneId = "US/Eastern"))
         assertInvalid(zonedSnapshot(zoneId = "+09:00"))

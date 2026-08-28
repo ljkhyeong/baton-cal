@@ -241,6 +241,14 @@ class IcsCalendarRendererTest {
     }
 
     @Test
+    fun `만료된 과거 DST 규칙은 현재 현지 시각을 거부하지 않는다`() {
+        ScheduleWindow.ZonedLocalPoint(
+            at = LocalDateTime.parse("2026-05-03T00:30:00"),
+            zoneId = "Asia/Tokyo",
+        )
+    }
+
+    @Test
     fun `schedule range must remain positive at iCalendar second precision`() {
         assertThatThrownBy {
             ScheduleWindow.UtcInstant(
