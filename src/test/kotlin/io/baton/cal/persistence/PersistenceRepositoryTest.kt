@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
+import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -32,6 +33,7 @@ class PersistenceRepositoryTest @Autowired constructor(
     private val itemRepository: CalendarItemRepository,
     private val feedRepository: SeasonFeedProjectionRepository,
     private val subscriptionRepository: CalendarSubscriptionRepository,
+    private val jdbcClient: JdbcClient,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transaction = TransactionTemplate(transactionManager)
@@ -156,6 +158,10 @@ class PersistenceRepositoryTest @Autowired constructor(
         )
 
         feedRepository.upsert(initial)
+        val initialVersion = projectionVersion()
+        feedRepository.upsert(initial.copy(representation = initial.representation.copyOf()))
+        assertThat(projectionVersion()).isEqualTo(initialVersion)
+
         val subscription = subscription()
         subscriptionRepository.insert(subscription)
         feedRepository.upsert(rebuilt)
@@ -301,6 +307,13 @@ class PersistenceRepositoryTest @Autowired constructor(
                 itemRepository.applyIfNewer(candidate)
             },
         )
+
+    private fun projectionVersion(): Long = jdbcClient.sql(
+        "SELECT xmin::text::bigint FROM season_feed_projection WHERE season_id = :seasonId",
+    )
+        .param("seasonId", SEASON_ID)
+        .query(Long::class.java)
+        .single()
 
     private fun inboxRow() = SourceEventInboxRow(
         eventId = UUID.fromString("11111111-1111-1111-1111-111111111111"),

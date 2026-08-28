@@ -1,6 +1,7 @@
 package io.baton.cal.subscription
 
 import io.baton.cal.config.CalProperties
+import io.baton.cal.persistence.ActiveSeasonFeedProjectionMetadata
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
@@ -81,6 +82,13 @@ class SubscriptionService(
     @Transactional(readOnly = true)
     fun findFeed(token: String): SeasonFeedProjectionRow? =
         repository.findProjectionByActiveTokenHash(
+            tokenCodec.hash(token),
+            properties.subscriptionGeneration,
+        )
+
+    @Transactional(readOnly = true)
+    fun findFeedMetadata(token: String): ActiveSeasonFeedProjectionMetadata? =
+        repository.findProjectionMetadataByActiveTokenHash(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,
         )

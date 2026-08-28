@@ -2,12 +2,18 @@ package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.calendar.goldenIcalendarFixture
+import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.micrometer.observation.tck.TestObservationRegistry
 import io.micrometer.observation.tck.TestObservationRegistryAssert
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.clearInvocations
+import org.mockito.Mockito.never
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -20,6 +26,7 @@ import org.springframework.http.MediaType
 import org.springframework.http.server.observation.ServerRequestObservationContext
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -47,6 +54,8 @@ class PublicCalendarContractTest @Autowired constructor(
     private val jdbcClient: JdbcClient,
     private val observationRegistry: TestObservationRegistry,
 ) {
+    @MockitoSpyBean
+    lateinit var subscriptionRepository: CalendarSubscriptionRepository
 
     @Test
     fun `empty season feed preserves canonical bytes validators and conditional responses across rebuild`() {
@@ -65,6 +74,7 @@ class PublicCalendarContractTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
             .andExpect(content().bytes(golden))
 
+        clearInvocations(subscriptionRepository)
         assertNotModified(
             token = token,
             headerName = HttpHeaders.IF_NONE_MATCH,
@@ -78,6 +88,14 @@ class PublicCalendarContractTest @Autowired constructor(
             headerValue = EPOCH_HTTP_DATE,
             etag = expectedEtag,
             lastModified = EPOCH_HTTP_DATE,
+        )
+        verify(subscriptionRepository, times(2)).findProjectionMetadataByActiveTokenHash(
+            ArgumentMatchers.anyString(),
+            eqArg(CREDENTIAL_GENERATION),
+        )
+        verify(subscriptionRepository, never()).findProjectionByActiveTokenHash(
+            ArgumentMatchers.anyString(),
+            eqArg(CREDENTIAL_GENERATION),
         )
 
         mockMvc.perform(
@@ -224,6 +242,8 @@ class PublicCalendarContractTest @Autowired constructor(
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
 
+    private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
+
     companion object {
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "11111111-1111-1111-1111-111111111111"
@@ -231,6 +251,8 @@ class PublicCalendarContractTest @Autowired constructor(
         const val CONTENT_DISPOSITION = "inline; filename=\"baton-calendar.ics\""
         val RESTORED_CREDENTIAL_GENERATION: UUID =
             UUID.fromString("10000000-0000-0000-0000-000000000001")
+        val CREDENTIAL_GENERATION: UUID =
+            UUID.fromString("20000000-0000-0000-0000-000000000002")
     }
 }
 

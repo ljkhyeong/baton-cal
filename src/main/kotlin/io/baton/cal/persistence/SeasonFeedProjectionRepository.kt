@@ -28,6 +28,9 @@ class SeasonFeedProjectionRepository(
                 representation = EXCLUDED.representation,
                 etag = EXCLUDED.etag,
                 last_modified = EXCLUDED.last_modified
+            WHERE season_feed_projection.representation IS DISTINCT FROM EXCLUDED.representation
+               OR season_feed_projection.etag IS DISTINCT FROM EXCLUDED.etag
+               OR season_feed_projection.last_modified IS DISTINCT FROM EXCLUDED.last_modified
             """.trimIndent(),
         )
             .param("seasonId", row.seasonId)
