@@ -1,6 +1,7 @@
 package io.baton.cal.config
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -66,7 +67,9 @@ class CalPropertiesTest {
             "http://localhost:8080",
             "http://127.0.0.1:8080",
             "http://[::1]:8080",
+            "HTTP://localhost:8080",
             "https://calendar.example.test",
+            "HTTPS://calendar.example.test",
         ).forEach { validUrl ->
             assertThat(CalProperties(token, URI.create(validUrl)).publicBaseUrl)
                 .isEqualTo(URI.create(validUrl))
@@ -101,8 +104,14 @@ class CalPropertiesTest {
     }
 
     @Test
-    fun `운영 프로필은 로컬 주소도 HTTPS가 아니면 거부한다`() {
+    fun `운영 프로필은 HTTPS 스킴의 대소문자를 구분하지 않고 HTTP를 거부한다`() {
         val token = "secret-internal-token-that-is-long-enough"
+
+        assertThatCode {
+            ProductionConfiguration(
+                CalProperties(token, URI.create("HTTPS://calendar.example.test")),
+            )
+        }.doesNotThrowAnyException()
 
         assertThatIllegalArgumentException()
             .isThrownBy {

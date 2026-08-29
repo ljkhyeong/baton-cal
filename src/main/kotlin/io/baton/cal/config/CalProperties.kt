@@ -28,8 +28,8 @@ class CalProperties(
             "publicBaseUrl은 호스트가 있는 계층형 URI여야 한다"
         }
         require(
-            publicBaseUrl.scheme == "https" ||
-                publicBaseUrl.scheme == "http" && publicHost.isLoopbackHost(),
+            publicBaseUrl.scheme.equals("https", ignoreCase = true) ||
+                publicBaseUrl.scheme.equals("http", ignoreCase = true) && publicHost.isLoopbackHost(),
         ) { "publicBaseUrl은 HTTPS 또는 로컬 개발용 HTTP를 사용해야 한다" }
         require(publicBaseUrl.query == null && publicBaseUrl.fragment == null) {
             "publicBaseUrl에는 쿼리나 프래그먼트를 넣을 수 없다"

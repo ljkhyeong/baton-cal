@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile
 @Profile("prod")
 class ProductionConfiguration(properties: CalProperties) {
     init {
-        require(properties.publicBaseUrl.scheme == "https") {
+        require(properties.publicBaseUrl.scheme.equals("https", ignoreCase = true)) {
             "prod 프로필의 publicBaseUrl은 HTTPS를 사용해야 한다"
         }
     }
