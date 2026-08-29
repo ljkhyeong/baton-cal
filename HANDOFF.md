@@ -23,8 +23,11 @@
   분리한다. 공개 프록시는 관리 포트를 노출하지 않아야 한다.
   PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초이며, 제한 시간 초과는
   `503 SERVICE_BUSY`와 `Retry-After: 1`로 반환한다.
-- CI는 풀 리퀘스트에서 OCI 이미지를 검증만 하고, `main` 푸시에서는 스모크를 통과한 같은 이미지를
-  `ghcr.io/ljkhyeong/baton-cal:{전체 Git 커밋 SHA}`로 게시하도록 구성되어 있다.
+- CI는 풀 리퀘스트에서 읽기 권한으로 OCI 이미지를 검증만 하고, `main` 푸시 작업에만 패키지 쓰기
+  권한을 부여해 스모크를 통과한 같은 이미지를
+  `ghcr.io/ljkhyeong/baton-cal:{전체 Git 커밋 SHA}`로 게시한다. 외부 액션은 전체 커밋 SHA로
+  고정했고 Gradle 의존성은 잠금 파일과 SHA-256 검증 메타데이터를 함께 검사한다. Gradle,
+  GitHub Actions와 Docker Compose 갱신은 Dependabot이 매주 제안하도록 구성되어 있다.
 - 시즌 전체 투영 수동 부하 측정은 PostgreSQL 18.4에서 500~10,000개를 각 5회 실행했다. 10,000개는
   676~689밀리초, 2,459,060바이트였으며 [성능 기준](docs/performance-baseline.md)에 기록했다.
 - 시간대 지정 현지 시각은 iCal4j 4.3.0 내장 Olson `2025a`의 원문 TZID만 허용한다. DST 공백도

@@ -279,6 +279,12 @@ GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테�
 배포는 전체 SHA 태그 또는 레지스트리가 반환한 digest를 고정한다. 이 게시 자체는 계약 팩의 불변
 릴리스나 공개 배포 완료를 뜻하지 않는다.
 
+워크플로의 기본 권한은 저장소 읽기이며 패키지 쓰기는 `main` 게시 작업에만 부여한다. 외부 액션은
+전체 커밋 SHA로 고정하고, Gradle은 `gradle.lockfile`과 `gradle/verification-metadata.xml`을 함께
+사용해 버전과 의존성 파일의 SHA-256을 검증한다. Gradle, GitHub Actions와 Docker Compose의 새
+버전은 Dependabot이 매주 풀 리퀘스트로 제안하며, 특히 iCal4j 갱신은 골든 바이트와 ETag를 직접
+검토한 뒤 반영한다.
+
 ## 라이선스
 
 이 프로젝트는 [MIT 라이선스](LICENSE)로 배포한다. 저작권 고지와 라이선스 문구를 유지하면

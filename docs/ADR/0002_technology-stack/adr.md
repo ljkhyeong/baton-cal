@@ -91,9 +91,10 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 - iCal4j `TimeZoneRegistryFactory`가 만든 레지스트리에서 사용하는 TZID의 전체 `VTIMEZONE`을
   가져온다. JVM `ZoneRules`를 복제해 전환 컴포넌트를 직접 만들지 않는다.
 - SHA-256은 JDK `MessageDigest`로 계산하고 소문자 16진수 변환에는 Kotlin `toHexString()`을 쓴다.
-- iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
-  `gradle.lockfile`에서 고정한다. iCal4j 또는 내장 Olson 데이터를 올릴 때는 의존성 잠금과
-  캘린더 골든 바이트·ETag를 같은 변경에서 검토하고, 의도하지 않은 표현 변경을 자동 승인하지 않는다.
+- iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와 `gradle.lockfile`에서 고정한다.
+  `gradle/verification-metadata.xml`의 SHA-256으로 플러그인과 의존성 파일도 검증한다. iCal4j 또는
+  내장 Olson 데이터를 올릴 때는 의존성 잠금과 검증 메타데이터, 캘린더 골든 바이트·ETag를 같은
+  변경에서 검토하고 의도하지 않은 표현 변경을 자동 승인하지 않는다.
 - iCal4j 4.3.0은 만료된 RRULE의 미래 전이 적용, 비반복 전이 누락과 JVM 기본 시간대에 따라 달라지던
   `ZoneRulesBuilder` 동작을 수정했다. CAL은 내장 Olson `2025a` 레지스트리가 원문 TZID를 제공하는지
   한 번 확인하고, 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 DST 공백을 판정한다. Java 런타임 TZDB와
@@ -232,6 +233,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   구독 세대로 컨테이너를 강제 재생성한 뒤 기존 공개 피드가 계속 `200`인지도 확인한다.
 - 풀 리퀘스트의 이미지는 게시하지 않는다. `main` 푸시는 스모크를 통과한 동일 이미지만 전체 Git
   커밋 SHA 태그로 GHCR에 게시한다.
+- 워크플로의 기본 권한은 저장소 읽기이며 `packages: write`는 `main` 게시 작업에만 부여한다.
+  외부 액션은 전체 커밋 SHA로 고정하고 메이저 버전 주석을 함께 둔다. Dependabot은 Gradle,
+  GitHub Actions와 Docker Compose 갱신을 매주 제안하며, 자동 병합하지 않는다.
 - 같은 스모크는 세대 A의 데이터를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션을
   중지한 상태에서 세대 B로 먼저 바꾼 뒤 `pg_restore --clean --create --exit-on-error`로 실제
   복원한다. 복원 토큰의 본문 없는 일반 `404`, 대표 계약 픽스처의 최신 변경·취소 재전달,
