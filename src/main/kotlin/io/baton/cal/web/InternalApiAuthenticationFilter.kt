@@ -40,10 +40,8 @@ class InternalApiAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val authorization = request.getHeader(HttpHeaders.AUTHORIZATION)
-        val presented = authorization
-            ?.takeIf { it.startsWith(BEARER_PREFIX) }
-            ?.substring(BEARER_PREFIX.length)
+        val presented = request.getHeader(HttpHeaders.AUTHORIZATION)
+            ?.bearerCredential()
             ?.encodeToByteArray()
 
         val authenticationResult = presented?.let(::matchingAuthenticationResult)
@@ -53,6 +51,7 @@ class InternalApiAuthenticationFilter(
         if (authenticationResult == AuthenticationResult.UNAUTHORIZED) {
             response.status = HttpServletResponse.SC_UNAUTHORIZED
             response.contentType = MediaType.APPLICATION_JSON_VALUE
+            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, BEARER_CHALLENGE)
             objectMapper.writeValue(
                 response.outputStream,
                 ApiErrorResponse(
@@ -64,6 +63,14 @@ class InternalApiAuthenticationFilter(
         }
 
         filterChain.doFilter(request, response)
+    }
+
+    private fun String.bearerCredential(): String? {
+        val scheme = substringBefore(' ')
+        val credential = substringAfter(' ', missingDelimiterValue = "").trimStart(' ')
+        return credential.takeIf {
+            scheme.equals(BEARER_SCHEME, ignoreCase = true) && it.isNotEmpty()
+        }
     }
 
     private fun matchingAuthenticationResult(presented: ByteArray): AuthenticationResult? {
@@ -88,7 +95,8 @@ class InternalApiAuthenticationFilter(
     }
 
     private companion object {
-        const val BEARER_PREFIX = "Bearer "
+        const val BEARER_SCHEME = "Bearer"
+        const val BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
         const val AUTHENTICATION_METRIC = "baton.cal.internal.authentication"
     }
 }

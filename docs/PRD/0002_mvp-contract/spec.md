@@ -273,7 +273,8 @@ CAL은 재생 전 구독 create·rotate를 자동 차단하지 않으며, BATON 
 
 ### 내부 인증과 공통 오류
 
-모든 `/internal/api/v1/**` 경로는 `Authorization: Bearer {internalToken}`을 요구한다.
+모든 `/internal/api/v1/**` 경로는 `Authorization: Bearer {internalToken}`을 요구한다. HTTP 인증
+스킴 `Bearer`는 대소문자를 구분하지 않고 스킴과 자격 증명 사이의 하나 이상 공백을 허용한다.
 `internalToken`은 BATON→CAL 호출만을 위해 배포 비밀값으로 주입하는 32자 이상의 고엔트로피
 자격 증명이다. 정상 상태에서는 현재 값 `BATON_CAL_INTERNAL_TOKEN` 하나만 허용한다. 회전 창에서는
 이 값과 선택적 이전 값 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 합쳐 최대 두 개만 허용하며, 제시된
@@ -282,7 +283,8 @@ CAL은 재생 전 구독 create·rotate를 자동 차단하지 않으며, BATON 
 문자열로 설정하면 시작을 거부한다. 운영 값은 `openssl rand -hex 32`로 발급한다.
 
 BATON 최종 사용자 Bearer 토큰, 워크스페이스 키 또는 세션을 재사용하지 않는다. 자격 증명을
-누락하거나 허용된 값과 모두 다르면 `401`과 `UNAUTHORIZED` 오류를 반환한다.
+누락하거나 허용된 값과 모두 다르면 `401`, `WWW-Authenticate: Bearer realm="baton-cal-internal"`과
+`UNAUTHORIZED` 오류를 반환한다.
 
 오류는 달리 명시하지 않으면 `application/json`과 `api-error.v1`의 `{code, message}`를 쓴다.
 응답과 애플리케이션 로그에는 토큰이나 피드 URL을 넣지 않는다.

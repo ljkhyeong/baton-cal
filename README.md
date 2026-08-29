@@ -70,7 +70,8 @@ CAL이 소유하지 않는다.
   포트는 `MANAGEMENT_SERVER_PORT`로 바꿀 수 있다.
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
-  하며, 선택적 값을 빈 문자열로 설정하면 시작에 실패한다.
+  하며, 선택적 값을 빈 문자열로 설정하면 시작에 실패한다. HTTP `Bearer` 스킴은 대소문자를
+  구분하지 않고 인증 실패 `401`은 고정된 `WWW-Authenticate` challenge를 반환한다.
 - 공개 구독은 DB 상태가 `ACTIVE`이고 토큰 해시와 저장된 구독 세대가 모두 일치할 때만 조회된다.
   외부 런타임 값 `BATON_CAL_SUBSCRIPTION_GENERATION`은 비밀이 아닌 UUID이며 정상 재시작·일반
   배포에서는 같은 값을 유지한다.

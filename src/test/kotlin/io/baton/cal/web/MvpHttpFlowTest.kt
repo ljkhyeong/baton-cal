@@ -61,6 +61,7 @@ class MvpHttpFlowTest @Autowired constructor(
                 .content(utcSnapshot(EVENT_1, revision = 1, summary = "Opening")),
         )
             .andExpect(status().isUnauthorized)
+            .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
 
         ingest(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"), "APPLIED")
@@ -262,24 +263,33 @@ class MvpHttpFlowTest @Autowired constructor(
         val previousBefore = authenticationCount("previous")
         val unauthorizedBefore = authenticationCount("unauthorized")
 
-        listOf(INTERNAL_TOKEN, PREVIOUS_INTERNAL_TOKEN).forEach { token ->
+        listOf(
+            "bearer $INTERNAL_TOKEN",
+            "BEARER   $PREVIOUS_INTERNAL_TOKEN",
+        ).forEach { authorization ->
             mockMvc.perform(
                 post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token"),
+                    .header(HttpHeaders.AUTHORIZATION, authorization),
             )
                 .andExpect(status().isOk)
         }
 
-        mockMvc.perform(
-            post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer unregistered-internal-token-that-is-long-enough"),
-        )
-            .andExpect(status().isUnauthorized)
-            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        listOf(
+            "Basic $INTERNAL_TOKEN",
+            "Bearer unregistered-internal-token-that-is-long-enough",
+        ).forEach { authorization ->
+            mockMvc.perform(
+                post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
+                    .header(HttpHeaders.AUTHORIZATION, authorization),
+            )
+                .andExpect(status().isUnauthorized)
+                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        }
 
         assertThat(authenticationCount("current")).isEqualTo(currentBefore + 1)
         assertThat(authenticationCount("previous")).isEqualTo(previousBefore + 1)
-        assertThat(authenticationCount("unauthorized")).isEqualTo(unauthorizedBefore + 1)
+        assertThat(authenticationCount("unauthorized")).isEqualTo(unauthorizedBefore + 2)
     }
 
     @Test
@@ -495,6 +505,7 @@ class MvpHttpFlowTest @Autowired constructor(
     companion object {
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val PREVIOUS_INTERNAL_TOKEN = "test-previous-internal-token-that-is-long-enough"
+        const val INTERNAL_BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         const val ZONED_SOURCE_ITEM_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
