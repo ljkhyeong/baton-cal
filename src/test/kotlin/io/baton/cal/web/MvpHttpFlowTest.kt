@@ -160,8 +160,7 @@ class MvpHttpFlowTest @Autowired constructor(
         )
             .andExpect(status().isOk)
 
-        // 이 항목은 시즌에서 sourceUpdatedAt이 가장 크지 않더라도 표현이 바뀌면
-        // 피드의 HTTP Last-Modified가 반드시 증가해야 한다.
+        // Last-Modified는 초 단위 보조 검증 값이므로 같은 초의 변경은 강한 ETag로 판정한다.
         ingest(
             utcSnapshot(
                 eventId = EVENT_7,
@@ -173,7 +172,7 @@ class MvpHttpFlowTest @Autowired constructor(
         )
         val refreshedFeed = mockMvc.perform(
             get("/calendars/v1/{token}.ics", originalToken)
-                .header(HttpHeaders.IF_MODIFIED_SINCE, originalLastModified),
+                .header(HttpHeaders.IF_NONE_MATCH, originalEtag),
         )
             .andExpect(status().isOk)
             .andReturn()
@@ -185,7 +184,6 @@ class MvpHttpFlowTest @Autowired constructor(
         val refreshedEtag = checkNotNull(refreshedFeed.response.getHeader(HttpHeaders.ETAG))
         val refreshedLastModified = checkNotNull(refreshedFeed.response.getHeader(HttpHeaders.LAST_MODIFIED))
         assertThat(refreshedEtag).isNotEqualTo(originalEtag)
-        assertThat(refreshedLastModified).isNotEqualTo(originalLastModified)
 
         val rebuildResult = mockMvc.perform(
             authorizedPost("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID),

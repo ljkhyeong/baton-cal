@@ -10,7 +10,8 @@
   `baton-cal-contracts-1.0.0.zip`의 SHA-256은
   `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이며 BATON 고정을 완료했다.
 - 다음 작업 후보 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod`
-  데이터베이스가 로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진,
+  데이터베이스가 로컬 기본값을 상속하지 않게 한다. HTTP 표준에 맞춘 Last-Modified 상한과
+  ETag 우선 조건부 요청,
   취소 뒤 재활성화, 예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀
   검증, iCal4j 4.3.0 단일 시간대 규칙 권위도 포함한다. 로컬 기본 테스트, 실행 JAR, 계약 ZIP과
   별도 투영 부하 테스트를 통과했지만 아직 게시하지 않았고 BATON 생산자 기준은 계속 `1.0.0`이다.
@@ -47,12 +48,7 @@
 
 `projectionLoadTest`는 기본 테스트에서 제외한 수동 성능 회귀 측정이다.
 
-안정 계약 자산은 다음 명령으로 확인한다.
-
-```shell
-gh release verify contracts-v1.0.0
-gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
-```
+안정 계약 자산의 다운로드와 검증 명령은 [계약 릴리스 현황](docs/contract-release-history.md)을 따른다.
 
 ## 다음 작업
 

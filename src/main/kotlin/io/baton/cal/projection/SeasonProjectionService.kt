@@ -97,31 +97,17 @@ class SeasonProjectionService(
             )
         })
 
-    @Transactional(propagation = Propagation.MANDATORY)
-    fun nextAcceptedAtWhileLocked(
-        seasonId: UUID,
-        observedAt: Instant,
-    ): Instant {
-        val observedSecond = observedAt.truncatedTo(ChronoUnit.SECONDS)
-        return projectionRepository.findMetadataBySeasonId(seasonId)
-            ?.lastModified
-            ?.plusSeconds(1)
-            ?.coerceAtLeast(observedSecond)
-            ?: observedSecond
-    }
-
     private fun resolveLastModified(
         existing: SeasonFeedProjectionMetadata?,
         etag: String,
         renderedLastModified: Instant,
-    ): Instant = when {
-        existing == null -> renderedLastModified
-        existing.etag == etag -> existing.lastModified
-        else -> maxOf(
-            renderedLastModified,
-            existing.lastModified.plusSeconds(1),
-            clock.instant().truncatedTo(ChronoUnit.SECONDS),
-        )
+    ): Instant {
+        val currentSecond = clock.instant().truncatedTo(ChronoUnit.SECONDS)
+        return when {
+            existing == null -> renderedLastModified.coerceAtMost(currentSecond)
+            existing.etag == etag -> existing.lastModified.coerceAtMost(currentSecond)
+            else -> currentSecond
+        }
     }
 }
 

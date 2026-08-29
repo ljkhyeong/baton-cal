@@ -64,7 +64,7 @@ class SnapshotIngestionService(
             )
         }
 
-        val acceptedAt = projectionService.nextAcceptedAtWhileLocked(snapshot.seasonId, receivedAt)
+        val acceptedAt = receivedAt.truncatedTo(ChronoUnit.SECONDS)
         return when (itemRepository.applyIfNewer(snapshot.toRow(acceptedAt))) {
             CalendarItemApplyOutcome.APPLIED -> {
                 projectionService.rebuildWhileLocked(snapshot.seasonId)

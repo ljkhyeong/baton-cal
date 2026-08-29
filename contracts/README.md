@@ -109,11 +109,12 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
-로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진, 취소 후 재활성화 픽스처,
+로컬 기본값을 상속하지 않게 한다. 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
+취소 후 재활성화 픽스처,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
 시간대 규칙 권위 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력은
-[계약 릴리스 현황](../docs/contract-release-history.md)이 관리한다.
+[계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)이 관리한다.
 
 ## 비밀정보 처리
 
