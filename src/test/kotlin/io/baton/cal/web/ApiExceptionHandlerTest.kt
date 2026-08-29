@@ -6,7 +6,10 @@ import ch.qos.logback.core.read.ListAppender
 import io.baton.cal.contract.ContractSchemaSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.slf4j.LoggerFactory
+import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -14,16 +17,20 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.transaction.TransactionTimedOutException
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
 class ApiExceptionHandlerTest {
-    @Test
-    fun `일시적인 데이터베이스 경합은 재시도 가능한 503을 반환한다`() {
-        val result = MockMvcBuilders.standaloneSetup(FailureController())
-            .setControllerAdvice(ApiExceptionHandler())
-            .build()
-            .perform(get("/internal/api/v1/temporary-database-contention"))
+    private val mockMvc = MockMvcBuilders.standaloneSetup(FailureController())
+        .setControllerAdvice(ApiExceptionHandler())
+        .build()
+
+    @ParameterizedTest(name = "{0} 제한 시간 초과")
+    @ValueSource(strings = ["lock", "query", "transaction"])
+    fun `데이터베이스 제한 시간 초과는 재시도 가능한 503을 반환한다`(failureType: String) {
+        val result = mockMvc
+            .perform(get("/internal/api/v1/temporary-database-contention/{failureType}", failureType))
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
@@ -33,7 +40,7 @@ class ApiExceptionHandlerTest {
         ContractSchemaSupport.assertValid(
             "api-error.v1.schema.json",
             result.response.contentAsString,
-            "일시적인 데이터베이스 경합 응답",
+            "데이터베이스 제한 시간 초과 응답",
         )
     }
 
@@ -44,10 +51,7 @@ class ApiExceptionHandlerTest {
         logger.addAppender(appender)
 
         try {
-            val result = MockMvcBuilders.standaloneSetup(FailureController())
-                .setControllerAdvice(ApiExceptionHandler())
-                .build()
-                .perform(get("/internal/api/v1/failure"))
+            val result = mockMvc.perform(get("/internal/api/v1/failure"))
                 .andExpect(status().isInternalServerError)
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.message").value("an unexpected error occurred"))
@@ -75,8 +79,14 @@ class ApiExceptionHandlerTest {
         @GetMapping("/internal/api/v1/failure")
         fun fail(): Nothing = throw IllegalStateException(SENSITIVE_VALUE)
 
-        @GetMapping("/internal/api/v1/temporary-database-contention")
-        fun temporaryDatabaseContention(): Nothing = throw QueryTimeoutException(SENSITIVE_VALUE)
+        @GetMapping("/internal/api/v1/temporary-database-contention/lock")
+        fun lockTimeout(): Nothing = throw CannotAcquireLockException(SENSITIVE_VALUE)
+
+        @GetMapping("/internal/api/v1/temporary-database-contention/query")
+        fun queryTimeout(): Nothing = throw QueryTimeoutException(SENSITIVE_VALUE)
+
+        @GetMapping("/internal/api/v1/temporary-database-contention/transaction")
+        fun transactionTimeout(): Nothing = throw TransactionTimedOutException(SENSITIVE_VALUE)
     }
 
     private companion object {

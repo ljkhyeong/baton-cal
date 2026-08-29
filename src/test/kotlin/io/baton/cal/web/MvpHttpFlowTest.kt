@@ -242,6 +242,33 @@ class MvpHttpFlowTest @Autowired constructor(
     }
 
     @Test
+    fun `같은 원본 항목을 다른 시즌에 재사용하면 범위 충돌을 반환한다`() {
+        ingest(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"), "APPLIED")
+
+        val result = mockMvc.perform(
+            authorizedPost("/internal/api/v1/schedule-snapshots")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    utcSnapshot(
+                        eventId = EVENT_2,
+                        revision = 2,
+                        summary = "Moved opening",
+                        seasonId = OTHER_SEASON_ID,
+                    ),
+                ),
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("SOURCE_ITEM_SCOPE_CONFLICT"))
+            .andReturn()
+
+        ContractSchemaSupport.assertValid(
+            "api-error.v1.schema.json",
+            result.response.contentAsString,
+            "원본 항목 시즌 범위 충돌 응답",
+        )
+    }
+
+    @Test
     fun `행렬 매개변수 형태의 내부 경로도 인증을 요구한다`() {
         listOf(
             "/internal/api/v1;ignored/subscriptions",
@@ -449,6 +476,7 @@ class MvpHttpFlowTest @Autowired constructor(
         revision: Int,
         summary: String,
         status: String = "ACTIVE",
+        seasonId: String = SEASON_ID,
         sourceUpdatedAt: String = when (revision) {
             0 -> "2026-08-11T00:20:00Z"
             1 -> "2026-08-11T00:30:00Z"
@@ -461,7 +489,7 @@ class MvpHttpFlowTest @Autowired constructor(
           "eventId": "$eventId",
           "occurredAt": "2026-08-11T01:00:00Z",
           "sourceItemId": "$SOURCE_ITEM_ID",
-          "seasonId": "$SEASON_ID",
+          "seasonId": "$seasonId",
           "revision": $revision,
           "status": "$status",
           "summary": "$summary",
@@ -507,6 +535,7 @@ class MvpHttpFlowTest @Autowired constructor(
         const val PREVIOUS_INTERNAL_TOKEN = "test-previous-internal-token-that-is-long-enough"
         const val INTERNAL_BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        const val OTHER_SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         const val ZONED_SOURCE_ITEM_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
         const val EVENT_1 = "11111111-1111-1111-1111-111111111111"
