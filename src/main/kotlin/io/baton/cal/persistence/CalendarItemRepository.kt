@@ -1,7 +1,6 @@
 package io.baton.cal.persistence
 
 import java.sql.Types
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -135,12 +134,12 @@ class CalendarItemRepository(
             .param("timeType", row.timeType.name)
             .param(
                 "startsAtInstant",
-                row.startsAtInstant?.let { OffsetDateTime.ofInstant(it, ZoneOffset.UTC) },
+                row.startsAtInstant?.atOffset(ZoneOffset.UTC),
                 Types.TIMESTAMP_WITH_TIMEZONE,
             )
             .param(
                 "endsAtInstant",
-                row.endsAtInstant?.let { OffsetDateTime.ofInstant(it, ZoneOffset.UTC) },
+                row.endsAtInstant?.atOffset(ZoneOffset.UTC),
                 Types.TIMESTAMP_WITH_TIMEZONE,
             )
             .param("startsAtLocal", row.startsAtLocal, Types.TIMESTAMP)
@@ -148,8 +147,8 @@ class CalendarItemRepository(
             .param("zoneId", row.zoneId, Types.VARCHAR)
             .param("startsOnDate", row.startsOnDate, Types.DATE)
             .param("endsOnDate", row.endsOnDate, Types.DATE)
-            .param("sourceUpdatedAt", OffsetDateTime.ofInstant(row.sourceUpdatedAt, ZoneOffset.UTC))
-            .param("acceptedAt", OffsetDateTime.ofInstant(row.acceptedAt, ZoneOffset.UTC))
+            .param("sourceUpdatedAt", row.sourceUpdatedAt.atOffset(ZoneOffset.UTC))
+            .param("acceptedAt", row.acceptedAt.atOffset(ZoneOffset.UTC))
 
     private companion object {
         const val COLUMNS = """

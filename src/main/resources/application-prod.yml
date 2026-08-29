@@ -1,3 +1,9 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+
 baton:
   cal:
     public-base-url: ${BATON_CAL_PUBLIC_BASE_URL}

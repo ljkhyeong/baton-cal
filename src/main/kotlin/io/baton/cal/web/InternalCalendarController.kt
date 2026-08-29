@@ -2,7 +2,10 @@ package io.baton.cal.web
 
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.snapshot.SnapshotIngestionService
+import io.baton.cal.snapshot.SnapshotIngestionResult
 import io.baton.cal.subscription.SubscriptionService
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.validation.Valid
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
@@ -22,13 +25,24 @@ class InternalCalendarController(
     private val snapshotIngestionService: SnapshotIngestionService,
     private val subscriptionService: SubscriptionService,
     private val projectionService: SeasonProjectionService,
+    meterRegistry: MeterRegistry,
 ) {
+    private val ingestionCounters: Map<SnapshotIngestionResult, Counter> =
+        SnapshotIngestionResult.entries.associateWith { result ->
+            Counter.builder(INGESTION_METRIC)
+                .description("일정 스냅샷 수신 판정")
+                .tag("result", result.name.lowercase())
+                .register(meterRegistry)
+        }
+
     @PostMapping("/schedule-snapshots")
     fun ingestSnapshot(
         @Valid @RequestBody request: ScheduleSnapshotRequest,
-    ): SnapshotIngestionResponse = SnapshotIngestionResponse(
-        result = snapshotIngestionService.ingest(request.toDomain()),
-    )
+    ): SnapshotIngestionResponse {
+        val result = snapshotIngestionService.ingest(request.toDomain())
+        ingestionCounters.getValue(result).increment()
+        return SnapshotIngestionResponse(result)
+    }
 
     @PostMapping("/subscriptions")
     fun createSubscription(
@@ -58,4 +72,8 @@ class InternalCalendarController(
     fun rebuildProjection(
         @PathVariable seasonId: UUID,
     ) = projectionService.rebuild(seasonId)
+
+    private companion object {
+        const val INGESTION_METRIC = "baton.cal.snapshot.ingestion"
+    }
 }

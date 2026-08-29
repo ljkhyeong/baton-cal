@@ -1,8 +1,6 @@
 package io.baton.cal.persistence
 
 import kotlin.jvm.optionals.getOrNull
-import java.time.Instant
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -30,25 +28,28 @@ class SeasonFeedProjectionRepository(
                 representation = EXCLUDED.representation,
                 etag = EXCLUDED.etag,
                 last_modified = EXCLUDED.last_modified
+            WHERE season_feed_projection.representation IS DISTINCT FROM EXCLUDED.representation
+               OR season_feed_projection.etag IS DISTINCT FROM EXCLUDED.etag
+               OR season_feed_projection.last_modified IS DISTINCT FROM EXCLUDED.last_modified
             """.trimIndent(),
         )
             .param("seasonId", row.seasonId)
             .param("representation", row.representation)
             .param("etag", row.etag)
-            .param("lastModified", OffsetDateTime.ofInstant(row.lastModified, ZoneOffset.UTC))
+            .param("lastModified", row.lastModified.atOffset(ZoneOffset.UTC))
             .update()
     }
 
-    fun findLastModifiedBySeasonId(seasonId: UUID): Instant? =
+    fun findMetadataBySeasonId(seasonId: UUID): SeasonFeedProjectionMetadata? =
         jdbcClient.sql(
             """
-            SELECT last_modified
+            SELECT etag, last_modified
             FROM season_feed_projection
             WHERE season_id = :seasonId
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
-            .query(Instant::class.java)
+            .query(SeasonFeedProjectionMetadata::class.java)
             .optional()
             .getOrNull()
 }

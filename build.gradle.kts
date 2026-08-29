@@ -33,12 +33,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
-    implementation("org.mnode.ical4j:ical4j:4.2.5")
+    implementation("org.mnode.ical4j:ical4j:4.3.0")
 
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
-    testImplementation("org.springframework.boot:spring-boot-starter-jdbc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("com.networknt:json-schema-validator:3.0.6") {
@@ -54,6 +53,23 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("load")
+    }
+}
+
+tasks.register<Test>("projectionLoadTest") {
+    group = "verification"
+    description = "시즌 항목 수에 따른 전체 투영 재구축 시간을 측정합니다."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform {
+        includeTags("load")
+    }
+    shouldRunAfter(tasks.test)
+}
+
 val contractsVersion = providers
     .fileContents(layout.projectDirectory.file("contracts/VERSION"))
     .asText
@@ -62,7 +78,8 @@ val contractsVersion = providers
 tasks.register<Zip>("contractsZip") {
     group = "distribution"
     description = "BATON CAL 계약 팩 ZIP을 생성합니다."
-    archiveFileName.set(contractsVersion.map { "baton-cal-contracts-$it.zip" })
+    archiveBaseName.set("baton-cal-contracts")
+    archiveVersion.set(contractsVersion)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
 
     from(layout.projectDirectory.dir("contracts")) {

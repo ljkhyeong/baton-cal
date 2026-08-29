@@ -4,6 +4,8 @@ import io.baton.cal.config.CalProperties
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.web.servlet.FilterRegistration
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -17,11 +19,21 @@ import java.security.MessageDigest
 class InternalApiAuthenticationFilter(
     properties: CalProperties,
     private val objectMapper: ObjectMapper,
+    meterRegistry: MeterRegistry,
 ) : OncePerRequestFilter() {
-    private val expectedTokens = listOfNotNull(
-        properties.internalToken,
-        properties.previousInternalToken,
-    ).map(String::encodeToByteArray)
+    private val expectedTokens = buildList {
+        add(ExpectedToken(AuthenticationResult.CURRENT, properties.internalToken.encodeToByteArray()))
+        properties.previousInternalToken?.let {
+            add(ExpectedToken(AuthenticationResult.PREVIOUS, it.encodeToByteArray()))
+        }
+    }
+    private val authenticationCounters: Map<AuthenticationResult, Counter> =
+        AuthenticationResult.entries.associateWith { result ->
+            Counter.builder(AUTHENTICATION_METRIC)
+                .description("내부 API 인증 결과")
+                .tag("result", result.tagValue)
+                .register(meterRegistry)
+        }
 
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -34,7 +46,11 @@ class InternalApiAuthenticationFilter(
             ?.substring(BEARER_PREFIX.length)
             ?.encodeToByteArray()
 
-        if (presented == null || !matchesExpectedToken(presented)) {
+        val authenticationResult = presented?.let(::matchingAuthenticationResult)
+            ?: AuthenticationResult.UNAUTHORIZED
+        authenticationCounters.getValue(authenticationResult).increment()
+
+        if (authenticationResult == AuthenticationResult.UNAUTHORIZED) {
             response.status = HttpServletResponse.SC_UNAUTHORIZED
             response.contentType = MediaType.APPLICATION_JSON_VALUE
             objectMapper.writeValue(
@@ -50,12 +66,29 @@ class InternalApiAuthenticationFilter(
         filterChain.doFilter(request, response)
     }
 
-    private fun matchesExpectedToken(presented: ByteArray): Boolean =
-        expectedTokens.fold(false) { matched, expected ->
-            MessageDigest.isEqual(expected, presented) or matched
+    private fun matchingAuthenticationResult(presented: ByteArray): AuthenticationResult? {
+        var matched: AuthenticationResult? = null
+        expectedTokens.forEach { expected ->
+            if (MessageDigest.isEqual(expected.value, presented)) {
+                matched = expected.result
+            }
         }
+        return matched
+    }
+
+    private data class ExpectedToken(
+        val result: AuthenticationResult,
+        val value: ByteArray,
+    )
+
+    private enum class AuthenticationResult(val tagValue: String) {
+        CURRENT("current"),
+        PREVIOUS("previous"),
+        UNAUTHORIZED("unauthorized"),
+    }
 
     private companion object {
         const val BEARER_PREFIX = "Bearer "
+        const val AUTHENTICATION_METRIC = "baton.cal.internal.authentication"
     }
 }

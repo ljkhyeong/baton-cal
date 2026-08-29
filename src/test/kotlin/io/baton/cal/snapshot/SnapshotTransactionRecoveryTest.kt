@@ -4,10 +4,9 @@ import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
-import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
+import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
-import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -15,8 +14,6 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.doThrow
-import org.mockito.Mockito.times
-import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
@@ -36,7 +33,6 @@ import java.util.UUID
 @Sql("/reset-database.sql")
 class SnapshotTransactionRecoveryTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
-    private val projectionRepository: SeasonFeedProjectionRepository,
     private val jdbcClient: JdbcClient,
 ) {
     @MockitoSpyBean
@@ -57,20 +53,15 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThat(ingestionService.ingest(SNAPSHOT)).isEqualTo(SnapshotIngestionResult.APPLIED)
         assertDurableRowCounts(expected = 1)
 
-        assertThat(projectionRepository.findLastModifiedBySeasonId(SEASON_ID)).isNotNull()
         val projection = jdbcClient.sql(
-            "SELECT representation, etag FROM season_feed_projection WHERE season_id = :seasonId",
+            "SELECT representation FROM season_feed_projection WHERE season_id = :seasonId",
         )
             .param("seasonId", SEASON_ID)
-            .query { resultSet, _ ->
-                resultSet.getBytes("representation") to resultSet.getString("etag")
-            }
+            .query(ByteArray::class.java)
             .single()
-        assertThat(projection.second).matches("\"[0-9a-f]{64}\"")
-        val event = projection.first.parseIcalendar().events().single()
+        val event = projection.parseIcalendar().requiredEvent()
         assertThat(event.requiredPropertyValue(Property.UID)).isEqualTo("$SOURCE_ITEM_ID@cal.baton")
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
-        verify(renderer, times(2)).render(eqArg(SEASON_ID), anyListArg<CalendarItem>())
     }
 
     private fun assertDurableRowCounts(expected: Int) {

@@ -7,6 +7,7 @@ import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.micrometer.core.instrument.MeterRegistry
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
@@ -45,10 +46,15 @@ private const val PUBLIC_BASE_URL = "https://calendar.example.test"
 class MvpHttpFlowTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,
+    private val meterRegistry: MeterRegistry,
 ) {
 
     @Test
     fun `MVP는 멱등 스냅샷과 조건부 피드 재구축 및 토큰 수명주기를 지원한다`() {
+        val appliedBefore = ingestionCount("applied")
+        val duplicateBefore = ingestionCount("duplicate")
+        val staleBefore = ingestionCount("stale")
+
         mockMvc.perform(
             post("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -60,6 +66,8 @@ class MvpHttpFlowTest @Autowired constructor(
         ingest(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"), "APPLIED")
         ingest(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"), "DUPLICATE")
         ingest(utcSnapshot(EVENT_2, revision = 1, summary = "Opening"), "DUPLICATE")
+        assertThat(ingestionCount("applied")).isEqualTo(appliedBefore + 1)
+        assertThat(ingestionCount("duplicate")).isEqualTo(duplicateBefore + 2)
         mockMvc.perform(
             authorizedPost("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -68,6 +76,7 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("EVENT_ID_CONFLICT"))
         ingest(utcSnapshot(EVENT_3, revision = 0, summary = "Old delivery"), "STALE")
+        assertThat(ingestionCount("stale")).isEqualTo(staleBefore + 1)
 
         ingest(
             utcSnapshot(
@@ -249,6 +258,10 @@ class MvpHttpFlowTest @Autowired constructor(
 
     @Test
     fun `내부 베어러 회전 창에서는 현재 값과 이전 값만 허용한다`() {
+        val currentBefore = authenticationCount("current")
+        val previousBefore = authenticationCount("previous")
+        val unauthorizedBefore = authenticationCount("unauthorized")
+
         listOf(INTERNAL_TOKEN, PREVIOUS_INTERNAL_TOKEN).forEach { token ->
             mockMvc.perform(
                 post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
@@ -263,6 +276,10 @@ class MvpHttpFlowTest @Autowired constructor(
         )
             .andExpect(status().isUnauthorized)
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+
+        assertThat(authenticationCount("current")).isEqualTo(currentBefore + 1)
+        assertThat(authenticationCount("previous")).isEqualTo(previousBefore + 1)
+        assertThat(authenticationCount("unauthorized")).isEqualTo(unauthorizedBefore + 1)
     }
 
     @Test
@@ -323,7 +340,31 @@ class MvpHttpFlowTest @Autowired constructor(
         ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json").readText(), "APPLIED")
         val cancelled = Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json").readText()
         ingest(cancelled, "APPLIED")
-        ingest(cancelled, "DUPLICATE")
+        val reactivated = Path.of("contracts/examples/schedule-snapshot.zoned-reactivated.json").readText()
+        ingest(reactivated, "APPLIED")
+        ingest(reactivated, "DUPLICATE")
+
+        val credential = mockMvc.perform(
+            authorizedPost("/internal/api/v1/subscriptions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"f5316f93-d49e-4230-b1d0-9e9c2d079819"}"""),
+        )
+            .andExpect(status().isCreated)
+            .andReturn()
+            .response
+            .contentAsString
+        val token = credentialToken(credential)
+        val event = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+            .andReturn()
+            .response
+            .contentAsByteArray
+            .parseIcalendar()
+            .events()
+            .single { it.requiredPropertyValue(Property.UID) == "b8ca471a-b228-42fa-8d41-28f05ee90d40@cal.baton" }
+
+        assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("4")
+        assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CONFIRMED")
     }
 
     @Test
@@ -380,6 +421,18 @@ class MvpHttpFlowTest @Autowired constructor(
 
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+
+    private fun ingestionCount(result: String): Double = meterRegistry
+        .get("baton.cal.snapshot.ingestion")
+        .tag("result", result)
+        .counter()
+        .count()
+
+    private fun authenticationCount(result: String): Double = meterRegistry
+        .get("baton.cal.internal.authentication")
+        .tag("result", result)
+        .counter()
+        .count()
 
     private fun utcSnapshot(
         eventId: String,

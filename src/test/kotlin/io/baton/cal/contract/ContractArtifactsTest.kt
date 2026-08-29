@@ -109,9 +109,9 @@ class ContractArtifactsTest {
         assertThat(snapshots.map { it["eventId"].asString() }).doesNotHaveDuplicates()
         assertThat(snapshots.map { it["sourceItemId"].asString() }).containsOnly(ZONED_SOURCE_ITEM_ID)
         assertThat(snapshots.map { it["seasonId"].asString() }).containsOnly(SEASON_ID)
-        assertThat(snapshots.map { it["revision"].intValue() }).containsExactly(0, 2, 3)
+        assertThat(snapshots.map { it["revision"].intValue() }).containsExactly(0, 2, 3, 4)
         assertThat(snapshots.map { it["status"].asString() })
-            .containsExactly("ACTIVE", "ACTIVE", "CANCELLED")
+            .containsExactly("ACTIVE", "ACTIVE", "CANCELLED", "ACTIVE")
         assertThat(snapshots.map { Instant.parse(it["sourceUpdatedAt"].asString()) })
             .doesNotHaveDuplicates()
             .isSorted()
@@ -130,6 +130,7 @@ class ContractArtifactsTest {
 
         private val EXAMPLES_BY_SCHEMA = linkedMapOf(
             "api-error.v1.schema.json" to listOf(
+                "api-error.service-busy.json",
                 "api-error.source-revision-conflict.json",
             ),
             "projection-rebuild-result.v1.schema.json" to listOf(
@@ -148,6 +149,7 @@ class ContractArtifactsTest {
                 "schedule-snapshot.zoned-active-r2.json",
                 "schedule-snapshot.zoned-cancelled.json",
                 "schedule-snapshot.zoned-point-active.json",
+                "schedule-snapshot.zoned-reactivated.json",
             ),
             "subscription-create.v1.schema.json" to listOf(
                 "subscription-create.json",
@@ -161,6 +163,7 @@ class ContractArtifactsTest {
             "schedule-snapshot.zoned-active-r0.json",
             "schedule-snapshot.zoned-active-r2.json",
             "schedule-snapshot.zoned-cancelled.json",
+            "schedule-snapshot.zoned-reactivated.json",
         )
 
         private const val ZONED_SOURCE_ITEM_ID = "b8ca471a-b228-42fa-8d41-28f05ee90d40"

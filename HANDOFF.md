@@ -1,115 +1,75 @@
 # 인수인계
 
-BATON 생산자가 불변 `1.0.0-rc.2`를 고정해 실제 직렬화, 트랜잭셔널 아웃박스, 커밋 후 전달과
-변경·취소·중복·역순 전달을 실제 CAL 컨테이너에 검증했다. 계약 의미 변경이 없어
-`contracts/VERSION`을 안정 `1.0.0`으로 승격했으며, 다음 작업은 검토·병합 뒤 불변 안정 릴리스를
-게시하는 것이다.
+## 현재 상태
 
-## 현재 구현
+- 시즌 단위 MVP와 계약·영속성·HTTP·iCalendar·OCI 스모크 테스트가 구현되어 있다.
+- BATON 생산자 연동은 수동 회차 `ALL_DAY`, 자동 회차 `ZONED_LOCAL_POINT`, 루틴 마감
+  `UTC_POINT`와 변경·취소·중복·역순 전달까지 검증했다.
+- 현재 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+  태그 커밋은 `fd081a742b7c09a7ace53bb445ce1380c533c19e`, 자산
+  `baton-cal-contracts-1.0.0.zip`의 SHA-256은
+  `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이며 BATON 고정을 완료했다.
+- 다음 작업 후보 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod`
+  데이터베이스가 로컬 기본값을 상속하지 않게 한다. 표현 바이트 변경 시 Last-Modified 전진,
+  취소 뒤 재활성화, 예상 밖 `500` 비밀 비노출과 데이터베이스 제한 시간의 `503 SERVICE_BUSY` 회귀
+  검증, iCal4j 4.3.0 단일 시간대 규칙 권위도 포함한다. 로컬 77개 기본 테스트, 실행 JAR, 계약 ZIP과
+  별도 투영 부하 테스트를 통과했지만 아직 게시하지 않았고 BATON 생산자 기준은 계속 `1.0.0`이다.
+- 공개 구독은 `ACTIVE` 상태·토큰 해시·구독 세대가 모두 일치할 때만 조회된다. V4~V6 최초 적용은
+  구버전을 모두 중지한 유지보수 배포이며, 적용 뒤 이전 버전 롤백과 구·신 버전 공존을 금지한다.
+- OCI 스모크는 Java 25 비루트 이미지, Flyway V1~V6, 준비 상태, SIGTERM 종료, 동일 세대 재시작,
+  PostgreSQL 논리 백업·복원과 복원 세대 펜스를 검증한다.
+- 일정 수신·내부 인증·투영 재구축·시즌 잠금은 식별자와 비밀값이 없는 Micrometer 지표를 남긴다.
+  PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초이며, 제한 시간 초과는
+  `503 SERVICE_BUSY`와 `Retry-After: 1`로 반환한다.
+- 시즌 전체 투영 수동 부하 측정은 PostgreSQL 18.4에서 500~10,000개를 각 5회 실행했다. 10,000개는
+  676~689밀리초, 2,459,060바이트였으며 [성능 기준](docs/performance-baseline.md)에 기록했다.
+- 시간대 지정 현지 시각은 iCal4j 4.3.0 내장 Olson `2025a`의 원문 TZID만 허용한다. DST 공백도
+  같은 `VTIMEZONE`에서 만든 규칙으로 판정해 Java 런타임 TZDB와 규칙 권위를 섞지 않는다.
+- 구현 계약과 운영 절차는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md), 기술 선택은
+  [ADR-0002](docs/ADR/0002_technology-stack/adr.md), 계약 게시 이력은
+  [계약 릴리스 현황](docs/contract-release-history.md)을 기준으로 한다.
 
-- PRD-0002와 ADR-0002가 시즌 단위 MVP 계약과 기술 스택의 기준이다.
-- 일정 스냅샷 수신, 중복·낮은 개정 번호·충돌 분류와 원자적 투영 재구축이 구현되어 있다.
-- 해시만 저장하는 구독 생성·회전·폐기와 공개 조건부 `.ics` GET이 구현되어 있다.
-- iCal4j 모델과 직렬화 도구, PostgreSQL·Flyway와 Testcontainers 통합 테스트를 사용한다.
-- 컬렉션·널 처리·문자열 인코딩·Base64·16진수·파일 편의 기능은 Kotlin 표준 라이브러리를 우선하고,
-  시간·암호화·URI·네트워크·UUID 같은 JVM 고유 기능만 JDK API를 사용한다.
-- 엄격한 타임스탬프 형식과 마이크로초 정규화, Java와 iCal4j 시간대의 교집합을 검증한다.
-- UTC·시간대 지정 구간뿐 아니라 `DTEND`가 없는 UTC·시간대 지정 시점과 `VALUE=DATE`인 종일
-  날짜 구간을 지원한다. CAL은 임의 지속 시간이나 자정 시각을 만들지 않는다.
-- 빈 피드·DST·자정·취소 골든 픽스처, 트랜잭션 롤백·호출자 재전달과 구독 CAS 경쟁을 검증한다.
-- 자격 증명 응답은 `no-store`이며 상태·준비 상태 검사와 로컬 PostgreSQL 실행 절차가 준비되어 있다.
-- 입력 시각은 단일 Java 엄격 파서가 형식과 날짜 유효성을 함께 검증하고, 내부 경로 필터 등록과
-  테스트 DB 초기화는 각각 Spring Boot와 Spring Test 표준 기능을 사용한다.
-- 계약 팩은 Draft 2020-12 JSON Schema와 모든 JSON 예시를 자동 검증하며, 시간대 일정의
-  활성·변경·취소·정확한 재전달 생명주기를 실제 수신 경로로 실행한다. 일정 수신 결과, 구독
-  생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답도 해당 응답 스키마에 직접 대조한다.
-- 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 값은 BATON 생산자 검증을 통과한 안정
-  `1.0.0`이다. Gradle 표준 `contractsZip` 작업은 `contracts/**`와 PRD-0002를 파일 시각·
-  항목 순서·권한이 고정된 `build/distributions/baton-cal-contracts-1.0.0.zip`으로 만든다.
-  ZIP 내부 `contracts/VERSION`, 파일명과 태그 `contracts-v1.0.0`은 같은 버전을 가리킨다.
-  GitHub Actions는 이 파일을 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
-  업로드한다.
-- GitHub의 release immutability를 활성화한 뒤 [불변 사전 릴리스
-  `contracts-v1.0.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.1)을
-  게시했다. 태그는 `ce613f2ed72aa7ada61592664ca8feb8077eac75`를 가리키며, 자산 SHA-256
-  `0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546`은
-  `gh release verify`와 `gh release verify-asset` 검증을 통과했다.
-- `rc.1`에는 BATON 원본의 단일 마감 시각과 날짜 단위 회차를 손실 없이 표현하는 형태가 없어
-  변경하지 않고 보존한다. 새 BATON 연동 대상은 세 시간 형태를 추가한 `rc.2`다.
-- [불변 사전 릴리스 `contracts-v1.0.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0-rc.2)는
-  병합 커밋 `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549`를 가리킨다. 자산 SHA-256
-  `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf`은 릴리스 증명과
-  로컬 ZIP 검증을 통과했다.
-- BATON은 `rc.2` 자산과 일정 스키마 SHA-256을 고정하고 수동 회차 `ALL_DAY`, 자동 회차
-  `ZONED_LOCAL_POINT`, 루틴 마감 `UTC_POINT`의 생산자 계약을 검증했다. 실제 CAL 컨테이너와
-  운영 클라이언트를 연결한 생성·변경·취소·응답 유실 중복·역순 전달도 통과했다.
-- RFC 5545 TEXT의 LF·HTAB과 정상 Unicode는 보존하고 금지 제어 문자와 짝이 없는 서로게이트는
-  HTTP 경계와 JSON Schema에서 거부한다. Unicode 이스케이프와 4바이트 문자 줄 접기 경계는
-  정규 골든으로 고정했고 의존성과 골든의 수동 검토 절차도 문서화했다.
-- 투영 `Last-Modified`의 단조 증가 계산과 내부 토큰 설정 바인딩 실패의 비노출을 회귀 테스트로
-  검증한다.
-- 개별 DTO·JSON Schema 필드 제약과 별도로 JSON 전체 문서를 128 KiB(131,072바이트)로 제한하고,
-  초과 요청을 `413 REQUEST_TOO_LARGE` 고정 오류로 변환한다.
-- 공개 기준 URL은 외부·비루프백 HTTPS 또는 로컬 개발용 루프백 HTTP만 허용한다. `prod` 프로필은
-  명시적인 `BATON_CAL_PUBLIC_BASE_URL`이 없거나 HTTPS가 아니면 시작을 거부한다.
-- Tomcat 접근 로그는 기본 비활성이고 안전 패턴에도 경로·쿼리·헤더가 없다. `prod`에서는
-  `StatementCreatorUtils` 로그를 끈다.
-- 내부 Bearer는 현재 값과 회전 창의 선택적 이전 값만 허용하고, 제시된 값을 설정된 모든 값과
-  상수 시간으로 비교한다. 공개 `/calendars/v1/**`의 고카디널리티 `http.url`은 실제 토큰이 없는
-  `/calendars/v1/{token}.ics`로 기록한다.
-- 구독은 비밀이 아닌 외부 런타임 UUID 세대를 저장하며 공개 조회에서 `ACTIVE` 상태·토큰 해시·세대가
-  모두 일치해야 한다. 호환용 초기 세대가 있고 `prod`는 명시적인 세대를 요구하므로, 과거 DB를
-  복원하기 전에 새 세대로 바꾸면 복원된 피드 URL이 즉시 일반 `404`로 무효화된다.
-- V4 최초 적용은 모든 pre-V4 인스턴스를 중지하고 호환 초기 세대로 신버전만 시작하는 유지보수
-  배포이며, 적용 뒤 pre-V4 롤백과 구·신 버전 공존은 금지한다.
-- V5는 더 이상 읽지 않는 투영 `item_count`를 제거하므로 모든 pre-V5 인스턴스를 중지한 유지보수
-  배포로 적용한다. 적용 뒤 pre-V5 롤백·공존은 금지하고 문제는 신버전으로 전진 수정한다.
-- V6는 시점·종일 일정 열과 제약을 추가한다. 모든 pre-V6 인스턴스를 종료하기 전에는 BATON이
-  새 형태를 보내지 않으며, 새 형태를 수신한 뒤에는 pre-V6 롤백·공존을 금지한다.
-- Spring Boot `bootBuildImage`가 Java 25 OCI 이미지를 만들고, 격리된 PostgreSQL과 `prod` 프로필의
-  컨테이너 스모크가 Flyway V1~V6, 준비 상태, 비루트 실행과 SIGTERM 종료 코드 143을 검증한다.
-  같은 구독 세대로 컨테이너를 강제 재생성한 뒤에도 기존 공개 피드가 `200`인지 확인한다.
-- 같은 스모크는 `pg_dump -Fc` 아카이브 확인과 `pg_restore --clean --create --exit-on-error` 실제
-  복원, 애플리케이션 시작 전 구독 세대 교체, 복원 토큰의 본문 없는 일반 `404`, 대표 최신 변경·취소
-  재전달 뒤 기존 구독 rotate와 새 피드의 `STATUS:CANCELLED`·`SEQUENCE:3`까지 검증한다.
-- GitHub Actions는 `main` 푸시와 풀 리퀘스트에서 테스트, 계약 팩과 OCI 이미지 생성, 같은
-  스모크·대표 복원 훈련을 실행한다.
-- 사람이 읽는 저장소 문서와 주석은 한글로 작성하며 코드 식별자와 표준명은 원문을 유지한다.
+## 검증 명령
 
-## 검증
+```shell
+./gradlew --no-daemon test bootJar contractsZip
+./gradlew --no-daemon projectionLoadTest
+./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
+./scripts/smoke-oci-image.sh baton-cal:smoke
+```
 
-- `./gradlew --no-daemon test`
-- `./gradlew --no-daemon contractsZip`
-- `./gradlew --no-daemon bootJar`
-- `./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke`
-- `./scripts/smoke-oci-image.sh baton-cal:smoke`
+`projectionLoadTest`는 기본 테스트에서 제외한 수동 성능 회귀 측정이다.
+
+안정 계약 자산은 다음 명령으로 확인한다.
+
+```shell
+gh release verify contracts-v1.0.0
+gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
+```
 
 ## 다음 작업
 
-1. 안정 버전 변경을 검토해 `main`에 병합한 뒤 깨끗한 체크아웃에서
-   `baton-cal-contracts-1.0.0.zip`을 다시 만들고, 불변 `contracts-v1.0.0` 초안 릴리스에 첨부해
-   게시한다. 게시 뒤 `gh release verify`, `gh release verify-asset`을 통과한 자산과 SHA-256을
-   BATON 저장소에 다시 고정한다.
-2. 실제 비밀 관리 시스템에 내부 Bearer를 연결하고 현재 값·이전 값 회전 절차를 운영 환경에서
-   훈련하며, 실제 운영 HTTPS 인증서·종단 설정을 확정한다.
-3. 실제 역방향 프록시와 tracing exporter에서 토큰 경로·쿼리·헤더를 삭제하는지 검증하고,
-   공개 요청 제한 수치와 접근 감사 기록 보존 정책을 정한다.
-4. 실제 BATON 전체 시즌의 매니페스트·재전달 완료 신호와 필요 시 재생 전 create·rotate 자동 차단
-   계약을 정하고, 운영 RTO/RPO·백업 저장소·암호화·비밀 관리 시스템을 포함한 실제 환경 복원 훈련을
-   수행한다.
-5. 실제 배포 대상과 이미지 레지스트리를 정하고 불변 이미지 식별자, builder 갱신과 배포 절차를
-   확정한다.
+1. 내부 Bearer를 실제 비밀 관리 시스템에 연결하고 현재 값·이전 값 회전을 운영 환경에서 훈련한다.
+2. 운영 HTTPS 인증서와 종단 구성을 확정하고 관측 백엔드·메트릭 내보내기를 연결한다. 역방향
+   프록시와 추적 내보내기에서 토큰 경로·쿼리·헤더가 남지 않는지도 검증한다.
+3. 공개 요청 제한 수치와 접근 감사 기록 보존 정책을 정한다.
+4. BATON 전체 시즌 재전달 매니페스트와 완료 신호를 정하고, 필요하면 복구 중 구독 생성·회전을
+   차단하는 복구 모드를 추가한다.
+5. 운영 RTO/RPO, 백업 저장소·암호화와 실제 환경 복원 훈련을 확정한다.
+6. 배포 대상과 이미지 레지스트리를 정하고 불변 이미지 식별자, builder 갱신과 배포 절차를 만든다.
+7. 후속 iCal4j가 Olson `2025a`보다 최신 데이터를 포함하면 의존성 잠금, 골든 바이트와 ETag를
+   검토한 새 계약 후보로 갱신한다.
 
 ## 현재 제한
 
-- CI 계약 팩은 90일 보존을 요청하는 변경 검토용 임시 산출물이다. 저장소·조직 정책에 따라 실제
-  만료 시점은 달라질 수 있다. `rc.2` 생산자 검증은 완료했지만 안정 `contracts-v1.0.0` 불변
-  릴리스 게시와 BATON의 안정 자산 고정은 아직 완료하지 않았다.
-- OCI 이미지의 로컬·CI 실행 검증은 준비됐지만 레지스트리 게시와 공개 배포, 운영 비밀 수명주기,
-  호출량 제한과 외부 관측 경로의 비노출 검증은 준비되지 않았다.
-- 저장소 복원 훈련은 대표 계약 픽스처와 절차 순서만 검증한다. 실제 BATON 전체 재전달 완료를
-  증명하지 않으며 CAL은 재생 전에 구독 create·rotate를 자동 차단하지 않는다. 실제 운영 RTO/RPO,
-  백업 저장소·암호화·비밀 관리 시스템과 배포 환경 복원 훈련은 아직 필요하다.
+- 안정 계약 게시와 BATON 생산자 고정은 완료했지만 실제 운영 활성화와 공개 배포는 하지 않았다.
+- CI 계약 팩은 보존 기간 90일을 요청하는 변경 검토용 임시 산출물이며 안정 의존성이 아니다.
+- OCI 이미지는 로컬·CI에서 검증했지만 레지스트리 게시, 운영 비밀 수명주기와 실제 프록시 관측
+  경로 검증은 남아 있다.
+- 저장소 복원 훈련은 대표 픽스처만 사용한다. BATON 전체 재전달 완료를 증명하지 않으며 CAL은
+  재전달 전에 구독 생성·회전을 자동 차단하지 않는다.
+- iCal4j 4.3.0 내장 시간대 데이터는 Olson `2025a`다. CAL은 이를 입력 검증과 출력의 단일 권위로
+  사용하므로 더 최신 IANA 시간대 식별자와 규칙은 다음 의존성 갱신 전까지 지원하지 않는다.
 - 현재 구현은 MVP이며 운영 준비 완료를 뜻하지 않는다.
 
 ## 저장소

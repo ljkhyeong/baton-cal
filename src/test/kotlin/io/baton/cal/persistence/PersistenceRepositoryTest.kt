@@ -3,6 +3,7 @@ package io.baton.cal.persistence
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.micrometer.core.instrument.MeterRegistry
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
+import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -32,6 +34,8 @@ class PersistenceRepositoryTest @Autowired constructor(
     private val itemRepository: CalendarItemRepository,
     private val feedRepository: SeasonFeedProjectionRepository,
     private val subscriptionRepository: CalendarSubscriptionRepository,
+    private val jdbcClient: JdbcClient,
+    private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transaction = TransactionTemplate(transactionManager)
@@ -156,10 +160,19 @@ class PersistenceRepositoryTest @Autowired constructor(
         )
 
         feedRepository.upsert(initial)
+        val initialVersion = projectionVersion()
+        feedRepository.upsert(initial.copy(representation = initial.representation.copyOf()))
+        assertThat(projectionVersion()).isEqualTo(initialVersion)
+
         val subscription = subscription()
         subscriptionRepository.insert(subscription)
         feedRepository.upsert(rebuilt)
-        assertThat(feedRepository.findLastModifiedBySeasonId(SEASON_ID)).isEqualTo(rebuilt.lastModified)
+        assertThat(feedRepository.findMetadataBySeasonId(SEASON_ID)).isEqualTo(
+            SeasonFeedProjectionMetadata(
+                etag = rebuilt.etag,
+                lastModified = rebuilt.lastModified,
+            ),
+        )
         assertThat(
             subscriptionRepository.findProjectionByActiveTokenHash(
                 subscription.tokenHash,
@@ -253,6 +266,10 @@ class PersistenceRepositoryTest @Autowired constructor(
 
     @Test
     fun `season projection lock serializes concurrent projection transactions`() {
+        val acquisitionCountBefore = meterRegistry
+            .get("baton.cal.projection.lock.acquire")
+            .timer()
+            .count()
         val firstHasLock = CountDownLatch(1)
         val allowFirstToCommit = CountDownLatch(1)
         val secondStarted = CountDownLatch(1)
@@ -283,6 +300,9 @@ class PersistenceRepositoryTest @Autowired constructor(
             first.get(5, TimeUnit.SECONDS)
             assertThat(secondHasLock.await(5, TimeUnit.SECONDS)).isTrue()
             second.get(5, TimeUnit.SECONDS)
+            assertThat(
+                meterRegistry.get("baton.cal.projection.lock.acquire").timer().count(),
+            ).isEqualTo(acquisitionCountBefore + 2)
         } finally {
             allowFirstToCommit.countDown()
             executor.shutdownNow()
@@ -296,6 +316,13 @@ class PersistenceRepositoryTest @Autowired constructor(
                 itemRepository.applyIfNewer(candidate)
             },
         )
+
+    private fun projectionVersion(): Long = jdbcClient.sql(
+        "SELECT xmin::text::bigint FROM season_feed_projection WHERE season_id = :seasonId",
+    )
+        .param("seasonId", SEASON_ID)
+        .query(Long::class.java)
+        .single()
 
     private fun inboxRow() = SourceEventInboxRow(
         eventId = UUID.fromString("11111111-1111-1111-1111-111111111111"),

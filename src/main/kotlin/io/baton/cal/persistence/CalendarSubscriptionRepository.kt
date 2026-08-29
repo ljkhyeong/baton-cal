@@ -73,6 +73,30 @@ class CalendarSubscriptionRepository(
             .optional()
             .getOrNull()
 
+    fun findProjectionMetadataByActiveTokenHash(
+        tokenHash: String,
+        expectedCredentialGeneration: UUID,
+    ): ActiveSeasonFeedProjectionMetadata? =
+        jdbcClient.sql(
+            """
+            SELECT
+                projection.season_id,
+                projection.etag,
+                projection.last_modified
+            FROM calendar_subscription subscription
+            JOIN season_feed_projection projection
+              ON projection.season_id = subscription.season_id
+            WHERE subscription.token_hash = :tokenHash
+              AND subscription.status = 'ACTIVE'
+              AND subscription.credential_generation = :expectedCredentialGeneration
+            """.trimIndent(),
+        )
+            .param("tokenHash", tokenHash)
+            .param("expectedCredentialGeneration", expectedCredentialGeneration)
+            .query(ActiveSeasonFeedProjectionMetadata::class.java)
+            .optional()
+            .getOrNull()
+
     /** 호출자가 읽은 자격 증명이 아직 활성 상태일 때만 회전한다. */
     fun rotate(
         id: UUID,
@@ -105,7 +129,6 @@ class CalendarSubscriptionRepository(
             UPDATE calendar_subscription
             SET status = 'REVOKED'
             WHERE id = :id
-              AND status IN ('ACTIVE', 'REVOKED')
               AND token_hash = :expectedTokenHash
             """.trimIndent(),
         )

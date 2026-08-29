@@ -6,12 +6,17 @@ import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
+import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.micrometer.core.instrument.DistributionSummary
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -28,7 +33,23 @@ class SeasonProjectionService(
     private val itemRepository: CalendarItemRepository,
     private val projectionRepository: SeasonFeedProjectionRepository,
     private val renderer: IcsCalendarRenderer,
+    private val clock: Clock,
+    private val meterRegistry: MeterRegistry,
 ) {
+    private val rebuildTimer: Timer = Timer.builder("baton.cal.projection.rebuild")
+        .description("시즌 피드 전체 재구축 시간")
+        .register(meterRegistry)
+    private val itemCountSummary: DistributionSummary = DistributionSummary
+        .builder("baton.cal.projection.items")
+        .description("재구축한 시즌의 일정 항목 수")
+        .baseUnit("items")
+        .register(meterRegistry)
+    private val byteSizeSummary: DistributionSummary = DistributionSummary
+        .builder("baton.cal.projection.bytes")
+        .description("재구축한 iCalendar 표현 크기")
+        .baseUnit("bytes")
+        .register(meterRegistry)
+
     @Transactional
     fun rebuild(seasonId: UUID): ProjectionResult {
         lockRepository.acquire(seasonId)
@@ -38,26 +59,41 @@ class SeasonProjectionService(
     @Transactional
     fun ensureProjection(seasonId: UUID) {
         lockRepository.acquire(seasonId)
-        if (projectionRepository.findLastModifiedBySeasonId(seasonId) == null) rebuildWhileLocked(seasonId)
+        if (projectionRepository.findMetadataBySeasonId(seasonId) == null) {
+            rebuildWhileLocked(seasonId, existing = null)
+        }
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    fun rebuildWhileLocked(seasonId: UUID): ProjectionResult {
-        val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
-        val rendered = renderer.render(seasonId = seasonId, items = items)
-        projectionRepository.upsert(
-            SeasonFeedProjectionRow(
+    fun rebuildWhileLocked(seasonId: UUID): ProjectionResult =
+        rebuildWhileLocked(seasonId, projectionRepository.findMetadataBySeasonId(seasonId))
+
+    private fun rebuildWhileLocked(
+        seasonId: UUID,
+        existing: SeasonFeedProjectionMetadata?,
+    ): ProjectionResult {
+        val sample = Timer.start(meterRegistry)
+        try {
+            val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
+            val rendered = renderer.render(seasonId = seasonId, items = items)
+            projectionRepository.upsert(
+                SeasonFeedProjectionRow(
+                    seasonId = seasonId,
+                    representation = rendered.bytes,
+                    etag = rendered.etag,
+                    lastModified = resolveLastModified(existing, rendered.etag, rendered.lastModified),
+                ),
+            )
+            itemCountSummary.record(items.size.toDouble())
+            byteSizeSummary.record(rendered.bytes.size.toDouble())
+            return ProjectionResult(
                 seasonId = seasonId,
-                representation = rendered.bytes,
                 etag = rendered.etag,
-                lastModified = rendered.lastModified,
-            ),
-        )
-        return ProjectionResult(
-            seasonId = seasonId,
-            etag = rendered.etag,
-            itemCount = items.size,
-        )
+                itemCount = items.size,
+            )
+        } finally {
+            sample.stop(rebuildTimer)
+        }
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -65,13 +101,26 @@ class SeasonProjectionService(
         seasonId: UUID,
         observedAt: Instant,
     ): Instant {
-        val lastModified = projectionRepository.findLastModifiedBySeasonId(seasonId)
         val observedSecond = observedAt.truncatedTo(ChronoUnit.SECONDS)
-        return if (lastModified == null || observedSecond.isAfter(lastModified)) {
-            observedSecond
-        } else {
-            lastModified.plusSeconds(1)
-        }
+        return projectionRepository.findMetadataBySeasonId(seasonId)
+            ?.lastModified
+            ?.plusSeconds(1)
+            ?.coerceAtLeast(observedSecond)
+            ?: observedSecond
+    }
+
+    private fun resolveLastModified(
+        existing: SeasonFeedProjectionMetadata?,
+        etag: String,
+        renderedLastModified: Instant,
+    ): Instant = when {
+        existing == null -> renderedLastModified
+        existing.etag == etag -> existing.lastModified
+        else -> maxOf(
+            renderedLastModified,
+            existing.lastModified.plusSeconds(1),
+            clock.instant().truncatedTo(ChronoUnit.SECONDS),
+        )
     }
 }
 

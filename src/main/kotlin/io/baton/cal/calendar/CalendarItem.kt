@@ -2,12 +2,14 @@ package io.baton.cal.calendar
 
 import net.fortuna.ical4j.model.TimeZone
 import net.fortuna.ical4j.model.TimeZoneRegistryFactory
+import net.fortuna.ical4j.model.ZoneRulesBuilder
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.time.zone.ZoneRules
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 enum class CalendarItemStatus {
     ACTIVE,
@@ -47,8 +49,8 @@ sealed interface ScheduleWindow {
             requirePositiveSecondRange(start.truncatedTo(ChronoUnit.SECONDS), end.truncatedTo(ChronoUnit.SECONDS))
             val zone = requireCalendarZone(zoneId)
             calendarTimeZone = zone.calendarTimeZone
-            requireValidLocalTime(zone.zoneId, start, "start")
-            requireValidLocalTime(zone.zoneId, end, "end")
+            requireValidLocalTime(zone.zoneRules, start, "start")
+            requireValidLocalTime(zone.zoneRules, end, "end")
         }
     }
 
@@ -61,7 +63,7 @@ sealed interface ScheduleWindow {
         init {
             val zone = requireCalendarZone(zoneId)
             calendarTimeZone = zone.calendarTimeZone
-            requireValidLocalTime(zone.zoneId, at, "at")
+            requireValidLocalTime(zone.zoneRules, at, "at")
         }
     }
 
@@ -79,33 +81,35 @@ private fun <T : Comparable<T>> requirePositiveSecondRange(start: T, end: T) {
     require(end > start) { "end must be after start at iCalendar second precision" }
 }
 
-private fun requireCalendarZone(zoneId: String): CalendarZone {
-    require(zoneId in ZoneId.getAvailableZoneIds()) { "zoneId must be an IANA timezone" }
-    return CalendarZone(
-        zoneId = ZoneId.of(zoneId),
-        calendarTimeZone = requireNotNull(CalendarTimeZones.findExact(zoneId)) {
-            "zoneId must be preserved exactly by the calendar renderer"
-        },
-    )
-}
+private fun requireCalendarZone(zoneId: String): CalendarZone =
+    requireNotNull(CalendarTimeZones.findExact(zoneId)) {
+        "zoneId must be preserved exactly by the calendar renderer"
+    }
 
-private fun requireValidLocalTime(zoneId: ZoneId, localDateTime: LocalDateTime, fieldName: String) {
-    require(zoneId.rules.getValidOffsets(localDateTime).isNotEmpty()) {
+private fun requireValidLocalTime(zoneRules: ZoneRules, localDateTime: LocalDateTime, fieldName: String) {
+    require(zoneRules.getValidOffsets(localDateTime).isNotEmpty()) {
         "$fieldName must not be in a DST gap"
     }
 }
 
 private data class CalendarZone(
-    val zoneId: ZoneId,
     val calendarTimeZone: TimeZone,
+    val zoneRules: ZoneRules,
 )
 
 private object CalendarTimeZones {
     private val registry = TimeZoneRegistryFactory.getInstance().createRegistry()
+    private val zones = ConcurrentHashMap<String, CalendarZone>()
 
-    fun findExact(zoneId: String): TimeZone? = registry
-        .getTimeZone(zoneId)
-        ?.takeIf { it.id == zoneId }
+    fun findExact(zoneId: String): CalendarZone? {
+        zones[zoneId]?.let { return it }
+        val timeZone = registry.getTimeZone(zoneId)?.takeIf { it.id == zoneId } ?: return null
+        val zone = CalendarZone(
+            calendarTimeZone = timeZone,
+            zoneRules = ZoneRulesBuilder().vTimeZone(timeZone.vTimeZone).build(),
+        )
+        return zones.getOrPut(zoneId) { zone }
+    }
 }
 
 data class CalendarItem(

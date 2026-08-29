@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties
+import org.springframework.boot.transaction.autoconfigure.TransactionProperties
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -22,6 +24,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import java.nio.file.Path
+import java.time.Duration
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
@@ -37,7 +40,16 @@ import java.nio.file.Path
 class OperationalHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val tomcatServerProperties: TomcatServerProperties,
+    private val jdbcClient: JdbcClient,
+    private val transactionProperties: TransactionProperties,
 ) {
+    @Test
+    fun `데이터베이스 잠금과 실행 및 트랜잭션은 제한 시간 안에서 끝나야 한다`() {
+        assertThat(jdbcClient.sql("SHOW lock_timeout").query(String::class.java).single()).isEqualTo("5s")
+        assertThat(jdbcClient.sql("SHOW statement_timeout").query(String::class.java).single()).isEqualTo("30s")
+        assertThat(transactionProperties.defaultTimeout).isEqualTo(Duration.ofSeconds(30))
+    }
+
     @Test
     fun `one-time subscription credentials cannot be stored by clients`() {
         val created = mockMvc.perform(
@@ -99,21 +111,53 @@ class OperationalHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `문서 상한 안의 잘못된 숫자는 크기 초과가 아닌 잘못된 요청으로 분류한다`() {
+    fun `JSON 구조 자원 제한을 넘으면 413을 반환한다`() {
         val validSnapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readText()
-        val invalidSnapshot = validSnapshot.replace(
-            "\"revision\": 0",
-            "\"revision\": ${"9".repeat(1_001)}",
+        val deepValue = "[".repeat(MAX_JSON_NESTING_DEPTH + 1) + "0" + "]".repeat(MAX_JSON_NESTING_DEPTH + 1)
+        val deeplyNestedSnapshot = validSnapshot
+            .replace("\"time\": {", "\"time\": {\n    \"padding\": $deepValue,")
+        val repeatedSummaries = List(MAX_JSON_TOKEN_COUNT / 2 + 1) { index ->
+            "\"summary\": \"ROUND $index\","
+        }.joinToString("\n")
+        val tooManyTokensSnapshot = validSnapshot.replace(
+            "\"summary\": \"ROUND 1 운영\",",
+            repeatedSummaries,
+        )
+        val payloads = listOf(
+            """{"${"a".repeat(MAX_JSON_NAME_LENGTH + 1)}":true}""",
+            deeplyNestedSnapshot,
+            """{"revision":${"9".repeat(MAX_JSON_NUMBER_LENGTH + 1)}}""",
+            tooManyTokensSnapshot,
         )
 
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(invalidSnapshot),
-        )
-            .andExpect(status().isBadRequest)
-            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        payloads.forEach { payload ->
+            mockMvc.perform(
+                authorizedPost("/internal/api/v1/schedule-snapshots")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(payload),
+            )
+                .andExpect(status().isContentTooLarge)
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
+                .andExpect(jsonPath("$.message").value("request body exceeds the maximum size"))
+        }
+    }
+
+    @Test
+    fun `작은 잘못된 JSON과 알 수 없는 필드는 400을 반환한다`() {
+        listOf(
+            """{"seasonId":"""",
+            """{"seasonId":"$SEASON_ID","unexpected":true}""",
+        ).forEach { payload ->
+            mockMvc.perform(
+                authorizedPost("/internal/api/v1/subscriptions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(payload),
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        }
     }
 
     @Test
@@ -137,5 +181,9 @@ class OperationalHttpTest @Autowired constructor(
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val MAX_JSON_DOCUMENT_LENGTH = 131_072
+        const val MAX_JSON_NAME_LENGTH = 64
+        const val MAX_JSON_NESTING_DEPTH = 16
+        const val MAX_JSON_NUMBER_LENGTH = 10
+        const val MAX_JSON_TOKEN_COUNT = 256
     }
 }

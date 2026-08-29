@@ -49,6 +49,22 @@ class SchemaMigrationTest {
             .param("seasonId", seasonId)
             .param("tokenHash", TOKEN_HASH)
             .update()
+        jdbcClient.sql(
+            """
+            INSERT INTO calendar_item
+                (source_item_id, season_id, revision, payload_hash, status, summary, description, location,
+                 time_type, starts_at_instant, ends_at_instant, starts_at_local, ends_at_local,
+                 zone_id, source_updated_at, accepted_at)
+            VALUES
+                (:sourceItemId, :seasonId, 4, :payloadHash, 'ACTIVE', '기존 구간 일정', NULL, NULL,
+                 'UTC_INSTANT', '2026-09-01T01:00:00Z', '2026-09-01T02:00:00Z', NULL, NULL,
+                 NULL, '2026-08-13T00:00:00Z', '2026-08-13T00:00:01Z')
+            """.trimIndent(),
+        )
+            .param("sourceItemId", UUID.fromString(SOURCE_ITEM_ID))
+            .param("seasonId", seasonId)
+            .param("payloadHash", TOKEN_HASH)
+            .update()
 
         Flyway.configure()
             .dataSource(dataSource)
@@ -82,6 +98,24 @@ class SchemaMigrationTest {
             .query(Int::class.java)
             .single()
         assertThat(redundantColumnCount).isZero()
+
+        val itemAfterV3 = jdbcClient.sql(
+            """
+            SELECT revision, status, summary
+            FROM calendar_item
+            WHERE source_item_id = :sourceItemId
+            """.trimIndent(),
+        )
+            .param("sourceItemId", UUID.fromString(SOURCE_ITEM_ID))
+            .query { resultSet, _ ->
+                Triple(
+                    resultSet.getInt("revision"),
+                    resultSet.getString("status"),
+                    resultSet.getString("summary"),
+                )
+            }
+            .single()
+        assertThat(itemAfterV3).isEqualTo(Triple(4, "ACTIVE", "기존 구간 일정"))
 
         Flyway.configure()
             .dataSource(dataSource)
@@ -123,22 +157,6 @@ class SchemaMigrationTest {
             .query(Int::class.java)
             .single()
         assertThat(itemCountColumnCount).isZero()
-
-        jdbcClient.sql(
-            """
-            INSERT INTO calendar_item
-                (source_item_id, season_id, revision, status, summary, description, location,
-                 time_type, starts_at_instant, ends_at_instant, starts_at_local, ends_at_local,
-                 zone_id, source_updated_at, accepted_at)
-            VALUES
-                (:sourceItemId, :seasonId, 4, 'ACTIVE', '기존 구간 일정', NULL, NULL,
-                 'UTC_INSTANT', '2026-09-01T01:00:00Z', '2026-09-01T02:00:00Z', NULL, NULL,
-                 NULL, '2026-08-13T00:00:00Z', '2026-08-13T00:00:01Z')
-            """.trimIndent(),
-        )
-            .param("sourceItemId", UUID.fromString(SOURCE_ITEM_ID))
-            .param("seasonId", seasonId)
-            .update()
 
         Flyway.configure()
             .dataSource(dataSource)

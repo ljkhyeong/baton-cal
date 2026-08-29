@@ -29,9 +29,10 @@ BATON CAL MVP는 다음 특성을 가진다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
 - Spring Boot 4.1.0과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
-- Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트)로 제한한다. 이는 DTO와
-  JSON Schema의 개별 필드 제약과 다른 파서 자원 경계이며, Spring MVC 오류 어댑터가 초과를
-  고정된 `413 REQUEST_TOO_LARGE` API 오류로 변환한다.
+- Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
+  16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
+  다른 단일 파서 자원 경계이며, Spring MVC 오류 어댑터가 어느 상한의 초과든 고정된
+  `413 REQUEST_TOO_LARGE` API 오류로 변환한다. 별도 요청 본문 필터나 자체 JSON 파서는 두지 않는다.
 - 내부 API 인증은 배포 비밀값으로 주입한 CAL 전용 Bearer 토큰을 Spring MVC 필터에서 비교한다.
   필수 현재 값과 회전 창에서만 쓰는 선택적 이전 값으로 최대 두 개를 구성하고, 제시된 값은
   일치 여부와 관계없이 설정된 모든 값과 `MessageDigest.isEqual`로 비교한다. BATON이 새 값으로
@@ -72,26 +73,35 @@ BATON CAL MVP는 다음 특성을 가진다.
   BATON이 새 시간 형태를 보내며 이후에는 pre-V6와 공존하거나 롤백하지 않는다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
+- 투영의 ETag가 같으면 기존 Last-Modified를 보존한다. ETag가 달라지면 새 표현 시각,
+  이전 Last-Modified + 1초와 현재 UTC 시각 중 가장 큰 값으로 전진시켜 직렬화기나 시간대 데이터
+  변경으로 바이트만 달라진 경우도 조건부 GET이 새 표현을 받게 한다.
 
 Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조회는 MVP에 포함하지 않는다.
 조건부 GET은 정규 바이트와 PostgreSQL 투영 상태만으로 처리한다.
 
 ### iCalendar
 
-- iCal4j 4.2.5의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
+- iCal4j 4.3.0의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
   캘린더 모델을 만들고 `CalendarOutputter`로 TEXT 이스케이프, DATE-TIME, UTF-8, CRLF와 마지막
   CRLF를 직렬화한다. 생성 결과를 다시 파싱하는 실행 중 검증은 하지 않는다.
-- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.2.5의
+- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.3.0의
   줄 접기는 UTF-8 옥텟이 아니라 UTF-16 문자를 세므로 줄 접기 길이를 25로 고정해 연속 줄
   공백을 포함한 모든 물리 줄이 75 옥텟 이하가 되게 한다.
 - iCal4j `TimeZoneRegistryFactory`가 만든 레지스트리에서 사용하는 TZID의 전체 `VTIMEZONE`을
   가져온다. JVM `ZoneRules`를 복제해 전환 컴포넌트를 직접 만들지 않는다.
 - SHA-256은 JDK `MessageDigest`로 계산하고 소문자 16진수 변환에는 Kotlin `toHexString()`을 쓴다.
 - iCal4j 직접 의존 버전, Java 25 툴체인과 전이 의존성은 빌드와
-  `gradle.lockfile`에서 고정한다. TZDB 갱신과 골든 픽스처 절차는 운영 출시 전
-  보류 항목이다.
-- 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 Java `ZoneId.getAvailableZoneIds()`의 이름 있는
-  TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다.
+  `gradle.lockfile`에서 고정한다. iCal4j 또는 내장 Olson 데이터를 올릴 때는 의존성 잠금과
+  캘린더 골든 바이트·ETag를 같은 변경에서 검토하고, 의도하지 않은 표현 변경을 자동 승인하지 않는다.
+- iCal4j 4.3.0은 만료된 RRULE의 미래 전이 적용, 비반복 전이 누락과 JVM 기본 시간대에 따라 달라지던
+  `ZoneRulesBuilder` 동작을 수정했다. CAL은 내장 Olson `2025a` 레지스트리가 원문 TZID를 제공하는지
+  한 번 확인하고, 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 DST 공백을 판정한다. Java 런타임 TZDB와
+  별도로 교차 검증하거나 RRULE을 직접 해석하지 않는다. 계산한 규칙은 TZID별로 캐시한다.
+- 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 iCal4j 내장 Olson `2025a`의 이름 있는 원문
+  TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다. 별칭과 숫자 오프셋은 거부한다.
+  내장 데이터보다 새로운 TZID와 규칙은 iCal4j 갱신, 의존성 잠금과 골든·ETag 검토를 거친 새 계약
+  후보에서 지원한다.
 - `UTC_INSTANT`·`ZONED_LOCAL` 구간은 `DTSTART`와 `DTEND`, `UTC_POINT`·`ZONED_LOCAL_POINT`
   단일 시점은 `DTSTART`만 투영한다. `ALL_DAY`는 `VALUE=DATE`인 배타적 시작·종료 날짜를 사용한다.
   CAL은 시점에 임의 지속 시간을, 종일 일정에 자정 시각이나 시간대를 만들지 않는다.
@@ -142,6 +152,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 
 ### 운영 프로필과 로그 경계
 
+- 로컬 실행에는 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
+  `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 모두 외부에서 명시하도록 요구해
+  개발 연결값으로 운영 애플리케이션이 시작되는 경로를 닫는다.
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
@@ -155,10 +168,18 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   포함하지 않아, 나중에 접근 로그를 켜더라도 피드 토큰을 기본 형식으로 남기지 않는다.
 - JDBC 값 바인딩을 TRACE에서 노출할 수 있는 `StatementCreatorUtils` 로거는 `prod`에서 `OFF`로
   고정한다.
+- Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
+  설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
+  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 예외는 Spring 예외 계층에서
+  `503 SERVICE_BUSY`와 `Retry-After: 1`로 변환한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
   `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
   기본 동작을 유지한다.
+- Micrometer로 일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·표현 바이트와 시즌 잠금
+  획득 시간을 기록한다. 태그는 `applied`·`duplicate`·`stale`, `current`·`previous`·`unauthorized`
+  처럼 값의 종류가 제한된 결과만 사용하고 토큰·시즌·항목 식별자는 넣지 않는다. 표준 HTTP 서버
+  지표로 이미 구분할 수 있는 공개 피드 상태를 별도 카운터로 중복 구현하지 않는다.
 - 애플리케이션 설정은 실제 역방향 프록시와 추적 내보내기의 동작을 증명하지 않는다. 두 경계에서
   경로·쿼리·헤더 삭제 처리를 확인하는 실제 환경 검증은 공개 배포 조건으로 남긴다.
 
@@ -172,15 +193,25 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 시계 의존 테스트는 고정된 `Clock`과 명시적인 IANA 시간대를 사용하며 시스템 기본 시간대에
   의존하지 않는다.
 - UTC, 빈 피드, 시간대 지정 취소와 Unicode 줄 접기의 정규 바이트를 Base64 골든으로 비교한다.
-  JSON 예시는 JSON Schema로 자동 검증하고 실제 CAL HTTP 경로에서도 일정 생명주기를 실행한다.
+  JSON 예시는 JSON Schema로 자동 검증하고 실제 CAL HTTP 경로에서도 취소 후 재활성화를 포함한
+  일정 생명주기를 실행한다.
   일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답도 각 응답 스키마에
   직접 대조해 직렬화 결과의 필드 누락과 예고 없는 추가를 막는다.
+- 고정 Clock을 사용해 같은 ETag의 Last-Modified 보존과 다른 ETag의 전진을 검증한다. 예상 밖
+  예외는 고정 `500` 응답을 반환하고 예외 메시지의 비밀값을 응답·로그에 남기지 않는지 검증한다.
 - JSON 문서 상한과 오류 매핑, 공개 기준 URL과 `prod` 시작 불변식은 애플리케이션 테스트로
   검증한다. Tomcat 접근 로그의 기본값·안전 패턴과 `prod`의 `StatementCreatorUtils` 비활성은
   설정 계약으로 고정한다.
 - 내부 Bearer의 현재 값·이전 값 허용과 그 밖의 값 거부를 HTTP 테스트로 검증한다. 공개 캘린더의
   정상 경로와 대체 `404` 경로를 실제 서버 요청 관측으로 실행해 고카디널리티 `http.url`에 토큰이
   없고 템플릿만 남는지 검증한다.
+- 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
+  확인하고, Spring의 쿼리 제한 시간 예외가 고정된 `503 SERVICE_BUSY`와 `Retry-After: 1`로
+  변환되는지 검증한다. Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
+  증가량만 확인해 같은 도메인 흐름을 중복 구현하지 않는다.
+- JUnit `load` 태그의 `projectionLoadTest`는 기본 `test`에서 제외하고, 실제 PostgreSQL에서
+  500·1,000·5,000·10,000개 시즌의 전체 투영 재구축 시간과 표현 크기를 필요할 때 반복 측정한다.
+  개발 기준과 운영 SLO를 구분하며 런타임·DB·iCal4j가 바뀌면 다시 측정한다.
 - 구독 생성·회전이 현재 런타임 세대를 저장하고, 정상 재시작의 같은 세대는 기존 토큰을 유지하며,
   세대 변경 뒤 과거 토큰은 일반 `404`가 되는지 PostgreSQL 통합 테스트로 검증한다.
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
@@ -214,6 +245,10 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - iCal4j 모델/직렬화기가 RFC 표현을 맡고 CAL이 정렬과 고정된 출력기 설정을 맡아 수동
   이스케이프, DATE-TIME, 시간대 직렬화기를 유지하지 않는다.
 - Java 25와 Spring Boot 4.1의 단일 실행 환경 기준선으로 운영 조합을 줄인다.
+- PostgreSQL과 Spring이 제공하는 제한 시간 및 예외 추상화를 사용해 자체 취소·감시 코드를 두지
+  않으면서도 내부 호출자에게 재시도 가능한 일시 실패를 일관되게 알린다.
+- 저카디널리티 지표로 중복·역순 수신, 이전 내부 Bearer 잔존과 투영 비용을 식별자 노출 없이
+  확인할 수 있다.
 - Cloud Native Buildpacks가 JRE 선택, 계층화와 non-root 이미지를 맡아 수동 Dockerfile과 JRE 조립
   책임을 두지 않는다.
 - Gradle 표준 아카이브가 재현 가능한 계약 팩 생성을 맡고 JSON Schema가 언어 중립 경계를 유지해,
