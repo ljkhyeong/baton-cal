@@ -11,11 +11,14 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.context.request.WebRequest
+import java.time.Clock
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @RestController
 class PublicCalendarController(
     private val subscriptionService: SubscriptionService,
+    private val clock: Clock,
 ) {
     @GetMapping("/calendars/v1/{token}.ics")
     fun getCalendar(
@@ -58,7 +61,9 @@ class PublicCalendarController(
         etag: String,
         lastModified: Instant,
     ): Boolean {
-        val lastModifiedMillis = lastModified.toEpochMilli()
+        val lastModifiedMillis = lastModified
+            .coerceAtMost(clock.instant().truncatedTo(ChronoUnit.SECONDS))
+            .toEpochMilli()
         response.setHeader(HttpHeaders.CACHE_CONTROL, FEED_CACHE_CONTROL.headerValue)
         val notModified = checkNotModified(etag, lastModifiedMillis)
         if (lastModifiedMillis == 0L) {

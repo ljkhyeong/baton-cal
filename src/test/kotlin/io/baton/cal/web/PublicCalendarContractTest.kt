@@ -23,6 +23,7 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.server.observation.ServerRequestObservationContext
@@ -38,7 +39,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.security.MessageDigest
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
@@ -141,6 +144,26 @@ class PublicCalendarContractTest @Autowired constructor(
             etag = updatedEtag,
             lastModified = ONE_SECOND_AFTER_EPOCH_HTTP_DATE,
         )
+    }
+
+    @Test
+    fun `미래 Last-Modified는 공개 응답 시각을 넘지 않는다`() {
+        val credential = createSubscription()
+        val token: String = JsonPath.read(credential, "$.token")
+        jdbcClient.sql(
+            """
+            UPDATE season_feed_projection
+            SET last_modified = :futureLastModified
+            WHERE season_id = :seasonId
+            """.trimIndent(),
+        )
+            .param("futureLastModified", FIXED_NOW.plusSeconds(30).atOffset(ZoneOffset.UTC))
+            .param("seasonId", UUID.fromString(SEASON_ID))
+            .update()
+
+        mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.LAST_MODIFIED, FIXED_NOW_HTTP_DATE))
     }
 
     @Test
@@ -297,7 +320,9 @@ class PublicCalendarContractTest @Autowired constructor(
         const val SEASON_ID = "11111111-1111-1111-1111-111111111111"
         const val EPOCH_HTTP_DATE = "Thu, 01 Jan 1970 00:00:00 GMT"
         const val ONE_SECOND_AFTER_EPOCH_HTTP_DATE = "Thu, 01 Jan 1970 00:00:01 GMT"
+        const val FIXED_NOW_HTTP_DATE = "Sat, 29 Aug 2026 10:00:00 GMT"
         const val CONTENT_DISPOSITION = "inline; filename=\"baton-calendar.ics\""
+        val FIXED_NOW: Instant = Instant.parse("2026-08-29T10:00:00Z")
         val RESTORED_CREDENTIAL_GENERATION: UUID =
             UUID.fromString("10000000-0000-0000-0000-000000000001")
         val CREDENTIAL_GENERATION: UUID =
@@ -309,4 +334,8 @@ class PublicCalendarContractTest @Autowired constructor(
 class TestObservationRegistryConfiguration {
     @Bean
     fun testObservationRegistry(): TestObservationRegistry = TestObservationRegistry.create()
+
+    @Bean
+    @Primary
+    fun testClock(): Clock = Clock.fixed(PublicCalendarContractTest.FIXED_NOW, ZoneOffset.UTC)
 }

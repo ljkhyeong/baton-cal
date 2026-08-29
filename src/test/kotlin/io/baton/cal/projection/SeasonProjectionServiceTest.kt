@@ -78,17 +78,6 @@ class SeasonProjectionServiceTest {
     }
 
     @Test
-    fun `기존 Last-Modified가 미래이면 현재 시각으로 바로잡는다`() {
-        val existing = metadata(lastModified = NOW.plusSeconds(30))
-        doReturn(existing).`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
-        stubRendering(etag = existing.etag, lastModified = NOW.minusSeconds(20))
-
-        service.rebuildWhileLocked(SEASON_ID)
-
-        assertThat(savedProjection().lastModified).isEqualTo(NOW)
-    }
-
-    @Test
     fun `표현이 바뀌면 현재 시각까지 Last-Modified를 전진한다`() {
         doReturn(metadata(lastModified = NOW.minusSeconds(30)))
             .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)

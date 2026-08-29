@@ -73,8 +73,8 @@ BATON CAL MVP는 다음 특성을 가진다.
   BATON이 새 시간 형태를 보내며 이후에는 pre-V6와 공존하거나 롤백하지 않는다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
-- 투영의 ETag가 같으면 기존 Last-Modified를 보존하되 미래 값은 현재 UTC 시각으로 바로잡는다.
-  ETag가 달라지면 응답 Date보다 미래가 되지 않는 현재 UTC 시각의 초 단위 값을 사용한다.
+- 투영의 ETag가 같으면 기존 Last-Modified를 보존하고 ETag가 달라지면 현재 UTC 시각의 초 단위 값을
+  사용한다. 공개 HTTP 경계는 저장값을 요청 처리 시각으로 제한해 응답 Date보다 미래가 되지 않게 한다.
   같은 초의 변경과 시계 역행은 Last-Modified만으로 구분하지 않고 강한 ETag가 정확한 판정을 맡는다.
   이 상한은 [RFC 9110 8.8.2.1절](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.2.1)을 따른다.
 
@@ -209,8 +209,8 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   일정 생명주기를 실행한다.
   일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류의 실제 MockMvc 응답도 각 응답 스키마에
   직접 대조해 직렬화 결과의 필드 누락과 예고 없는 추가를 막는다.
-- 고정 Clock을 사용해 같은 ETag의 Last-Modified 보존, 미래 값 교정과 다른 ETag의 현재 시각 적용을
-  검증한다. 예상 밖
+- 고정 Clock을 사용해 같은 ETag의 Last-Modified 보존, 다른 ETag의 현재 시각 적용과 공개 응답의
+  미래 값 제한을 검증한다. 예상 밖
   예외는 고정 `500` 응답을 반환하고 예외 메시지의 비밀값을 응답·로그에 남기지 않는지 검증한다.
 - JSON 문서 상한과 오류 매핑, 공개 기준 URL과 `prod` 시작 불변식은 애플리케이션 테스트로
   검증한다. Tomcat 접근 로그의 기본값·안전 패턴과 `prod`의 `StatementCreatorUtils` 비활성은

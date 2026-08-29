@@ -104,8 +104,8 @@ class SeasonProjectionService(
     ): Instant {
         val currentSecond = clock.instant().truncatedTo(ChronoUnit.SECONDS)
         return when {
-            existing == null -> renderedLastModified.coerceAtMost(currentSecond)
-            existing.etag == etag -> existing.lastModified.coerceAtMost(currentSecond)
+            existing == null -> renderedLastModified
+            existing.etag == etag -> existing.lastModified
             else -> currentSecond
         }
     }

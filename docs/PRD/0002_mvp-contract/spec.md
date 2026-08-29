@@ -190,19 +190,18 @@ VCALENDAR의 고정 속성은 아래 순서다.
 - `ETag`는 정규 UTF-8 바이트의 SHA-256 소문자 16진수 64자리를 따옴표로 감싼 강한
   태그다.
 - `Last-Modified`는 시즌 투영 행에 IMF-fixdate GMT 초 정밀도로 저장한다. 처음 만든 투영은
-  새 표현에 포함된 가장 큰 CAL `acceptedAt`을 현재 UTC 시각 이하로 사용하며 항목이 하나도 없으면
-  Unix 시간 원점을 쓴다. 기존 투영과 ETag가 같으면 값을 보존하되, 저장된 값이 현재 시각보다
-  미래이면 현재 UTC 시각으로 바로잡는다. ETag가 바뀌면 현재 UTC 시각의 초 단위 값을 사용한다.
-  `Last-Modified`는 응답 `Date`보다 미래일 수 없다.
+  새 표현에 포함된 가장 큰 CAL `acceptedAt`을 사용하며 항목이 하나도 없으면 Unix 시간 원점을 쓴다.
+  기존 투영과 ETag가 같으면 값을 보존하고 ETag가 바뀌면 현재 UTC 시각의 초 단위 값을 사용한다.
+  공개 HTTP 경계는 저장된 값과 요청 처리 시각 중 이른 값을 헤더에 사용하므로 `Last-Modified`는
+  응답 `Date`보다 미래일 수 없다.
 - `If-Modified-Since`는 초 단위의 보조 검증 값이므로 같은 초에 표현이 바뀌거나 시계가 뒤로 가면
   변경을 구분하지 못할 수 있다. 정규 바이트 변경의 정확한 판정은 강한 `ETag`와
   `If-None-Match`가 맡는다.
 - `If-None-Match`가 있으면 이를 먼저 평가하며 일치할 때 본문 없는 `304 Not Modified`를
   반환한다. 이 헤더가 없을 때만 `If-Modified-Since`를 평가한다.
 - `304`에도 `ETag`, `Last-Modified`, `Cache-Control`을 넣고 `Content-Type`과 본문은 넣지 않는다.
-- 정상 범위의 검증 값에서는 재구축, 동일 내용 재전달과 낮은 개정 번호 전달이 캘린더 바이트,
-  ETag와 Last-Modified를 바꾸지 않는다. 저장된 Last-Modified가 현재 시각보다 미래인 경우에만
-  재구축이 현재 UTC 시각으로 한 번 바로잡는다.
+- 재구축, 동일 내용 재전달과 낮은 개정 번호 전달은 캘린더 바이트, ETag와 저장된 Last-Modified를
+  바꾸지 않는다. 시계 역행으로 저장값이 요청 처리 시각보다 미래이면 HTTP 헤더만 현재 시각으로 제한한다.
 
 ## 구독 자격 증명 계약
 
