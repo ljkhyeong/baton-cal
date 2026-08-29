@@ -78,13 +78,20 @@ wait_for_readiness() {
   container_id=$("${compose[@]}" ps --all --quiet app)
   [[ -n "$container_id" ]] || fail "애플리케이션 컨테이너 ID를 찾을 수 없습니다."
 
-  local published_address
-  published_address=$("${compose[@]}" port app 8080)
-  published_port=${published_address##*:}
-  [[ "$published_port" =~ ^[0-9]+$ ]] \
-    || fail "동적으로 할당된 HTTP 포트를 확인할 수 없습니다: '$published_address'"
-  base_url="http://127.0.0.1:$published_port"
-  readiness_url="$base_url/actuator/health/readiness"
+  local application_address
+  application_address=$("${compose[@]}" port app 8080)
+  application_port=${application_address##*:}
+  [[ "$application_port" =~ ^[0-9]+$ ]] \
+    || fail "동적으로 할당된 애플리케이션 포트를 확인할 수 없습니다: '$application_address'"
+  base_url="http://127.0.0.1:$application_port"
+
+  local management_address
+  management_address=$("${compose[@]}" port app 8081)
+  management_port=${management_address##*:}
+  [[ "$management_port" =~ ^[0-9]+$ ]] \
+    || fail "동적으로 할당된 관리 포트를 확인할 수 없습니다: '$management_address'"
+  management_url="http://127.0.0.1:$management_port"
+  readiness_url="$management_url/actuator/health/readiness"
 
   local readiness_status=000
   local ready=false
@@ -119,6 +126,20 @@ wait_for_readiness() {
     fail "readiness가 제한 시간 안에 HTTP 200과 UP을 반환하지 않았습니다."
   fi
   echo "readiness HTTP 200/UP 확인: $readiness_url"
+}
+
+assert_prometheus_metrics() {
+  local status
+  status=$(
+    curl --silent --show-error \
+      --output "$readiness_file" \
+      --write-out '%{http_code}' \
+      "$management_url/actuator/prometheus"
+  )
+  [[ "$status" == 200 ]] || fail "Prometheus 메트릭이 HTTP 200이 아닌 $status를 반환했습니다."
+  grep --quiet '^jvm_info' "$readiness_file" \
+    || fail "Prometheus 메트릭에서 JVM 런타임 정보를 찾을 수 없습니다."
+  echo "Prometheus 메트릭 HTTP 200과 JVM 런타임 정보를 확인했습니다."
 }
 
 database_scalar() {
@@ -221,6 +242,7 @@ esac
 echo "격리된 Compose project '$project_name'에서 애플리케이션을 시작합니다."
 "${compose[@]}" up --detach
 wait_for_readiness
+assert_prometheus_metrics
 assert_flyway_versions
 
 container_pid1=$(docker inspect --format '{{.State.Pid}}' "$container_id")

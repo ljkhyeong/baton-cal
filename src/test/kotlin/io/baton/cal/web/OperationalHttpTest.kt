@@ -25,6 +25,7 @@ import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import java.nio.file.Path
 import java.time.Duration
+import org.hamcrest.Matchers.containsString
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
@@ -35,6 +36,7 @@ import java.time.Duration
         "baton.cal.internal-token=test-internal-token-that-is-long-enough",
         "baton.cal.public-base-url=https://calendar.example.test",
         "baton.cal.subscription-generation=30000000-0000-0000-0000-000000000003",
+        "management.server.port=8080",
     ],
 )
 class OperationalHttpTest @Autowired constructor(
@@ -71,7 +73,7 @@ class OperationalHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `actuator exposes only detail-free health and its probes`() {
+    fun `actuator는 상세 없는 상태와 Prometheus 메트릭만 공개한다`() {
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.status").value("UP"))
@@ -85,6 +87,10 @@ class OperationalHttpTest @Autowired constructor(
         mockMvc.perform(get("/actuator/health/readiness"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.status").value("UP"))
+
+        mockMvc.perform(get("/actuator/prometheus"))
+            .andExpect(status().isOk)
+            .andExpect(content().string(containsString("jvm_info")))
 
         mockMvc.perform(get("/actuator/info"))
             .andExpect(status().isNotFound)

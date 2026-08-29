@@ -33,6 +33,9 @@ services:
       - target: 8080
         host_ip: 127.0.0.1
         protocol: tcp
+      - target: 8081
+        host_ip: 127.0.0.1
+        protocol: tcp
     stop_grace_period: 35s
 
 volumes:

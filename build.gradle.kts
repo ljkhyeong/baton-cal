@@ -36,6 +36,7 @@ dependencies {
     implementation("org.mnode.ical4j:ical4j:4.3.0")
 
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

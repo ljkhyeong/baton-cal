@@ -7,7 +7,7 @@ import org.springframework.core.io.ClassPathResource
 
 class ProductionDatasourceConfigurationTest {
     @Test
-    fun `운영 데이터베이스 설정은 로컬 기본값을 상속하지 않는다`() {
+    fun `운영 데이터베이스 기본값을 막고 관리 포트를 분리한다`() {
         val properties = YamlPropertiesFactoryBean().apply {
             setResources(ClassPathResource("application-prod.yml"))
         }.getObject()
@@ -16,5 +16,6 @@ class ProductionDatasourceConfigurationTest {
             .containsEntry("spring.datasource.url", "${'$'}{DATABASE_URL}")
             .containsEntry("spring.datasource.username", "${'$'}{DATABASE_USERNAME}")
             .containsEntry("spring.datasource.password", "${'$'}{DATABASE_PASSWORD}")
+            .containsEntry("management.server.port", "${'$'}{MANAGEMENT_SERVER_PORT:8081}")
     }
 }
