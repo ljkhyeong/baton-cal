@@ -59,6 +59,10 @@ class SeasonProjectionService(
 
     @Transactional
     fun ensureProjection(seasonId: UUID) {
+        if (projectionRepository.findMetadataBySeasonId(seasonId) != null) {
+            return
+        }
+
         lockRepository.acquire(seasonId)
         if (projectionRepository.findMetadataBySeasonId(seasonId) == null) {
             rebuildWhileLocked(seasonId, existing = null)

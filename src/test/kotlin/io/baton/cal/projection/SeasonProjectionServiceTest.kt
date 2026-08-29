@@ -13,8 +13,11 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -23,16 +26,41 @@ import java.util.UUID
 class SeasonProjectionServiceTest {
     private val itemRepository = mock(CalendarItemRepository::class.java)
     private val projectionRepository = mock(SeasonFeedProjectionRepository::class.java)
+    private val lockRepository = mock(SeasonProjectionLockRepository::class.java)
     private val renderer = mock(IcsCalendarRenderer::class.java)
     private val meterRegistry = SimpleMeterRegistry()
     private val service = SeasonProjectionService(
-        lockRepository = mock(SeasonProjectionLockRepository::class.java),
+        lockRepository = lockRepository,
         itemRepository = itemRepository,
         projectionRepository = projectionRepository,
         renderer = renderer,
         clock = Clock.fixed(NOW, ZoneOffset.UTC),
         meterRegistry = meterRegistry,
     )
+
+    @Test
+    fun `기존 투영이 있으면 시즌 잠금을 잡지 않는다`() {
+        doReturn(metadata(lastModified = NOW))
+            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+
+        service.ensureProjection(SEASON_ID)
+
+        verify(lockRepository, never()).acquire(SEASON_ID)
+    }
+
+    @Test
+    fun `투영이 없으면 시즌 잠금 뒤 다시 확인한다`() {
+        doReturn(null, metadata(lastModified = NOW))
+            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+
+        service.ensureProjection(SEASON_ID)
+
+        val calls = inOrder(projectionRepository, lockRepository)
+        calls.verify(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        calls.verify(lockRepository).acquire(SEASON_ID)
+        calls.verify(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        verifyNoInteractions(itemRepository, renderer)
+    }
 
     @Test
     fun `투영이 없으면 관측 시각의 초를 사용한다`() {
