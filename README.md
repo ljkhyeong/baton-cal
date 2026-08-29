@@ -226,7 +226,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실�
 
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
-산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
+산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 과거 계약 태그에서 갈라져 `main`에
+병합하지 않는 `release/contracts-` 풀 리퀘스트는 일반 merge 검증과 별도로 브랜치의 정확한 HEAD를
+체크아웃해 계약 ZIP을 검증하고 별도 산출물로 올린다.
 
 현재 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산

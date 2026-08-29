@@ -7,6 +7,8 @@
 
 - `contracts/VERSION`을 ZIP 파일명과 `contracts-v{버전}` 태그의 단일 원천으로 사용한다.
 - 계약 변경을 풀 리퀘스트로 검토해 `main`에 반영한 뒤, 깨끗하고 원격과 같은 커밋에서 게시한다.
+- 과거 태그에서 갈라져 `main`에 병합하지 않는 호환 브랜치는 풀 리퀘스트의 `계약 릴리스 HEAD 검증`
+  작업으로 합성 merge commit이 아닌 브랜치의 정확한 커밋과 계약 ZIP을 검증한다.
 - `verifyContractsZip`으로 실제 ZIP의 파일명, 내부 버전과 포함 파일 목록을 검증한다.
 - GitHub 저장소의 릴리스 불변성 설정을 켠 상태에서 초안을 검토한 뒤 게시한다.
 - 게시한 태그와 자산은 교체하지 않는다. 수정이 필요하면 다음 버전을 만든다.
@@ -42,8 +44,9 @@ git commit -m "배포: 계약 1.0.1 호환 보완판 준비"
 git push -u origin release/contracts-v1.0.1
 ```
 
-풀 리퀘스트에서 변경 범위와 CI를 확인한다. 이 호환 브랜치는 과거 안정 태그에서 갈라지므로
-`main`에 병합하지 않고 릴리스 태그의 기준 커밋으로만 사용한다.
+풀 리퀘스트에서 변경 범위, 일반 CI와 `계약 릴리스 HEAD 검증` 작업을 모두 확인한다. 후자는
+`release/contracts-` 브랜치의 정확한 HEAD에서 만든 계약 ZIP을 별도 산출물로 올린다. 이 호환
+브랜치는 과거 안정 태그에서 갈라지므로 `main`에 병합하지 않고 릴리스 태그의 기준 커밋으로만 사용한다.
 
 ## `1.0.1` 게시
 
@@ -53,9 +56,12 @@ git push -u origin release/contracts-v1.0.1
 ```shell
 git switch release/contracts-v1.0.1
 git pull --ff-only
+test "$(git rev-parse HEAD)" = "$(git rev-parse '@{upstream}')"
 git status --short
 ./gradlew --no-daemon clean verifyContractsZip
+git status --short
 git tag -a contracts-v1.0.1 -m "계약 1.0.1"
+test "$(git rev-parse HEAD)" = "$(git rev-parse 'contracts-v1.0.1^{}')"
 git push origin contracts-v1.0.1
 gh release create contracts-v1.0.1 build/distributions/baton-cal-contracts-1.0.1.zip \
   --draft --verify-tag --title "BATON CAL 계약 1.0.1" \
@@ -83,10 +89,12 @@ gh release view contracts-v1.0.1 --json assets \
 ```shell
 git switch main
 git pull --ff-only
+test "$(git rev-parse HEAD)" = "$(git rev-parse '@{upstream}')"
 git status --short
 ./gradlew --no-daemon clean test bootJar verifyContractsZip
 git status --short
 git tag -a contracts-v1.1.0-rc.1 -m "계약 1.1.0-rc.1"
+test "$(git rev-parse HEAD)" = "$(git rev-parse 'contracts-v1.1.0-rc.1^{}')"
 git push origin contracts-v1.1.0-rc.1
 gh release create contracts-v1.1.0-rc.1 \
   build/distributions/baton-cal-contracts-1.1.0-rc.1.zip \
