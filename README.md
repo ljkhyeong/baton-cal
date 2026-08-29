@@ -257,7 +257,8 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ```
 
 스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V6 적용, 분리된 관리 포트의 DB 포함 준비 상태와
-Prometheus 메트릭, SIGTERM 종료 코드 143을 확인한다. 세대 A를 유지한 채 애플리케이션 컨테이너를 실제로 재생성해
+Prometheus 메트릭, 35초 유예 안의 SIGTERM 정상 종료와 SIGKILL·OOM 미발생을 확인한다. 세대 A를 유지한 채
+애플리케이션 컨테이너를 실제로 재생성해
 기존 공개 피드가 계속 `200`인지 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고
 아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔
 `pg_restore --clean --create --exit-on-error`로 복원한다. 복원된 기존 토큰의 본문 없는 일반 `404`,

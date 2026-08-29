@@ -359,8 +359,18 @@ running_before_stop=$(docker inspect --format '{{.State.Running}}' "$container_i
 echo "Compose의 35초 종료 유예 설정으로 애플리케이션을 중지합니다."
 "${compose[@]}" stop app
 
+container_status=$(docker inspect --format '{{.State.Status}}' "$container_id")
+[[ "$container_status" == exited ]] \
+  || fail "애플리케이션 컨테이너가 종료 상태가 아닙니다: $container_status"
+
+oom_killed=$(docker inspect --format '{{.State.OOMKilled}}' "$container_id")
+[[ "$oom_killed" == false ]] \
+  || fail "애플리케이션 컨테이너가 OOM으로 종료되었습니다."
+
 exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_id")
-[[ "$exit_code" == 143 ]] \
-  || fail "애플리케이션 컨테이너가 SIGTERM 종료 코드 143이 아닌 $exit_code로 끝났습니다."
-echo "SIGTERM 종료 경로 확인: ExitCode=$exit_code"
+case "$exit_code" in
+  0 | 143) ;;
+  *) fail "애플리케이션 컨테이너가 정상 종료 코드 0 또는 143이 아닌 $exit_code로 끝났습니다." ;;
+esac
+echo "SIGTERM 정상 종료 경로 확인: Status=$container_status, OOMKilled=$oom_killed, ExitCode=$exit_code"
 echo "OCI 이미지와 PostgreSQL 논리 백업/복원 스모크 검증을 완료했습니다: $image_name"
