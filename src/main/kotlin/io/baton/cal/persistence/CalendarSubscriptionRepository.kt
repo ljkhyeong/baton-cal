@@ -76,11 +76,10 @@ class CalendarSubscriptionRepository(
     fun findProjectionMetadataByActiveTokenHash(
         tokenHash: String,
         expectedCredentialGeneration: UUID,
-    ): ActiveSeasonFeedProjectionMetadata? =
+    ): SeasonFeedProjectionMetadata? =
         jdbcClient.sql(
             """
             SELECT
-                projection.season_id,
                 projection.etag,
                 projection.last_modified
             FROM calendar_subscription subscription
@@ -93,7 +92,7 @@ class CalendarSubscriptionRepository(
         )
             .param("tokenHash", tokenHash)
             .param("expectedCredentialGeneration", expectedCredentialGeneration)
-            .query(ActiveSeasonFeedProjectionMetadata::class.java)
+            .query(SeasonFeedProjectionMetadata::class.java)
             .optional()
             .getOrNull()
 

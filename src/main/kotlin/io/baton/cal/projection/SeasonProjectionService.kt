@@ -20,6 +20,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.function.Supplier
 
 data class ProjectionResult(
     val seasonId: UUID,
@@ -71,9 +72,8 @@ class SeasonProjectionService(
     private fun rebuildWhileLocked(
         seasonId: UUID,
         existing: SeasonFeedProjectionMetadata?,
-    ): ProjectionResult {
-        val sample = Timer.start(meterRegistry)
-        try {
+    ): ProjectionResult =
+        rebuildTimer.record(Supplier {
             val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
             val rendered = renderer.render(seasonId = seasonId, items = items)
             projectionRepository.upsert(
@@ -86,15 +86,12 @@ class SeasonProjectionService(
             )
             itemCountSummary.record(items.size.toDouble())
             byteSizeSummary.record(rendered.bytes.size.toDouble())
-            return ProjectionResult(
+            ProjectionResult(
                 seasonId = seasonId,
                 etag = rendered.etag,
                 itemCount = items.size,
             )
-        } finally {
-            sample.stop(rebuildTimer)
-        }
-    }
+        })
 
     @Transactional(propagation = Propagation.MANDATORY)
     fun nextAcceptedAtWhileLocked(

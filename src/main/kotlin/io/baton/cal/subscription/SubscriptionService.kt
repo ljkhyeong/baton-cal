@@ -1,10 +1,10 @@
 package io.baton.cal.subscription
 
 import io.baton.cal.config.CalProperties
-import io.baton.cal.persistence.ActiveSeasonFeedProjectionMetadata
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
+import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.web.InternalResourceNotFoundException
@@ -87,7 +87,7 @@ class SubscriptionService(
         )
 
     @Transactional(readOnly = true)
-    fun findFeedMetadata(token: String): ActiveSeasonFeedProjectionMetadata? =
+    fun findFeedMetadata(token: String): SeasonFeedProjectionMetadata? =
         repository.findProjectionMetadataByActiveTokenHash(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,

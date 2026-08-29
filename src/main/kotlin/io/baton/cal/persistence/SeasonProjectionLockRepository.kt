@@ -23,8 +23,7 @@ class SeasonProjectionLockRepository(
      */
     @Transactional(propagation = Propagation.MANDATORY)
     fun acquire(seasonId: UUID) {
-        val sample = Timer.start(meterRegistry)
-        try {
+        acquisitionTimer.record(Runnable {
             jdbcClient.sql(
                 """
                 INSERT INTO season_projection_lock (season_id)
@@ -46,8 +45,6 @@ class SeasonProjectionLockRepository(
                 .param("seasonId", seasonId)
                 .query(UUID::class.java)
                 .single()
-        } finally {
-            sample.stop(acquisitionTimer)
-        }
+        })
     }
 }
