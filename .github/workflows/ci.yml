@@ -36,8 +36,8 @@ jobs:
         with:
           cache-provider: basic
 
-      - name: 전체 테스트, 계약 팩과 OCI 이미지 빌드
-        run: ./gradlew --no-daemon test contractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
+      - name: 전체 테스트, 계약 팩 검증과 OCI 이미지 빌드
+        run: ./gradlew --no-daemon test verifyContractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
 
       - name: OCI 이미지 스모크 검증
         run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"
@@ -76,8 +76,8 @@ jobs:
         with:
           cache-provider: basic
 
-      - name: 전체 테스트, 계약 팩과 OCI 이미지 빌드
-        run: ./gradlew --no-daemon test contractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
+      - name: 전체 테스트, 계약 팩 검증과 OCI 이미지 빌드
+        run: ./gradlew --no-daemon test verifyContractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
 
       - name: OCI 이미지 스모크 검증
         run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"

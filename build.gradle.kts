@@ -1,4 +1,68 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.bundling.Zip
+import java.util.zip.ZipFile
+
+abstract class VerifyContractsZip : DefaultTask() {
+
+    @get:Input
+    abstract val expectedVersion: Property<String>
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val archiveFile: RegularFileProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val contractsDirectory: DirectoryProperty
+
+    @TaskAction
+    fun verify() {
+        val version = expectedVersion.get()
+        val archive = archiveFile.get().asFile
+        check(archive.name == "baton-cal-contracts-$version.zip") {
+            "계약 ZIP 파일명이 contracts/VERSION과 다릅니다: ${archive.name}"
+        }
+
+        val contractsRoot = contractsDirectory.get().asFile
+        val expectedFiles = contractsRoot
+            .walkTopDown()
+            .filter { it.isFile }
+            .mapTo(linkedSetOf("LICENSE", "docs/PRD/0002_mvp-contract/spec.md")) {
+                "contracts/${it.relativeTo(contractsRoot).invariantSeparatorsPath}"
+            }
+
+        ZipFile(archive).use { zipFile ->
+            val packagedFiles = zipFile.entries()
+                .asSequence()
+                .filterNot { it.isDirectory }
+                .mapTo(linkedSetOf()) { it.name }
+            check(packagedFiles == expectedFiles) {
+                val missingFiles = expectedFiles - packagedFiles
+                val unexpectedFiles = packagedFiles - expectedFiles
+                "계약 ZIP 파일 목록이 소스와 다릅니다: 누락=$missingFiles, 추가=$unexpectedFiles"
+            }
+
+            val versionEntry = checkNotNull(zipFile.getEntry("contracts/VERSION")) {
+                "계약 ZIP에 contracts/VERSION이 없습니다."
+            }
+            val packagedVersion = zipFile.getInputStream(versionEntry)
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText().trim() }
+            check(packagedVersion == version) {
+                "계약 ZIP 내부 버전이 contracts/VERSION과 다릅니다: $packagedVersion"
+            }
+        }
+    }
+}
 
 plugins {
     kotlin("jvm") version "2.3.21"
@@ -76,18 +140,42 @@ val contractsVersion = providers
     .asText
     .map { it.trim() }
 
-tasks.register<Zip>("contractsZip") {
+val contractsSourceDirectory = layout.projectDirectory.dir("contracts")
+val contractSpecification = layout.projectDirectory.file("docs/PRD/0002_mvp-contract/spec.md")
+
+val contractsZip = tasks.register<Zip>("contractsZip") {
     group = "distribution"
     description = "BATON CAL 계약 팩 ZIP을 생성합니다."
     archiveBaseName.set("baton-cal-contracts")
     archiveVersion.set(contractsVersion)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    dirPermissions {
+        unix("rwxr-xr-x")
+    }
+    filePermissions {
+        unix("rw-r--r--")
+    }
 
     from(layout.projectDirectory.file("LICENSE"))
-    from(layout.projectDirectory.dir("contracts")) {
+    from(contractsSourceDirectory) {
         into("contracts")
     }
-    from(layout.projectDirectory.file("docs/PRD/0002_mvp-contract/spec.md")) {
+    from(contractSpecification) {
         into("docs/PRD/0002_mvp-contract")
     }
+}
+
+val verifyContractsZip = tasks.register<VerifyContractsZip>("verifyContractsZip") {
+    group = "verification"
+    description = "계약 팩 ZIP의 파일명, 내부 버전과 포함 파일을 검증합니다."
+    dependsOn(contractsZip)
+    expectedVersion.set(contractsVersion)
+    archiveFile.set(contractsZip.flatMap { it.archiveFile })
+    contractsDirectory.set(contractsSourceDirectory)
+}
+
+tasks.named("check") {
+    dependsOn(verifyContractsZip)
 }
