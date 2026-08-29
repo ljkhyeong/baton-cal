@@ -224,6 +224,8 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 내부 Bearer의 현재 값·이전 값 허용과 그 밖의 값 거부를 HTTP 테스트로 검증한다. 공개 캘린더의
   정상 경로와 대체 `404` 경로를 실제 서버 요청 관측으로 실행해 고카디널리티 `http.url`에 토큰이
   없고 템플릿만 남는지 검증한다.
+- JSON UUID는 스키마와 같은 36자 표준 문자열만 허용하고, 내부 Bearer 설정은 RFC 6750 `b64token`
+  문자 범위를 벗어나면 애플리케이션 시작 시 거부한다.
 - 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
   확인하고, Spring의 쿼리 제한 시간 예외가 고정된 `503 SERVICE_BUSY`와 `Retry-After: 1`로
   변환되는지 검증한다. Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서

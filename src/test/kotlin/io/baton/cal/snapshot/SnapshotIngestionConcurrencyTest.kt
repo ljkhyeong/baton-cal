@@ -2,24 +2,29 @@ package io.baton.cal.snapshot
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
+import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
-import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.persistence.CalendarItemRepository
+import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.util.AopTestUtils
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @SpringBootTest(
@@ -33,10 +38,14 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
     private val itemRepository: CalendarItemRepository,
     private val jdbcClient: JdbcClient,
 ) {
+    @MockitoSpyBean
+    private lateinit var lockRepository: SeasonProjectionLockRepository
+
     @Test
-    fun `같은 시즌의 연속 개정 번호를 동시에 받아도 최신 항목과 피드가 일치한다`() {
-        val revision1 = snapshot(revision = 1)
-        val revision2 = snapshot(revision = 2)
+    fun `같은 시즌의 서로 다른 항목을 동시에 받아도 피드에 모두 남는다`() {
+        synchronizeSeasonLockAcquisition()
+        val firstSnapshot = snapshot(number = 1)
+        val secondSnapshot = snapshot(number = 2)
         val ready = CountDownLatch(2)
         val start = CountDownLatch(1)
 
@@ -44,12 +53,12 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
             val first = executor.submit<SnapshotIngestionResult> {
                 ready.countDown()
                 start.await()
-                ingestionService.ingest(revision1)
+                ingestionService.ingest(firstSnapshot)
             }
             val second = executor.submit<SnapshotIngestionResult> {
                 ready.countDown()
                 start.await()
-                ingestionService.ingest(revision2)
+                ingestionService.ingest(secondSnapshot)
             }
 
             try {
@@ -57,26 +66,29 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
             } finally {
                 start.countDown()
             }
-            first.get(10, TimeUnit.SECONDS) to second.get(10, TimeUnit.SECONDS)
+            listOf(
+                first.get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                second.get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            )
         }
 
-        assertThat(results.second).isEqualTo(SnapshotIngestionResult.APPLIED)
-        assertThat(results.first).isIn(SnapshotIngestionResult.APPLIED, SnapshotIngestionResult.STALE)
+        assertThat(results).containsOnly(SnapshotIngestionResult.APPLIED)
+        assertThat(itemRepository.listBySeasonId(SEASON_ID).map { it.sourceItemId })
+            .containsExactlyInAnyOrder(firstSnapshot.sourceItemId, secondSnapshot.sourceItemId)
 
-        val current = itemRepository.listBySeasonId(SEASON_ID).single()
-        assertThat(current.revision).isEqualTo(2)
-        assertThat(current.summary).isEqualTo("개정 2 일정")
-
-        val projection = jdbcClient.sql(
+        val events = jdbcClient.sql(
             "SELECT representation FROM season_feed_projection WHERE season_id = :seasonId",
         )
             .param("seasonId", SEASON_ID)
             .query(ByteArray::class.java)
             .single()
             .parseIcalendar()
-            .requiredEvent()
-        assertThat(projection.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("2")
-        assertThat(projection.requiredPropertyValue(Property.SUMMARY)).isEqualTo("개정 2 일정")
+            .events()
+        assertThat(events.map { it.requiredPropertyValue(Property.UID) })
+            .containsExactlyInAnyOrder(
+                "${firstSnapshot.sourceItemId}@cal.baton",
+                "${secondSnapshot.sourceItemId}@cal.baton",
+            )
         assertThat(
             jdbcClient.sql("SELECT count(*) FROM source_event_inbox")
                 .query(Int::class.java)
@@ -84,25 +96,51 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
         ).isEqualTo(2)
     }
 
-    private fun snapshot(revision: Int) = ScheduleSnapshot(
-        eventId = UUID.fromString("10000000-0000-0000-0000-00000000000$revision"),
-        occurredAt = Instant.parse("2026-08-28T00:00:0${revision}Z"),
-        sourceItemId = SOURCE_ITEM_ID,
+    private fun synchronizeSeasonLockAcquisition() {
+        val firstHasLock = CountDownLatch(1)
+        val secondReachedLock = CountDownLatch(1)
+        val acquisitionCount = AtomicInteger()
+        val lockTarget = AopTestUtils.getUltimateTargetObject<SeasonProjectionLockRepository>(lockRepository)
+
+        doAnswer { invocation ->
+            when (acquisitionCount.incrementAndGet()) {
+                1 -> {
+                    invocation.callRealMethod()
+                    firstHasLock.countDown()
+                    check(secondReachedLock.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    null
+                }
+
+                2 -> {
+                    check(firstHasLock.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    secondReachedLock.countDown()
+                    invocation.callRealMethod()
+                }
+
+                else -> invocation.callRealMethod()
+            }
+        }.`when`(lockTarget).acquire(SEASON_ID)
+    }
+
+    private fun snapshot(number: Int) = ScheduleSnapshot(
+        eventId = UUID.fromString("10000000-0000-0000-0000-00000000000$number"),
+        occurredAt = Instant.parse("2026-08-28T00:00:0${number}Z"),
+        sourceItemId = UUID.fromString("20000000-0000-0000-0000-00000000000$number"),
         seasonId = SEASON_ID,
-        revision = revision,
+        revision = 1,
         status = CalendarItemStatus.ACTIVE,
-        summary = "개정 $revision 일정",
+        summary = "항목 $number 일정",
         description = null,
         location = null,
         schedule = ScheduleWindow.UtcInstant(
             start = Instant.parse("2026-09-01T01:00:00Z"),
             end = Instant.parse("2026-09-01T02:00:00Z"),
         ),
-        sourceUpdatedAt = Instant.parse("2026-08-28T00:00:0${revision}Z"),
+        sourceUpdatedAt = Instant.parse("2026-08-28T00:00:0${number}Z"),
     )
 
     private companion object {
+        const val TIMEOUT_SECONDS = 10L
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-        val SOURCE_ITEM_ID: UUID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     }
 }

@@ -154,6 +154,8 @@ class OperationalHttpTest @Autowired constructor(
         listOf(
             """{"seasonId":"""",
             """{"seasonId":"$SEASON_ID","unexpected":true}""",
+            """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA"}""",
+            """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA=="}""",
         ).forEach { payload ->
             mockMvc.perform(
                 authorizedPost("/internal/api/v1/subscriptions")

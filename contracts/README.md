@@ -59,8 +59,10 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 
 `ContractSchemaSupport`가 Draft 2020-12 스키마 로딩과 검증 결과 보고를 한 곳에서 맡는다.
 `ContractArtifactsTest`는 이를 사용해 Docker 없이 모든 JSON 예시를 검증하고, UUID, RFC 3339
-시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 일정 생명주기 예시는 실제 CAL
-내부 HTTP 경로에서 개정·취소·재활성화·정확한 재전달 순서로 검증하고, 최종 피드의 같은 UID가
+시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 내부 HTTP 요청의 UUID도
+하이픈을 포함한 36자 표준 문자열만 허용하며 Jackson의 22자·24자 Base64 UUID 표현은 거부한다.
+일정 생명주기 예시는 실제 CAL 내부 HTTP 경로에서 개정·취소·재활성화·정확한 재전달 순서로
+검증하고, 최종 피드의 같은 UID가
 `SEQUENCE:4`, `STATUS:CONFIRMED`로 복원되는지 확인한다. 세 시점·종일 예시도 같은 수신 경로로
 실행한다. 기존 전체 HTTP 흐름을 실행하는 `MvpHttpFlowTest`는 같은 스키마 지원 코드를 재사용해
 MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을 각 응답 스키마에

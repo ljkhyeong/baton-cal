@@ -14,11 +14,11 @@ class CalProperties(
 ) {
     init {
         require(internalToken.isValidInternalToken()) {
-            "internalToken은 줄 바꿈 없이 32자 이상이어야 한다"
+            "internalToken은 RFC 6750 Bearer 형식으로 32자 이상이어야 한다"
         }
         previousInternalToken?.let {
             require(it.isValidInternalToken()) {
-                "previousInternalToken은 줄 바꿈 없이 32자 이상이어야 한다"
+                "previousInternalToken은 RFC 6750 Bearer 형식으로 32자 이상이어야 한다"
             }
             require(it != internalToken) {
                 "previousInternalToken은 internalToken과 달라야 한다"
@@ -49,7 +49,9 @@ class CalProperties(
 }
 
 private fun String.isValidInternalToken(): Boolean =
-    length >= 32 && none { it == '\r' || it == '\n' }
+    length >= 32 && matches(INTERNAL_TOKEN_PATTERN)
+
+private val INTERNAL_TOKEN_PATTERN = Regex("[A-Za-z0-9._~+/\\-]+=*")
 
 private fun String.isLoopbackHost(): Boolean {
     if (equals("localhost", ignoreCase = true)) return true

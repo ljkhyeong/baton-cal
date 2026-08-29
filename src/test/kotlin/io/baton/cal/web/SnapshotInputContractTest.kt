@@ -45,6 +45,16 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
+    fun `UUID 필드는 Jackson Base64 표현을 거부한다`() {
+        listOf(
+            "AAAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAAA==",
+        ).forEach { base64Uuid ->
+            assertInvalid(utcSnapshot(eventId = base64Uuid))
+        }
+    }
+
+    @Test
     fun `zoned local fields require seconds`() {
         listOf(
             zonedSnapshot(startLocal = "2026-08-31T23:30"),
@@ -200,6 +210,7 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     private fun utcSnapshot(
+        eventId: String = UUID.randomUUID().toString(),
         occurredAt: String = quoted("2026-08-11T01:00:05Z"),
         sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
         startInstant: String = quoted("2026-08-16T09:00:00Z"),
@@ -210,7 +221,7 @@ class SnapshotInputContractTest @Autowired constructor(
     ): String =
         """
         {
-          "eventId": "${UUID.randomUUID()}",
+          "eventId": "$eventId",
           "occurredAt": $occurredAt,
           "sourceItemId": "${UUID.randomUUID()}",
           "seasonId": "$SEASON_ID",

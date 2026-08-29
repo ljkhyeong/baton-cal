@@ -54,6 +54,27 @@ class CalPropertiesTest {
     }
 
     @Test
+    fun `내부 토큰은 RFC 6750 Bearer 자격 증명 형식을 따른다`() {
+        listOf(
+            "a".repeat(32),
+            "Aa0-._~+/".repeat(4) + "==",
+        ).forEach { token ->
+            assertThatCode { CalProperties(token) }.doesNotThrowAnyException()
+        }
+
+        listOf(
+            " ".repeat(32),
+            "a".repeat(31) + " ",
+            "a".repeat(31) + ":",
+            "a".repeat(16) + "=" + "a".repeat(16),
+        ).forEach { token ->
+            assertThatIllegalArgumentException()
+                .isThrownBy { CalProperties(token) }
+                .withMessageNotContaining(token)
+        }
+    }
+
+    @Test
     fun `공개 기준 URL은 계층형 HTTPS 또는 로컬 개발용 HTTP여야 한다`() {
         val token = "secret-internal-token-that-is-long-enough"
 
