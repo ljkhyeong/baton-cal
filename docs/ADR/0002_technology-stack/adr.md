@@ -125,7 +125,12 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 OCI 이미지다. Spring Boot가 Java 대상 버전을 기본 Paketo builder에 전달하고 프로젝트명·버전으로
 이미지 이름을 정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. builder metadata가 호환
 run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpack으로 실행 계약을 만족할 수
-없을 때만 새 결정으로 도입한다. 이미지 레지스트리와 게시 방식은 실제 배포 대상을 정할 때 확정한다.
+없을 때만 새 결정으로 도입한다.
+
+이미지 레지스트리는 GitHub Container Registry를 사용한다. GitHub Actions는 풀 리퀘스트에서 이미지를
+로컬 검증만 하고, `main` 푸시에서 스모크를 통과한 같은 이미지를
+`ghcr.io/ljkhyeong/baton-cal:{전체 Git 커밋 SHA}`로 게시한다. 가변 `latest` 태그를 만들지 않고 실제
+배포는 전체 SHA 태그 또는 레지스트리 digest를 고정한다.
 
 언어 중립 계약 버전의 단일 원천은 `contracts/VERSION`이다. Gradle 표준 `Zip` 작업
 `contractsZip`은 이 값에서 `baton-cal-contracts-{version}.zip`을 만든다. ZIP은 `contracts/**`
@@ -180,6 +185,10 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   획득 시간을 기록한다. 태그는 `applied`·`duplicate`·`stale`, `current`·`previous`·`unauthorized`
   처럼 값의 종류가 제한된 결과만 사용하고 토큰·시즌·항목 식별자는 넣지 않는다. 표준 HTTP 서버
   지표로 이미 구분할 수 있는 공개 피드 상태를 별도 카운터로 중복 구현하지 않는다.
+- Spring Boot 자동 설정과 Micrometer Prometheus 레지스트리로 `/actuator/prometheus`를 제공한다.
+  `prod` 프로필은 관리 서버를 기본 `8081` 포트로 분리한다. 공개 역방향 프록시는 관리 포트를
+  라우팅하지 않고 관측 수집기만 내부 네트워크에서 접근하게 한다. 자체 메트릭 직렬화기나 전송기를
+  만들지 않는다.
 - 애플리케이션 설정은 실제 역방향 프록시와 추적 내보내기의 동작을 증명하지 않는다. 두 경계에서
   경로·쿼리·헤더 삭제 처리를 확인하는 실제 환경 검증은 공개 배포 조건으로 남긴다.
 
@@ -217,8 +226,10 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
 - GitHub Actions는 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만든다. 실제
   이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V6, DB 포함 준비 상태,
-  비루트 실행과 SIGTERM 종료 코드 143을 스모크 검증한다. 같은 외부 구독 세대로 컨테이너를
+  Prometheus 메트릭, 비루트 실행과 SIGTERM 종료 코드 143을 스모크 검증한다. 같은 외부 구독 세대로 컨테이너를
   강제 재생성한 뒤 기존 공개 피드가 계속 `200`인지도 확인한다.
+- 풀 리퀘스트의 이미지는 게시하지 않는다. `main` 푸시는 스모크를 통과한 동일 이미지만 전체 Git
+  커밋 SHA 태그로 GHCR에 게시한다.
 - 같은 스모크는 세대 A의 데이터를 `pg_dump -Fc`로 백업해 아카이브를 확인하고, 애플리케이션을
   중지한 상태에서 세대 B로 먼저 바꾼 뒤 `pg_restore --clean --create --exit-on-error`로 실제
   복원한다. 복원 토큰의 본문 없는 일반 `404`, 대표 계약 픽스처의 최신 변경·취소 재전달,
@@ -251,6 +262,8 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   확인할 수 있다.
 - Cloud Native Buildpacks가 JRE 선택, 계층화와 non-root 이미지를 맡아 수동 Dockerfile과 JRE 조립
   책임을 두지 않는다.
+- Micrometer Prometheus 레지스트리와 Spring Boot 관리 포트 분리가 메트릭 형식과 공개 경계 분리를
+  맡아 자체 내보내기 코드 없이 외부 관측 백엔드를 연결할 수 있다.
 - Gradle 표준 아카이브가 재현 가능한 계약 팩 생성을 맡고 JSON Schema가 언어 중립 경계를 유지해,
   공유 DTO JAR·별도 압축기·자체 체크섬 매니페스트의 중복 책임이 생기지 않는다.
 

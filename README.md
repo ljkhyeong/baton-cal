@@ -65,6 +65,9 @@ CAL이 소유하지 않는다.
   잠금 획득 시간은 `baton.cal.projection.lock.acquire`로 기록한다. 내부 인증 결과는
   `baton.cal.internal.authentication`의 `current`, `previous`, `unauthorized` 세 값만 사용한다.
   토큰·시즌·항목 식별자는 메트릭 태그에 넣지 않는다.
+- Prometheus 형식은 `/actuator/prometheus`에서 제공한다. `prod` 프로필은 관리 서버를 기본
+  `8081` 포트로 분리하며, 공개 역방향 프록시는 이 포트를 노출하지 않고 관측 수집기만 접근하게 한다.
+  포트는 `MANAGEMENT_SERVER_PORT`로 바꿀 수 있다.
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
   하며, 선택적 값을 빈 문자열로 설정하면 시작에 실패한다.
@@ -159,6 +162,7 @@ BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자
 
 - Kotlin 2.3.21, Java 25, Gradle 9.6.1
 - Spring Boot 4.1.0, Spring MVC, `JdbcClient`, Bean Validation
+- Spring Boot Actuator, Micrometer Prometheus
 - PostgreSQL 18.4, Flyway, Testcontainers
 - iCal4j 4.3.0
 
@@ -177,8 +181,10 @@ BATON_CAL_INTERNAL_TOKEN=local-development-internal-token-change-me ./gradlew --
 ```
 
 로컬 기본 공개 기준 URL은 `http://localhost:8080`이다. 기본 상태 확인 엔드포인트는
-`http://localhost:8080/actuator/health`이며 PostgreSQL은 로컬 루프백의 `5432` 포트에만
-바인딩된다. 종료할 때는 다음 명령을 사용한다.
+`http://localhost:8080/actuator/health`, Prometheus 메트릭은
+`http://localhost:8080/actuator/prometheus`이며 PostgreSQL은 로컬 루프백의 `5432` 포트에만
+바인딩된다. `prod` 프로필에서는 상태와 메트릭이 기본 `8081` 관리 포트로 분리된다. 종료할 때는
+다음 명령을 사용한다.
 
 ```shell
 docker compose down
@@ -250,8 +256,8 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ./scripts/smoke-oci-image.sh baton-cal:smoke
 ```
 
-스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V6 적용, DB를 포함한 준비 상태,
-SIGTERM 종료 코드 143을 확인한다. 세대 A를 유지한 채 애플리케이션 컨테이너를 실제로 재생성해
+스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V6 적용, 분리된 관리 포트의 DB 포함 준비 상태와
+Prometheus 메트릭, SIGTERM 종료 코드 143을 확인한다. 세대 A를 유지한 채 애플리케이션 컨테이너를 실제로 재생성해
 기존 공개 피드가 계속 `200`인지 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고
 아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔
 `pg_restore --clean --create --exit-on-error`로 복원한다. 복원된 기존 토큰의 본문 없는 일반 `404`,
@@ -265,8 +271,11 @@ SIGTERM 종료 코드 143을 확인한다. 세대 A를 유지한 채 애플리�
 실제 배포 환경의 복원 훈련을 대신하지 않는다.
 
 GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테스트, 계약 팩과 OCI 이미지를
-만들고 같은 컨테이너 스모크·대표 복원 훈련을 실행한다. 이 검증은 계약 팩의 불변 릴리스,
-레지스트리 게시나 공개 배포 완료를 뜻하지 않는다.
+만들고 같은 컨테이너 스모크·대표 복원 훈련을 실행한다. 풀 리퀘스트에서는 게시하지 않고,
+`main` 푸시에서는 검증한 동일 이미지를
+`ghcr.io/ljkhyeong/baton-cal:{전체 Git 커밋 SHA}`로 게시한다. 가변 `latest` 태그는 만들지 않으며
+배포는 전체 SHA 태그 또는 레지스트리가 반환한 digest를 고정한다. 이 게시 자체는 계약 팩의 불변
+릴리스나 공개 배포 완료를 뜻하지 않는다.
 
 ## 라이선스
 
