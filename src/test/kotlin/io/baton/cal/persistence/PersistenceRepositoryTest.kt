@@ -12,10 +12,13 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
+import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
@@ -147,6 +150,39 @@ class PersistenceRepositoryTest @Autowired constructor(
     }
 
     @Test
+    fun `시간 형태 DB 제약은 대표적인 잘못된 행을 거부한다`() {
+        val invalidRows = listOf(
+            "UTC_POINT의 종료 시각" to utcItem(revision = 0).copy(
+                sourceItemId = UUID.fromString("40000000-0000-0000-0000-000000000004"),
+                timeType = ScheduleTimeType.UTC_POINT,
+            ),
+            "ZONED_LOCAL_POINT의 누락된 시간대" to zonedItem(
+                UUID.fromString("50000000-0000-0000-0000-000000000005"),
+            ).copy(
+                timeType = ScheduleTimeType.ZONED_LOCAL_POINT,
+                endsAtLocal = null,
+                zoneId = null,
+            ),
+            "ALL_DAY의 동일한 시작일과 종료일" to utcItem(revision = 0).copy(
+                sourceItemId = UUID.fromString("60000000-0000-0000-0000-000000000006"),
+                timeType = ScheduleTimeType.ALL_DAY,
+                startsAtInstant = null,
+                endsAtInstant = null,
+                startsOnDate = LocalDate.parse("2026-09-03"),
+                endsOnDate = LocalDate.parse("2026-09-03"),
+            ),
+        )
+
+        invalidRows.forEach { (caseName, row) ->
+            assertThatThrownBy { applyWithSeasonLock(row) }
+                .`as`(caseName)
+                .isInstanceOf(DataIntegrityViolationException::class.java)
+                .rootCause()
+                .hasMessageContaining("ck_calendar_item_time_shape")
+        }
+    }
+
+    @Test
     fun `materialized feed upsert replaces the season representation and validators`() {
         val initial = SeasonFeedProjectionRow(
             seasonId = SEASON_ID,
@@ -265,16 +301,14 @@ class PersistenceRepositoryTest @Autowired constructor(
     }
 
     @Test
-    fun `season projection lock serializes concurrent projection transactions`() {
+    fun `시즌 투영 잠금은 동시 트랜잭션을 직렬화한다`() {
         val acquisitionCountBefore = meterRegistry
             .get("baton.cal.projection.lock.acquire")
             .timer()
             .count()
         val firstHasLock = CountDownLatch(1)
         val allowFirstToCommit = CountDownLatch(1)
-        val secondStarted = CountDownLatch(1)
-        val secondHasLock = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(2)
+        val executor = Executors.newSingleThreadExecutor()
 
         try {
             val first = executor.submit {
@@ -286,23 +320,22 @@ class PersistenceRepositoryTest @Autowired constructor(
             }
             assertThat(firstHasLock.await(5, TimeUnit.SECONDS)).isTrue()
 
-            val second = executor.submit {
-                secondStarted.countDown()
+            assertThatThrownBy {
                 transaction.executeWithoutResult {
+                    jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
                     seasonLockRepository.acquire(SEASON_ID)
-                    secondHasLock.countDown()
                 }
             }
-            assertThat(secondStarted.await(5, TimeUnit.SECONDS)).isTrue()
-            assertThat(secondHasLock.await(250, TimeUnit.MILLISECONDS)).isFalse()
+                .isInstanceOf(CannotAcquireLockException::class.java)
 
             allowFirstToCommit.countDown()
             first.get(5, TimeUnit.SECONDS)
-            assertThat(secondHasLock.await(5, TimeUnit.SECONDS)).isTrue()
-            second.get(5, TimeUnit.SECONDS)
+            transaction.executeWithoutResult {
+                seasonLockRepository.acquire(SEASON_ID)
+            }
             assertThat(
                 meterRegistry.get("baton.cal.projection.lock.acquire").timer().count(),
-            ).isEqualTo(acquisitionCountBefore + 2)
+            ).isEqualTo(acquisitionCountBefore + 3)
         } finally {
             allowFirstToCommit.countDown()
             executor.shutdownNow()
