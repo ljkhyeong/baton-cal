@@ -10,6 +10,27 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 class SnapshotFingerprintTest {
+    private val utcInterval = ScheduleWindow.UtcInstant(
+        start = Instant.parse("2026-09-01T01:00:00Z"),
+        end = Instant.parse("2026-09-01T02:00:00Z"),
+    )
+    private val utcPoint = ScheduleWindow.UtcPoint(
+        at = Instant.parse("2026-09-01T01:00:00Z"),
+    )
+    private val zonedInterval = ScheduleWindow.ZonedLocal(
+        start = LocalDateTime.parse("2026-09-01T10:00:00"),
+        end = LocalDateTime.parse("2026-09-01T11:00:00"),
+        zoneId = "America/New_York",
+    )
+    private val zonedPoint = ScheduleWindow.ZonedLocalPoint(
+        at = LocalDateTime.parse("2026-09-01T10:00:00"),
+        zoneId = "America/New_York",
+    )
+    private val allDay = ScheduleWindow.AllDay(
+        startDate = LocalDate.parse("2026-09-01"),
+        endDate = LocalDate.parse("2026-09-02"),
+    )
+
     @Test
     fun `전달 봉투 필드는 원본 스냅샷 지문을 바꾸지 않는다`() {
         val original = snapshot()
@@ -46,26 +67,6 @@ class SnapshotFingerprintTest {
 
     @Test
     fun `시간 유형과 각 값은 지문을 바꾼다`() {
-        val utcInterval = ScheduleWindow.UtcInstant(
-            start = Instant.parse("2026-09-01T01:00:00Z"),
-            end = Instant.parse("2026-09-01T02:00:00Z"),
-        )
-        val utcPoint = ScheduleWindow.UtcPoint(
-            at = Instant.parse("2026-09-01T01:00:00Z"),
-        )
-        val zonedInterval = ScheduleWindow.ZonedLocal(
-            start = LocalDateTime.parse("2026-09-01T10:00:00"),
-            end = LocalDateTime.parse("2026-09-01T11:00:00"),
-            zoneId = "America/New_York",
-        )
-        val zonedPoint = ScheduleWindow.ZonedLocalPoint(
-            at = LocalDateTime.parse("2026-09-01T10:00:00"),
-            zoneId = "America/New_York",
-        )
-        val allDay = ScheduleWindow.AllDay(
-            startDate = LocalDate.parse("2026-09-01"),
-            endDate = LocalDate.parse("2026-09-02"),
-        )
         val schedulesAndVariants = listOf(
             utcInterval to listOf(
                 utcInterval.copy(start = Instant.parse("2026-09-01T00:59:00Z")),
@@ -97,6 +98,20 @@ class SnapshotFingerprintTest {
         }
         assertThat(schedulesAndVariants.map { (schedule, _) -> scheduleFingerprint(schedule) })
             .doesNotHaveDuplicates()
+    }
+
+    @Test
+    fun `시간 유형별 스냅샷 지문은 기존 저장 형식과 호환된다`() {
+        assertThat(
+            listOf(utcInterval, utcPoint, zonedInterval, zonedPoint, allDay)
+                .map(::scheduleFingerprint),
+        ).containsExactly(
+            "76082ec11744e229d906a005075971a28127a208a97c23f7c7c653d07f826696",
+            "e0094f7aa51258bb2b729dd59575ecdaf984f375521a6eedc0be5d3ea0c299bb",
+            "bd7905a0d44aed92062869c2ae53dd584cc9395a7fc4eae8b3e2a415228b0d71",
+            "b3d52614dac2ab3d30ca3dbcd660001c248a2c712a26f2ecb2c2e2385235ea59",
+            "fefcba4026c38ca774b1e068622967f4c47a18399f9dc28d30b34a5601ac7535",
+        )
     }
 
     private fun scheduleFingerprint(schedule: ScheduleWindow): String =
