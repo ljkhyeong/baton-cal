@@ -3,6 +3,7 @@ package io.baton.cal.web
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.calendar.goldenIcalendarFixture
 import io.baton.cal.persistence.CalendarSubscriptionRepository
+import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.micrometer.observation.tck.TestObservationRegistry
 import io.micrometer.observation.tck.TestObservationRegistryAssert
@@ -11,6 +12,7 @@ import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.clearInvocations
+import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
@@ -36,6 +38,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.UUID
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
@@ -111,6 +114,51 @@ class PublicCalendarContractTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.ETAG, expectedEtag))
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
             .andExpect(content().bytes(golden))
+    }
+
+    @Test
+    fun `메타데이터 조회 뒤 바뀐 투영의 검증 값으로 조건부 요청을 다시 판정한다`() {
+        val credential = createSubscription()
+        val token: String = JsonPath.read(credential, "$.token")
+        val updatedEtag = "\"updated-etag\""
+        val updatedLastModified = Instant.ofEpochSecond(1)
+        doReturn(
+            SeasonFeedProjectionRow(
+                seasonId = UUID.fromString(SEASON_ID),
+                representation = byteArrayOf(1),
+                etag = updatedEtag,
+                lastModified = updatedLastModified,
+            ),
+        ).`when`(subscriptionRepository).findProjectionByActiveTokenHash(
+            ArgumentMatchers.anyString(),
+            eqArg(CREDENTIAL_GENERATION),
+        )
+
+        assertNotModified(
+            token = token,
+            headerName = HttpHeaders.IF_NONE_MATCH,
+            headerValue = updatedEtag,
+            etag = updatedEtag,
+            lastModified = ONE_SECOND_AFTER_EPOCH_HTTP_DATE,
+        )
+    }
+
+    @Test
+    fun `메타데이터 조회 뒤 자격 증명이 무효화되면 본문 없는 404를 반환한다`() {
+        val credential = createSubscription()
+        val token: String = JsonPath.read(credential, "$.token")
+        doReturn(null).`when`(subscriptionRepository).findProjectionByActiveTokenHash(
+            ArgumentMatchers.anyString(),
+            eqArg(CREDENTIAL_GENERATION),
+        )
+
+        mockMvc.perform(
+            get("/calendars/v1/{token}.ics", token)
+                .header(HttpHeaders.IF_NONE_MATCH, "\"stale-etag\""),
+        )
+            .andExpect(status().isNotFound)
+            .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
+            .andExpect(content().bytes(byteArrayOf()))
     }
 
     @Test
@@ -248,6 +296,7 @@ class PublicCalendarContractTest @Autowired constructor(
         const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "11111111-1111-1111-1111-111111111111"
         const val EPOCH_HTTP_DATE = "Thu, 01 Jan 1970 00:00:00 GMT"
+        const val ONE_SECOND_AFTER_EPOCH_HTTP_DATE = "Thu, 01 Jan 1970 00:00:01 GMT"
         const val CONTENT_DISPOSITION = "inline; filename=\"baton-calendar.ics\""
         val RESTORED_CREDENTIAL_GENERATION: UUID =
             UUID.fromString("10000000-0000-0000-0000-000000000001")
