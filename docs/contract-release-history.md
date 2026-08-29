@@ -32,7 +32,7 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 | 예정 태그 | `contracts-v1.1.0-rc.1` |
 | 자산 | `baton-cal-contracts-1.1.0-rc.1.zip` |
 | 변경 의미 | JSON 구조 제한, `prod` 데이터베이스 기본값 차단, 표현 변경 검증 값 전진, 재활성화·500 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`, iCal4j 4.3.0 단일 시간대 규칙 권위 회귀 검증 |
-| 상태 | 로컬 77개 기본 테스트·실행 JAR·계약 ZIP과 별도 투영 부하 테스트 검증 완료, 미게시, BATON 미고정 |
+| 상태 | 로컬 기본 테스트·실행 JAR·계약 ZIP과 별도 투영 부하 테스트 검증 완료, 미게시, BATON 미고정 |
 
 이 후보가 게시되고 BATON 교차 서비스 테스트를 통과하기 전까지 생산자 기준은 `1.0.0`이다.
 
@@ -49,8 +49,8 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 ## 문서와 버전 관리 원칙
 
 - `contracts/VERSION`이 계약 버전과 ZIP 파일명, 릴리스 태그의 단일 원천이다.
-- `contracts/**`와 PRD-0002는 계약 ZIP에 포함된다. 이 파일을 바꾸면 문구만 고쳐도 새 계약
-  바이트가 되므로 버전을 올리고 새 자산과 태그를 게시한다.
+- 루트 `LICENSE`, `contracts/**`와 PRD-0002는 계약 ZIP에 포함된다. 이 파일을 바꾸면 문구만
+  고쳐도 새 계약 바이트가 되므로 버전을 올리고 새 자산과 태그를 게시한다.
 - 이미 게시된 ZIP 안의 README와 PRD는 해당 릴리스가 만들어진 시점의 스냅샷이다. 게시 뒤의 현재
   고정 상태와 검증 결과는 이 문서에서 갱신한다.
 - CI의 `upload-artifact` 자산은 변경 검토용 임시 파일이다. BATON은 GitHub의 불변 릴리스 자산과

@@ -83,6 +83,7 @@ tasks.register<Zip>("contractsZip") {
     archiveVersion.set(contractsVersion)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
 
+    from(layout.projectDirectory.file("LICENSE"))
     from(layout.projectDirectory.dir("contracts")) {
         into("contracts")
     }

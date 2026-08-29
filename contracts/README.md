@@ -90,6 +90,7 @@ Gradle 표준 `Zip` 작업으로 생성한다.
 
 `build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`에는 다음 기준만 들어간다.
 
+- `LICENSE`: 계약 팩 복제·재배포 조건을 설명하는 MIT 라이선스
 - `contracts/**`: JSON Schema, 예시, 정규 iCalendar 골든과 이 안내서
 - `docs/PRD/0002_mvp-contract/spec.md`: JSON Schema로 표현하지 못하는 필드 간 의미, HTTP 상태,
   토큰과 iCalendar 규칙

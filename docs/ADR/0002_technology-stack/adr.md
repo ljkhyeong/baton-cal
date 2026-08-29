@@ -134,10 +134,11 @@ run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpac
 
 언어 중립 계약 버전의 단일 원천은 `contracts/VERSION`이다. Gradle 표준 `Zip` 작업
 `contractsZip`은 이 값에서 `baton-cal-contracts-{version}.zip`을 만든다. ZIP은 `contracts/**`
-전체와 JSON Schema 밖의 필드 간 의미, HTTP 상태, 토큰·iCalendar 규칙을 소유하는 PRD-0002만
-포함한다. ZIP 내부 `contracts/VERSION`, 파일명의 버전과 `contracts-v{version}` 태그는 같은
-버전을 가리킨다. Gradle 표준 아카이브 기본값이 파일 시각을 보존하지 않고 재현 가능한 항목 순서와
-디렉터리 `0755`·파일 `0644` 권한을 적용해 같은 입력에서 같은 ZIP 바이트를 만든다.
+전체, 루트 MIT `LICENSE`와 JSON Schema 밖의 필드 간 의미, HTTP 상태, 토큰·iCalendar 규칙을
+소유하는 PRD-0002만 포함한다. ZIP 내부 `contracts/VERSION`, 파일명의 버전과
+`contracts-v{version}` 태그는 같은 버전을 가리킨다. Gradle 표준 아카이브 기본값이 파일 시각을
+보존하지 않고 재현 가능한 항목 순서와 디렉터리 `0755`·파일 `0644` 권한을 적용해 같은 입력에서
+같은 ZIP 바이트를 만든다.
 
 GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` 보존을 요청하는 변경
 검토용 임시 배포 경계다. 실제 만료는 저장소·조직 정책을 따른다. 안정적인 생산자 의존성은 릴리스

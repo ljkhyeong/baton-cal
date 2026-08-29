@@ -407,7 +407,7 @@ Jackson 파서에서 먼저 적용한다. 어느 자원 상한이든 초과하�
     예고 없는 추가도 실패로 처리한다. 예상 밖 `500`은 고정 응답을 반환하고 예외 메시지의 비밀값을
     응답과 애플리케이션 로그에 남기지 않는다.
 17. `contracts/VERSION`의 `1.1.0-rc.1`을 단일 버전 원천으로 사용해 Gradle 표준 `contractsZip`
-    작업이 `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
+    작업이 루트 `LICENSE`, `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
     `baton-cal-contracts-1.1.0-rc.1.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
     후보 태그 `contracts-v1.1.0-rc.1`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
     않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
@@ -450,9 +450,9 @@ Bearer는 현재 값과 회전 창의 선택적 이전 값만 허용하고, 공�
 스모크는 `pg_dump -Fc` 아카이브와
 `pg_restore --clean --create --exit-on-error` 실제 복원, 시작 전 세대 교체, 복원 토큰의 일반
 `404`, 대표 최신 변경·취소 재전달 뒤 새 토큰의 취소 피드까지 실행한다. Gradle은
-`contracts/VERSION`의 `1.1.0-rc.1`을 단일 원천으로 사용해 `contracts/**`와 이 PRD를 같은 입력에서
-같은 바이트가 되는 `baton-cal-contracts-1.1.0-rc.1.zip`으로 만들며, GitHub Actions는
-`retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
+`contracts/VERSION`의 `1.1.0-rc.1`을 단일 원천으로 사용해 루트 `LICENSE`, `contracts/**`와 이
+PRD를 같은 입력에서 같은 바이트가 되는 `baton-cal-contracts-1.1.0-rc.1.zip`으로 만들며,
+GitHub Actions는 `retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
 이 임시 산출물은 안정적인 BATON 의존성이 아니다. 안정 버전 `1.0.0`은 불변
 `1.0.0-rc.2` 계약을 고정한 BATON 운영 직렬화기와 실제 CAL 컨테이너 교차 서비스 테스트가
 계약 의미 변경 없이 통과한 뒤 승격했다.

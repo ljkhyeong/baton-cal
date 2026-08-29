@@ -217,10 +217,10 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 따라서 결과는
 `build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`이고, ZIP 안에도 같은
 `contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.1`이며 파일명, ZIP 내부
-버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 `contracts/**` 전체와 필드 간 의미, HTTP 상태,
-토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다. 파일 시각과 항목
-순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나 수동
-체크섬·매니페스트를 유지하지 않는다.
+버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 루트 `LICENSE`, `contracts/**` 전체와 필드 간
+의미, HTTP 상태, 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다.
+파일 시각과 항목 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나
+수동 체크섬·매니페스트를 유지하지 않는다.
 
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
