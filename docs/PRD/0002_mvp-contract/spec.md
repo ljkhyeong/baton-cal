@@ -415,7 +415,8 @@ Jackson 파서에서 먼저 적용한다. 어느 자원 상한이든 초과하�
     작업이 루트 `LICENSE`, `contracts/**`와 이 PRD를 파일 시각·항목 순서·권한이 고정된
     `baton-cal-contracts-1.1.0-rc.1.zip`으로 만든다. ZIP 내부 `contracts/VERSION`, 파일명과
     후보 태그 `contracts-v1.1.0-rc.1`은 같은 버전을 가리킨다. 별도 체크섬이나 자체 매니페스트는 만들지
-    않는다. GitHub Actions는 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
+    않는다. `verifyContractsZip`은 실제 ZIP의 파일명, 내부 버전과 포함 파일 목록을 검증한다. GitHub
+    Actions는 이 작업을 통과한 ZIP만 `retention-days: 90` 보존을 요청하는 변경 검토용 임시 산출물로
     업로드하며, 실제 만료는 저장소·조직 정책을 따른다.
 18. PostgreSQL 잠금 대기 5초, SQL 실행과 Spring 트랜잭션 30초를 운영 안전 기본값으로 적용한다.
     잠금·SQL·트랜잭션 제한 시간 초과는 고정된 `503 SERVICE_BUSY` 응답과 `Retry-After: 1`로
@@ -457,7 +458,8 @@ Bearer는 현재 값과 회전 창의 선택적 이전 값만 허용하고, 공�
 `404`, 대표 최신 변경·취소 재전달 뒤 새 토큰의 취소 피드까지 실행한다. Gradle은
 `contracts/VERSION`의 `1.1.0-rc.1`을 단일 원천으로 사용해 루트 `LICENSE`, `contracts/**`와 이
 PRD를 같은 입력에서 같은 바이트가 되는 `baton-cal-contracts-1.1.0-rc.1.zip`으로 만들며,
-GitHub Actions는 `retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
+실제 ZIP의 파일명, 내부 버전과 포함 파일 목록을 검증한다. GitHub Actions는 검증을 통과한 ZIP에
+`retention-days: 90`으로 변경 검토용 보존을 요청한다. 실제 만료는 저장소·조직 정책을 따르며,
 이 임시 산출물은 안정적인 BATON 의존성이 아니다. 안정 버전 `1.0.0`은 불변
 `1.0.0-rc.2` 계약을 고정한 BATON 운영 직렬화기와 실제 CAL 컨테이너 교차 서비스 테스트가
 계약 의미 변경 없이 통과한 뒤 승격했다.

@@ -138,9 +138,9 @@ run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpac
 `contractsZip`은 이 값에서 `baton-cal-contracts-{version}.zip`을 만든다. ZIP은 `contracts/**`
 전체, 루트 MIT `LICENSE`와 JSON Schema 밖의 필드 간 의미, HTTP 상태, 토큰·iCalendar 규칙을
 소유하는 PRD-0002만 포함한다. ZIP 내부 `contracts/VERSION`, 파일명의 버전과
-`contracts-v{version}` 태그는 같은 버전을 가리킨다. Gradle 표준 아카이브 기본값이 파일 시각을
-보존하지 않고 재현 가능한 항목 순서와 디렉터리 `0755`·파일 `0644` 권한을 적용해 같은 입력에서
-같은 ZIP 바이트를 만든다.
+`contracts-v{version}` 태그는 같은 버전을 가리킨다. Gradle 아카이브 설정으로 파일 시각 비보존,
+재현 가능한 항목 순서와 디렉터리 `0755`·파일 `0644` 권한을 명시해 같은 입력에서 같은 ZIP 바이트를
+만든다. `verifyContractsZip`은 생성된 ZIP의 파일명, 내부 버전과 포함 파일 목록을 직접 검증한다.
 
 GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` 보존을 요청하는 변경
 검토용 임시 배포 경계다. 실제 만료는 저장소·조직 정책을 따른다. 안정적인 생산자 의존성은 릴리스
@@ -152,6 +152,11 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 `contracts/VERSION`을 안정 버전으로 올려 새 ZIP과 태그를 만들고, 의미 변경이 필요하면 게시된
 사전 릴리스를 교체하지 않고 다음 사전 릴리스를 만든다. CI 산출물만으로 생산자 연동이 완료됐다고
 판단하지 않는다.
+
+이미 게시된 `contracts-v1.0.0` 자산에 루트 `LICENSE`가 빠진 경우 같은 태그와 자산을 교체하지
+않는다. 스키마, 예시, 골든과 PRD 의미를 유지한 `1.0.1` 호환 보완판을 과거 안정 태그에서 별도로
+만들고 BATON이 새 태그·자산·SHA-256을 다시 고정한다. 새 의미를 담은 `1.1.0-rc.1` 검증은 이
+재포장과 분리한다.
 
 서비스 사이에 공유 DTO JAR은 두지 않는다. BATON 구현을 CAL의 Kotlin/JVM 타입과 릴리스 주기에
 결합하지 않고 JSON Schema와 예시를 언어 중립 기준으로 유지하기 위해서다. 별도 압축 스크립트,

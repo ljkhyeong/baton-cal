@@ -82,10 +82,10 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 ## 계약 팩 생성과 배포
 
 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 계약 팩은
-Gradle 표준 `Zip` 작업으로 생성한다.
+Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 
 ```shell
-./gradlew --no-daemon contractsZip
+./gradlew --no-daemon verifyContractsZip
 ```
 
 `build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`에는 다음 기준만 들어간다.
@@ -95,10 +95,11 @@ Gradle 표준 `Zip` 작업으로 생성한다.
 - `docs/PRD/0002_mvp-contract/spec.md`: JSON Schema로 표현하지 못하는 필드 간 의미, HTTP 상태,
   토큰과 iCalendar 규칙
 
-작업은 파일 시각을 보존하지 않고 재현 가능한 항목 순서와 Unix 권한을 고정하므로 같은 입력에서
-같은 ZIP 바이트를 만든다. 계약을 JVM 구현에 결합하는 공유 DTO JAR은 만들지 않는다. 압축, 체크섬이나
-매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과 GitHub Actions가 제공하는
-artifact digest를 사용한다.
+`contractsZip`은 파일 시각을 보존하지 않고 재현 가능한 항목 순서와 디렉터리 `0755`·파일 `0644`
+권한을 명시해 같은 입력에서 같은 ZIP 바이트를 만든다. `verifyContractsZip`은 생성된 ZIP의 파일명,
+내부 버전과 포함 파일 목록이 소스와 같은지 확인한다. 계약을 JVM 구현에 결합하는 공유 DTO JAR은
+만들지 않는다. 압축, 체크섬이나 매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과
+GitHub Actions가 제공하는 artifact digest를 사용한다.
 
 ZIP 내부의 `contracts/VERSION`, 파일명과 후보 태그 `contracts-v1.1.0-rc.1`은 모두 같은 버전을
 가리켜야 한다. 안정 버전은 새 ZIP과 태그로 게시하며, 게시된 RC 파일과 태그를 덮어쓰지 않는다.
@@ -108,13 +109,16 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 임시 CI 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+이 자산에는 루트 `LICENSE`가 없어 계약 의미를 유지한 `1.0.1` 호환 보완판으로 재포장하고 BATON이
+새 태그·자산·SHA-256을 다시 고정할 예정이다.
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화 픽스처,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
 시간대 규칙 권위 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
-게시·검증 이력은
-[계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)이 관리한다.
+게시·검증 이력과 절차는
+[계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
+[계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.
 
 ## 비밀정보 처리
 
@@ -146,10 +150,14 @@ Spring Boot, Kotlin, iCal4j 또는 JSON Schema 검증기 버전은 한 종류씩
 잠금 파일을 갱신하고 계약·캘린더 테스트를 먼저 실행한다.
 
 ```shell
-./gradlew --no-daemon dependencies --write-locks
+./gradlew --no-daemon --write-locks --write-verification-metadata sha256 dependencies
+git diff -- gradle.lockfile gradle/verification-metadata.xml
 ./gradlew --no-daemon test --tests io.baton.cal.contract.ContractArtifactsTest
 ./gradlew --no-daemon test --tests io.baton.cal.calendar.IcsCalendarRendererTest
 ```
+
+잠금 파일은 선택된 버전을, 검증 메타데이터는 실제로 내려받은 플러그인과 의존성 파일의 SHA-256을
+고정한다. 두 파일의 변경이 의도한 의존성과 전이 의존성에만 해당하는지 확인한 뒤 테스트한다.
 
 골든이 달라지면 테스트에서 자동 덮어쓰지 않는다. 후보 `.ics`를 임시 위치에 생성해 속성·컴포넌트
 순서, TEXT 재파싱 결과, TZID·VTIMEZONE, UTF-8 물리 줄 길이와 ETag 변화를 검토한다. 의도한

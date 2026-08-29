@@ -2,7 +2,8 @@
 
 이 문서는 BATON이 고정할 계약 자산의 현재 게시 상태와 이력을 관리한다. 계약 의미의 기준은
 [PRD-0002](PRD/0002_mvp-contract/spec.md), 기계 판독형 형식은
-[계약 팩](../contracts/README.md), 다음 개발 작업은 [HANDOFF](../HANDOFF.md)가 맡는다.
+[계약 팩](../contracts/README.md), 게시 명령은 [계약 릴리스 절차](contract-release-procedure.md),
+다음 개발 작업은 [HANDOFF](../HANDOFF.md)가 맡는다.
 
 ## 현재 생산자 기준
 
@@ -23,6 +24,20 @@ gh release verify contracts-v1.0.0
 gh release download contracts-v1.0.0 --pattern baton-cal-contracts-1.0.0.zip
 gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 ```
+
+## 호환 보완 예정
+
+| 항목 | 값 |
+| --- | --- |
+| 버전 | `1.0.1` |
+| 예정 태그 | `contracts-v1.0.1` |
+| 자산 | `baton-cal-contracts-1.0.1.zip` |
+| 변경 범위 | `1.0.0`의 스키마·예시·골든·PRD 의미를 유지하고 루트 MIT `LICENSE`와 새 버전 표식만 추가 |
+| 상태 | 준비 절차와 릴리스 노트 작성 완료, 미게시, BATON 미고정 |
+
+불변 `1.0.0` 자산에는 루트 `LICENSE`가 없다. 같은 태그를 교체하지 않고 과거 안정 태그에서
+`1.0.1`을 별도로 재포장한다. BATON은 게시된 태그·자산·SHA-256으로 다시 고정하고 생산자 계약
+테스트를 실행해야 한다.
 
 ## 다음 검토 후보
 

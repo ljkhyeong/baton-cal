@@ -194,7 +194,7 @@ docker compose down
 Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로 실행한다.
 
 ```shell
-./gradlew --no-daemon test bootJar
+./gradlew --no-daemon test bootJar verifyContractsZip
 ./gradlew --no-daemon projectionLoadTest
 ```
 
@@ -209,10 +209,10 @@ Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로
 취소 뒤 더 높은 개정 번호로 재활성화하고 같은 UID의 `SEQUENCE`와 `STATUS`를 확인한다. 예상 밖
 `500` 응답은 고정 형식이며 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는다.
 
-BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
+BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실제 산출물을 검증한다.
 
 ```shell
-./gradlew --no-daemon contractsZip
+./gradlew --no-daemon verifyContractsZip
 ```
 
 계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 따라서 결과는
@@ -221,7 +221,8 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만든다.
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 루트 `LICENSE`, `contracts/**` 전체와 필드 간
 의미, HTTP 상태, 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다.
 파일 시각과 항목 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나
-수동 체크섬·매니페스트를 유지하지 않는다.
+수동 체크섬·매니페스트를 유지하지 않는다. 검증 작업은 생성된 ZIP의 파일명, 내부 버전과 포함 파일
+목록이 소스와 같은지 확인한다.
 
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
@@ -232,8 +233,10 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 `baton-cal-contracts-1.0.0.zip`의 SHA-256은
 `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
 릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 생산자 계약 테스트를
-완료했다. 사전 릴리스 이력과 다음 버전 규칙은 [계약 릴리스 현황](docs/contract-release-history.md)에
-정리한다.
+완료했다. 이 자산에는 루트 `LICENSE`가 없으므로 계약 의미를 유지한 `1.0.1` 호환 보완판으로
+재포장해 BATON 고정을 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
+[계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
+[계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 
 `1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 또한 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
