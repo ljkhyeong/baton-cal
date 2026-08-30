@@ -27,7 +27,7 @@ BATON CAL MVP는 다음 특성을 가진다.
   라이브러리를 우선한다. 시간, 암호화, URI, 네트워크와 UUID처럼 Kotlin 표준 라이브러리가
   소유하지 않는 JVM 기능은 JDK API를 사용한다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
-- Spring Boot 4.1.0과 동기식 Spring MVC를 쓴다.
+- Spring Boot 4.1.1과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
 - Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
   16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
