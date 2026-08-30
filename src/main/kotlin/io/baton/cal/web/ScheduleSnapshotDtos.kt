@@ -144,11 +144,7 @@ private fun strictDateTimeFormatter(
     withOffset: Boolean = false,
 ): DateTimeFormatter = DateTimeFormatterBuilder()
     .apply { if (caseInsensitive) parseCaseInsensitive() }
-    .appendValue(ChronoField.YEAR, 4)
-    .appendLiteral('-')
-    .appendValue(ChronoField.MONTH_OF_YEAR, 2)
-    .appendLiteral('-')
-    .appendValue(ChronoField.DAY_OF_MONTH, 2)
+    .append(LOCAL_DATE_FORMATTER)
     .appendLiteral('T')
     .appendValue(ChronoField.HOUR_OF_DAY, 2)
     .appendLiteral(':')
