@@ -211,20 +211,31 @@ class IcsCalendarRendererTest {
     }
 
     @Test
-    fun `입력 순서와 무관하게 이벤트 바이트 순서가 안정적이다`() {
+    fun `입력 순서와 무관하게 UID 사전순의 바이트와 ETag를 유지한다`() {
         val laterId = item(
             sourceItemId = "ffffffff-ffff-ffff-ffff-ffffffffffff",
             summary = "나중 일정",
+        )
+        val middleId = item(
+            sourceItemId = "00000000-0000-0000-8000-000000000000",
+            summary = "중간 일정",
         )
         val earlierId = item(
             sourceItemId = "00000000-0000-0000-0000-000000000001",
             summary = "먼저 일정",
         )
 
-        val first = renderer.render(seasonId, listOf(laterId, earlierId))
-        val second = renderer.render(seasonId, listOf(earlierId, laterId))
+        val first = renderer.render(seasonId, listOf(laterId, middleId, earlierId))
+        val second = renderer.render(seasonId, listOf(earlierId, middleId, laterId))
 
         assertThat(first.bytes).isEqualTo(second.bytes)
+        assertThat(first.etag).isEqualTo(second.etag)
+        assertThat(first.bytes.parseIcalendar().events().map { it.requiredPropertyValue(Property.UID) })
+            .containsExactly(
+                "${earlierId.sourceItemId}@cal.baton",
+                "${middleId.sourceItemId}@cal.baton",
+                "${laterId.sourceItemId}@cal.baton",
+            )
     }
 
     @Test
