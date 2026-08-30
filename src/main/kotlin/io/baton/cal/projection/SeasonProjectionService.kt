@@ -35,7 +35,7 @@ class SeasonProjectionService(
     private val projectionRepository: SeasonFeedProjectionRepository,
     private val renderer: IcsCalendarRenderer,
     private val clock: Clock,
-    private val meterRegistry: MeterRegistry,
+    meterRegistry: MeterRegistry,
 ) {
     private val rebuildTimer: Timer = Timer.builder("baton.cal.projection.rebuild")
         .description("시즌 피드 전체 재구축 시간")

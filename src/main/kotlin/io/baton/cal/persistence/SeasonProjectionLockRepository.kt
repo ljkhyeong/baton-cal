@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional
 @Repository
 class SeasonProjectionLockRepository(
     private val jdbcClient: JdbcClient,
-    private val meterRegistry: MeterRegistry,
+    meterRegistry: MeterRegistry,
 ) {
     private val acquisitionTimer: Timer = Timer.builder("baton.cal.projection.lock.acquire")
         .description("시즌 투영 잠금 획득 시간")
