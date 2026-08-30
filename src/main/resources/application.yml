@@ -54,3 +54,4 @@ baton:
   cal:
     internal-token: ${BATON_CAL_INTERNAL_TOKEN}
     public-base-url: ${BATON_CAL_PUBLIC_BASE_URL:http://localhost:8080}
+    recovery-mode: ${BATON_CAL_RECOVERY_MODE:false}

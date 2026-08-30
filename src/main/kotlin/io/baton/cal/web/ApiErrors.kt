@@ -33,3 +33,9 @@ class InternalResourceNotFoundException(message: String) : ApiException(
     code = "RESOURCE_NOT_FOUND",
     message = message,
 )
+
+class RecoveryInProgressException : ApiException(
+    status = HttpStatus.SERVICE_UNAVAILABLE,
+    code = "RECOVERY_IN_PROGRESS",
+    message = "subscription issuance is disabled during recovery",
+)

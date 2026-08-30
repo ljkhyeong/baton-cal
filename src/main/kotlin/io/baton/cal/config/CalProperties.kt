@@ -11,6 +11,7 @@ class CalProperties(
     val publicBaseUrl: URI = URI.create("http://localhost:8080"),
     val previousInternalToken: String? = null,
     subscriptionGeneration: String = DEFAULT_SUBSCRIPTION_GENERATION.toString(),
+    val recoveryMode: Boolean = false,
 ) {
     val subscriptionGeneration: UUID = StandardUuid.parse(subscriptionGeneration)
 

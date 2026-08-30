@@ -11,7 +11,7 @@
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
-| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json` |
+| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json`, `examples/api-error.recovery-in-progress.json` |
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
@@ -72,9 +72,16 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 별도 MVC 회귀 테스트로 확인한다.
 
 데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
-`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 호출자는 같은 요청을 즉시 반복하지 않고
+`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
 `Retry-After` 이후 재시도한다. 스냅샷 수신의 이벤트 식별자와 원본 개정 번호 계약은 이 재시도가
 중복으로 도착해도 같은 결과를 보장한다.
+
+`BATON_CAL_RECOVERY_MODE=true`이면 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`를 반환하고
+토큰을 발급하지 않는다. 일정 수신·재구축·폐기와 공개 조회는 기존 계약을 유지한다. 복구 완료 시각을
+알 수 없으므로 `Retry-After`는 없으며, 운영자가 최신 전체 스냅샷과 필요한 취소의 재전달 완료를
+확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. 응답 유실 시 자동 재시도하거나 같은
+토큰을 다시 받는 계약은 추가하지 않는다. 이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
+응답을 같은 스키마에 검증한다.
 
 이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 안정 버전 `1.0.0`은 사전 릴리스
 `1.0.0-rc.2`를 고정한 BATON 생산자 테스트와 실제 CAL 컨테이너 교차 서비스 테스트로 운영

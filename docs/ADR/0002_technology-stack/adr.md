@@ -175,6 +175,12 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   `BATON_CAL_SUBSCRIPTION_GENERATION`을 명시적으로 요구한다. UUID 문자열은 Kotlin의
   `Uuid.parseHexDashOrNull`로 36자 표준 형식을 검사하고 NIL 여부는 설정 경계에서 한 번만 검증한다.
   별도 UUID 생성 로직은 애플리케이션에 두지 않는다.
+- 복구 모드는 기본 `false`인 `recoveryMode`를 `BATON_CAL_RECOVERY_MODE`에서 Spring Boot 설정
+  바인딩으로 읽는다. 구독 서비스의 생성·회전 진입점에서만 검사하고 기존 `ApiException` 처리로
+  `503 RECOVERY_IN_PROGRESS`를 반환한다. 복원되는 DB에는 모드를 저장하지 않으며 별도 필터,
+  상태 관리 테이블이나 자동 해제 작업은 두지 않는다. 수신·재구축·폐기·공개 조회와 readiness는
+  유지한다. 복원 전 모든 인스턴스를 중지하고 새 구독 세대와 모드를 적용하며, 운영자가 전체
+  재전달 완료를 확인한 뒤 같은 세대를 유지한 채 모드만 해제해 모든 인스턴스를 재시작한다.
 - 공개 피드 URL의 기준 주소는 타입이 지정된 `publicBaseUrl` 설정으로 주입한다. 외부 또는
   비루프백 주소는 HTTPS만 허용하고 루프백 HTTP는 로컬 개발에서만 허용한다.
 - `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시적으로 요구하며 HTTPS가 아니면 시작을
@@ -298,9 +304,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   검토해야 한다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤
   버전이 일치하는 태그와 검증 가능한 GitHub 릴리스 자산을 별도로 운영해야 한다.
-- CAL은 BATON 전체 재전달 완료를 판단하는 매니페스트나 완료 신호가 없어 재생 전 create·rotate를
-  자동 차단하지 않는다. 해당 계약을 추가하기 전에는 BATON 또는 운영 오케스트레이션이 절차 순서를
-  보장해야 한다.
+- CAL은 BATON 전체 재전달 완료를 판단하는 매니페스트나 완료 신호가 없다. 복구 모드를 켜면
+  create·rotate를 차단하지만, 모드 설정과 전체 재전달 완료 확인 뒤의 해제는 BATON 또는 운영
+  오케스트레이션이 보장해야 한다.
 
 ## 보류한 대안
 

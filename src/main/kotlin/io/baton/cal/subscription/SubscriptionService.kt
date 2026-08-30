@@ -8,6 +8,7 @@ import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.web.InternalResourceNotFoundException
+import io.baton.cal.web.RecoveryInProgressException
 import io.baton.cal.web.SnapshotConflictException
 import io.baton.cal.web.SubscriptionCredential
 import org.springframework.stereotype.Service
@@ -25,6 +26,7 @@ class SubscriptionService(
 ) {
     @Transactional
     fun create(seasonId: UUID): SubscriptionCredential {
+        ensureCredentialIssuanceAllowed()
         projectionService.ensureProjection(seasonId)
         val token = tokenCodec.generate()
         val subscriptionId = UUID.randomUUID()
@@ -42,6 +44,7 @@ class SubscriptionService(
 
     @Transactional
     fun rotate(subscriptionId: UUID): SubscriptionCredential {
+        ensureCredentialIssuanceAllowed()
         val current = repository.findById(subscriptionId)
             ?.takeIf { it.status == CalendarSubscriptionStatus.ACTIVE }
             ?: throw InternalResourceNotFoundException("active subscription was not found")
@@ -92,6 +95,10 @@ class SubscriptionService(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,
         )
+
+    private fun ensureCredentialIssuanceAllowed() {
+        if (properties.recoveryMode) throw RecoveryInProgressException()
+    }
 
     private fun feedUri(token: String): URI = UriComponentsBuilder
         .fromUri(properties.publicBaseUrl)
