@@ -45,12 +45,17 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
-    fun `UUID 필드는 36자 표준 문자열만 허용한다`() {
+    fun `UUID 필드는 대소문자를 구분하지 않는 36자 표준 문자열만 허용한다`() {
+        assertApplied(utcSnapshot(eventId = "01234567-89AB-CDEF-0123-456789ABCDEF"))
+
         listOf(
             "AAAAAAAAAAAAAAAAAAAAAA",
             "AAAAAAAAAAAAAAAAAAAAAA==",
             "1-1-1-1-1",
             "00000000-00000-000-0000-000000000000",
+            "0123456789abcdef0123456789abcdef",
+            " 01234567-89ab-cdef-0123-456789abcdef",
+            "01234567-89ab-cdef-0123-456789abcdef ",
         ).forEach { invalidUuid ->
             assertInvalid(utcSnapshot(eventId = invalidUuid))
         }

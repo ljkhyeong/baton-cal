@@ -23,9 +23,9 @@ BATON CAL MVP는 다음 특성을 가진다.
 ### 애플리케이션 실행 환경
 
 - Kotlin/JVM 2.4.10과 Gradle 9.7.1 Kotlin DSL을 쓴다.
-- 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수와 파일 편의 기능에는 Kotlin 표준
-  라이브러리를 우선한다. 시간, 암호화, URI, 네트워크와 UUID처럼 Kotlin 표준 라이브러리가
-  소유하지 않는 JVM 기능은 JDK API를 사용한다.
+- 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수, UUID 문자열 파싱과 파일 편의 기능에는
+  Kotlin 표준 라이브러리를 우선한다. 시간, 암호화, URI와 네트워크 등 필요한 JVM 기능은 JDK API를
+  사용한다. JDBC·Spring에 전달하는 UUID는 `java.util.UUID` 타입을 유지한다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
 - Spring Boot 4.1.1과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
@@ -172,8 +172,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
-  `BATON_CAL_SUBSCRIPTION_GENERATION`을 명시적으로 요구한다. UUID 형식과 NIL 여부는 Java UUID
-  타입과 설정 경계에서 한 번만 검증하며 별도 생성 로직을 애플리케이션에 두지 않는다.
+  `BATON_CAL_SUBSCRIPTION_GENERATION`을 명시적으로 요구한다. UUID 문자열은 Kotlin의
+  `Uuid.parseHexDashOrNull`로 36자 표준 형식을 검사하고 NIL 여부는 설정 경계에서 한 번만 검증한다.
+  별도 UUID 생성 로직은 애플리케이션에 두지 않는다.
 - 공개 피드 URL의 기준 주소는 타입이 지정된 `publicBaseUrl` 설정으로 주입한다. 외부 또는
   비루프백 주소는 HTTPS만 허용하고 루프백 HTTP는 로컬 개발에서만 허용한다.
 - `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시적으로 요구하며 HTTPS가 아니면 시작을
