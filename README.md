@@ -157,6 +157,18 @@ BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자
 `RECOVERY_IN_PROGRESS`에는 완료 시각을 추측한 `Retry-After`를 넣지 않는다. 생성·회전 호출자는
 모드 해제를 확인한 뒤 명시적으로 다시 요청하며 응답 유실을 이유로 자동 재시도하지 않는다.
 
+### 내부 상태 조회
+
+내부 Bearer 인증으로 다음 상태를 조회할 수 있다. 성공 응답은 `Cache-Control: no-store`이며
+복구 모드에서도 동작한다.
+
+- `GET /internal/api/v1/calendar-items/{sourceItemId}`: CAL이 채택한 개정 번호, 일정 상태와 원본 수정 시각.
+- `GET /internal/api/v1/subscriptions/{subscriptionId}`: 구독 상태와 현재 인스턴스의 구독 세대 일치 여부.
+
+취소 일정과 폐기된 구독도 조회할 수 있다. 응답에는 토큰·해시·피드 URL·세대 UUID를 넣지 않는다.
+BATON 전체 재전달 완료나 접근 권한을 증명하는 API는 아니며, 유실된 토큰도 복구하지 않는다.
+필드와 오류의 기준은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)의 HTTP 경로 절을 따른다.
+
 ## 문서
 
 - [제품 기준](docs/PRD/0001_product-baseline/spec.md)
@@ -212,8 +224,8 @@ Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로
 
 ## 계약 팩 검증과 배포
 
-실제 Spring MVC 응답은 MockMvc로 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류를
-실행한 뒤 각 v1 JSON Schema에 직접 대조한다. 따라서 예제 파일뿐 아니라 컨트롤러의 실제
+실제 Spring MVC 응답은 MockMvc로 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·회전,
+투영 재구축과 공통 오류를 실행한 뒤 각 v1 JSON Schema에 직접 대조한다. 따라서 예제 파일뿐 아니라 컨트롤러의 실제
 직렬화 결과도 `additionalProperties: false`를 포함한 응답 계약을 따라야 한다. 시간대 일정은
 취소 뒤 더 높은 개정 번호로 재활성화하고 같은 UID의 `SEQUENCE`와 `STATUS`를 확인한다. 예상 밖
 `500` 응답은 고정 형식이며 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는다.
@@ -253,8 +265,8 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 로컬 기본값을 상속하지 않게 한다. 또한 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일 시간대
-규칙 권위 회귀 검증을 포함한 다음 검토 후보다. 아직 게시하거나 BATON 생산자 기준으로 고정하지
-않았으므로 현재 운영 기준은 계속 `1.0.0`이다.
+규칙 권위 회귀 검증, 복구 모드의 발급 차단과 내부 상태 조회를 포함한 다음 검토 후보다.
+아직 게시하거나 BATON 생산자 기준으로 고정하지 않았으므로 현재 운영 기준은 계속 `1.0.0`이다.
 
 ## OCI 이미지 검증
 
