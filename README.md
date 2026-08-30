@@ -192,6 +192,11 @@ BATON의 `BATON_CAL_SEASON_METADATA_MAINTENANCE`는 기본 `OFF`다. `BACKFILL`�
 뜻하지 않는다. 전체 일정·취소의 재전달 완료 판단, 후보 계약 채택과 실제 캘린더 앱 검증은 남아 있다.
 자세한 제약은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)을 따른다.
 
+BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 복구 키로 보호한
+`PATCH /api/v1/teams/{teamId}/seasons/{seasonId}/name`을 사용한다. CAL에 직접 이름이나 개정 번호를
+만들어 보내지 않고 BATON 이름 아웃박스를 거친다. 같은 시즌의 더 높은 개정이 전달되면 BATON은
+과거 이름 실패를 조치 대상에서 제외하되 실패 이력은 보존한다.
+
 ## 문서
 
 - [제품 기준](docs/PRD/0001_product-baseline/spec.md)
