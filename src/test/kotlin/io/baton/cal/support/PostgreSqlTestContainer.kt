@@ -6,9 +6,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 
 class PostgreSqlTestContainer {
     companion object {
+        const val IMAGE = "postgres:18.6-alpine"
+
         @Container
         @ServiceConnection
         @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
+        val postgres = PostgreSQLContainer(IMAGE)
     }
 }

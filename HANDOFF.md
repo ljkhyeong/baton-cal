@@ -34,8 +34,8 @@
   GitHub Actions와 Docker Compose 갱신은 Dependabot이 매주 제안하도록 구성되어 있다. 과거 계약
   태그에서 갈라진 `release/contracts-` 풀 리퀘스트는 일반 검증과 별도로 정확한 브랜치 HEAD에서
   계약 ZIP을 만들고 검증한다.
-- 시즌 전체 투영 수동 부하 측정은 PostgreSQL 18.4에서 500~10,000개를 각 5회 실행했다. 10,000개는
-  676~689밀리초, 2,459,060바이트였으며 [성능 기준](docs/performance-baseline.md)에 기록했다.
+- 시즌 전체 투영 수동 부하 측정은 PostgreSQL 18.6에서 500~10,000개를 각 5회 실행했다. 10,000개는
+  712~730밀리초, 2,459,060바이트였으며 [성능 기준](docs/performance-baseline.md)에 기록했다.
 - 시간대 지정 현지 시각은 iCal4j 4.3.0 내장 Olson `2025a`의 원문 TZID만 허용한다. DST 공백도
   같은 `VTIMEZONE`에서 만든 규칙으로 판정해 Java 런타임 TZDB와 규칙 권위를 섞지 않는다.
 - 구현 계약과 운영 절차는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md), 기술 선택은

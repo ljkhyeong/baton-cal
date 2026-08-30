@@ -1,6 +1,7 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.config.CalProperties
+import io.baton.cal.support.PostgreSqlTestContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
@@ -200,6 +201,6 @@ class SchemaMigrationTest {
 
         @Container
         @JvmField
-        val postgres = PostgreSQLContainer("postgres:18.4-alpine")
+        val postgres = PostgreSQLContainer(PostgreSqlTestContainer.IMAGE)
     }
 }

@@ -47,7 +47,7 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 영속성
 
-- PostgreSQL 18.4를 유일한 영구 저장소로 쓴다.
+- PostgreSQL 18.6을 유일한 영구 저장소로 쓴다.
 - 스키마 마이그레이션의 유일한 기준은 Flyway다.
 - 영속성 접근에는 Spring `JdbcClient`와 명시적인 SQL을 쓴다.
 - JPA/Hibernate 스키마 생성과 엔티티 수명주기를 사용하지 않는다.

@@ -165,7 +165,7 @@ BATON의 전체 최신 스냅샷 재전달이 끝나기 전에 현재 세대 자
 - Kotlin 2.3.21, Java 25, Gradle 9.6.1
 - Spring Boot 4.1.0, Spring MVC, `JdbcClient`, Bean Validation
 - Spring Boot Actuator, Micrometer Prometheus
-- PostgreSQL 18.4, Flyway, Testcontainers
+- PostgreSQL 18.6, Flyway, Testcontainers
 - iCal4j 4.3.0
 
 ## 로컬 실행
