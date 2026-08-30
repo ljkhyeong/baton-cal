@@ -22,7 +22,7 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 애플리케이션 실행 환경
 
-- Kotlin/JVM 2.4.10과 Gradle 9.6.1 Kotlin DSL을 쓴다.
+- Kotlin/JVM 2.4.10과 Gradle 9.7.1 Kotlin DSL을 쓴다.
 - 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수와 파일 편의 기능에는 Kotlin 표준
   라이브러리를 우선한다. 시간, 암호화, URI, 네트워크와 UUID처럼 Kotlin 표준 라이브러리가
   소유하지 않는 JVM 기능은 JDK API를 사용한다.
