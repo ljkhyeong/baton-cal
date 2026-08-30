@@ -99,16 +99,14 @@ private data class CalendarZone(
 
 private object CalendarTimeZones {
     private val registry = TimeZoneRegistryFactory.getInstance().createRegistry()
-    private val zones = ConcurrentHashMap<String, CalendarZone>()
+    private val zones = ConcurrentHashMap<String, CalendarZone?>()
 
-    fun findExact(zoneId: String): CalendarZone? {
-        zones[zoneId]?.let { return it }
-        val timeZone = registry.getTimeZone(zoneId)?.takeIf { it.id == zoneId } ?: return null
-        val zone = CalendarZone(
+    fun findExact(zoneId: String): CalendarZone? = zones.computeIfAbsent(zoneId) { id ->
+        val timeZone = registry.getTimeZone(id)?.takeIf { it.id == id } ?: return@computeIfAbsent null
+        CalendarZone(
             calendarTimeZone = timeZone,
             zoneRules = ZoneRulesBuilder().vTimeZone(timeZone.vTimeZone).build(),
         )
-        return zones.getOrPut(zoneId) { zone }
     }
 }
 
