@@ -264,6 +264,10 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ./scripts/smoke-oci-image.sh baton-cal:smoke
 ```
 
+스모크의 HTTP 요청은 curl 옵션으로 연결 대기를 2초, 연결을 포함한 전체 요청을 60초로 제한한다.
+readiness 반복 확인은 연결 1초·전체 요청 2초 제한을 사용한다. 구독 생성·회전 POST는
+응답을 받지 못해도 서버에서 처리됐을 수 있으므로 자동 재시도하지 않는다.
+
 스모크는 이미지의 Java 25와 비루트 실행, Flyway V1~V6 적용, 분리된 관리 포트의 DB 포함 준비 상태와
 Prometheus 메트릭, 35초 유예 안의 SIGTERM 정상 종료와 SIGKILL·OOM 미발생을 확인한다. 세대 A를 유지한 채
 애플리케이션 컨테이너를 실제로 재생성해

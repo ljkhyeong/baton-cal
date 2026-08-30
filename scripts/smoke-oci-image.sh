@@ -33,6 +33,7 @@ compose=(
   --project-name "$project_name"
   --file "$compose_file"
 )
+http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
 
 fail() {
   echo "오류: $*" >&2
@@ -131,7 +132,7 @@ wait_for_readiness() {
 assert_prometheus_metrics() {
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --output "$readiness_file" \
       --write-out '%{http_code}' \
       "$management_url/actuator/prometheus"
@@ -166,7 +167,7 @@ post_snapshot() {
   local fixture_name=$1
   local response
   if ! response=$(
-    curl --silent --show-error --fail \
+    "${http_request[@]}" --fail \
       --header "Authorization: Bearer $internal_token" \
       --header 'Content-Type: application/json' \
       --data-binary "@$project_directory/contracts/examples/$fixture_name" \
@@ -184,7 +185,7 @@ assert_public_ok() {
   local token=$1
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --output /dev/null \
       --write-out '%{http_code}' \
       "$base_url/calendars/v1/$token.ics"
@@ -196,7 +197,7 @@ assert_public_not_found() {
   local token=$1
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --dump-header "$response_header_file" \
       --output "$response_body_file" \
       --write-out '%{http_code}' \
@@ -258,7 +259,7 @@ echo "실행 중인 컨테이너 PID 1 비루트 확인: UID $pid1_uid"
 post_snapshot schedule-snapshot.zoned-active-r0.json
 
 if ! initial_credential=$(
-  curl --silent --show-error --fail \
+  "${http_request[@]}" --fail \
     --header "Authorization: Bearer $internal_token" \
     --header 'Content-Type: application/json' \
     --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
@@ -330,7 +331,7 @@ post_snapshot schedule-snapshot.zoned-cancelled.json
 echo "최신 ACTIVE 개정과 CANCELLED 스냅샷 재전달을 완료했습니다."
 
 if ! rotated_credential=$(
-  curl --silent --show-error --fail \
+  "${http_request[@]}" --fail \
     --request POST \
     --header "Authorization: Bearer $internal_token" \
     "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
@@ -341,7 +342,7 @@ token_t2=$(printf '%s' "$rotated_credential" | jq --exit-status --raw-output '.t
 rotated_credential=
 
 final_feed_status=$(
-  curl --silent --show-error \
+  "${http_request[@]}" \
     --output "$feed_file" \
     --write-out '%{http_code}' \
     "$base_url/calendars/v1/$token_t2.ics"
