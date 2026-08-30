@@ -87,6 +87,20 @@ class RecoveryModeHttpTest @Autowired constructor(
 
         ingest("schedule-snapshot.zoned-active-r2.json")
         ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.perform(
+            get("/internal/api/v1/calendar-items/b8ca471a-b228-42fa-8d41-28f05ee90d40")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.revision").value(3))
+            .andExpect(jsonPath("$.status").value("CANCELLED"))
+        mockMvc.perform(
+            get("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.generationMatches").value(true))
         mockMvc.perform(authorizedPost("/internal/api/v1/projections/seasons/$SEASON_ID/rebuild"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.itemCount").value(1))

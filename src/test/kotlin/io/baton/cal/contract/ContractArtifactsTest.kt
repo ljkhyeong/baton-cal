@@ -134,6 +134,9 @@ class ContractArtifactsTest {
                 "api-error.service-busy.json",
                 "api-error.source-revision-conflict.json",
             ),
+            "calendar-item-status.v1.schema.json" to listOf(
+                "calendar-item-status.cancelled.json",
+            ),
             "projection-rebuild-result.v1.schema.json" to listOf(
                 "projection-rebuild-result.json",
             ),
@@ -157,6 +160,9 @@ class ContractArtifactsTest {
             ),
             "subscription-credential.v1.schema.json" to listOf(
                 "subscription-credential.json",
+            ),
+            "subscription-status.v1.schema.json" to listOf(
+                "subscription-status.generation-mismatch.json",
             ),
         )
 

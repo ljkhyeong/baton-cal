@@ -11,6 +11,7 @@ import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.RecoveryInProgressException
 import io.baton.cal.web.SnapshotConflictException
 import io.baton.cal.web.SubscriptionCredential
+import io.baton.cal.web.SubscriptionStatusResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.util.UriComponentsBuilder
@@ -24,6 +25,18 @@ class SubscriptionService(
     private val tokenCodec: SubscriptionTokenCodec,
     private val properties: CalProperties,
 ) {
+    @Transactional(readOnly = true)
+    fun getStatus(subscriptionId: UUID): SubscriptionStatusResponse {
+        val subscription = repository.findById(subscriptionId)
+            ?: throw InternalResourceNotFoundException("구독을 찾을 수 없습니다")
+        return SubscriptionStatusResponse(
+            subscriptionId = subscription.id,
+            seasonId = subscription.seasonId,
+            status = subscription.status,
+            generationMatches = subscription.credentialGeneration == properties.subscriptionGeneration,
+        )
+    }
+
     @Transactional
     fun create(seasonId: UUID): SubscriptionCredential {
         ensureCredentialIssuanceAllowed()

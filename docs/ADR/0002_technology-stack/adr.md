@@ -114,8 +114,8 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 현재 패키지 책임은 다음과 같다.
 
 1. `calendar`: 일정 항목/시간 불변식과 정규 iCalendar 렌더링
-2. `snapshot`: 지문값과 멱등 수신 사용 사례
-3. `subscription`: 토큰 인코딩과 생성/회전/폐기/캘린더 피드 조회 사용 사례
+2. `snapshot`: 지문값, 멱등 수신과 채택한 항목 상태 조회 사용 사례
+3. `subscription`: 토큰 인코딩과 생성/회전/폐기/구독 상태·캘린더 피드 조회 사용 사례
 4. `projection`: 시즌 투영 재구축과 잠금 조정
 5. `persistence`: JdbcClient SQL 행과 리포지토리
 6. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑

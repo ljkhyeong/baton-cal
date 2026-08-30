@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/calendar-item-status.v1.schema.json",
+  "title": "CalendarItemStatusV1",
+  "description": "CAL이 채택한 일정 항목의 현재 상태입니다. BATON 전체 일정의 동기화 완료를 뜻하지 않습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sourceItemId",
+    "seasonId",
+    "revision",
+    "status",
+    "sourceUpdatedAt"
+  ],
+  "properties": {
+    "sourceItemId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "CANCELLED"
+      ]
+    },
+    "sourceUpdatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "채택한 스냅샷의 원본 수정 시각입니다. 마이크로초 정밀도로 저장한 값을 반환하며 CAL 수신 시각이 아닙니다."
+    }
+  }
+}

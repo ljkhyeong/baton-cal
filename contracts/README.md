@@ -8,6 +8,8 @@
 | 경로 | 요청 스키마 | 성공 응답 스키마 | 예시 |
 | --- | --- | --- | --- |
 | `POST /internal/api/v1/schedule-snapshots` | `schemas/schedule-snapshot.v1.schema.json` | `schemas/schedule-snapshot-result.v1.schema.json` | `examples/schedule-snapshot.*.json`, `examples/schedule-snapshot-result.*.json` |
+| `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
+| `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
@@ -16,6 +18,13 @@
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
 `text/calendar` 계약을 따른다.
+
+두 내부 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
+일정 조회는 CAL이 채택한
+개정 번호·상태·원본 수정 시각을, 구독 조회는 저장된 상태와 현재 인스턴스의 구독 세대 일치 여부를
+반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
+반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
+오류는 PRD-0002의 각 경로 계약을 따른다.
 
 ## 기준과 버전 관리
 
@@ -65,8 +74,8 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 검증하고, 최종 피드의 같은 UID가
 `SEQUENCE:4`, `STATUS:CONFIRMED`로 복원되는지 확인한다. 세 시점·종일 예시도 같은 수신 경로로
 실행한다. 기존 전체 HTTP 흐름을 실행하는 `MvpHttpFlowTest`는 같은 스키마 지원 코드를 재사용해
-MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을 각 응답 스키마에
-직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
+MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을
+각 응답 스키마에 직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
 유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다. 예상 밖
 `500`은 고정 오류 응답을 반환하고 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는지
 별도 MVC 회귀 테스트로 확인한다.
@@ -77,8 +86,8 @@ MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공�
 중복으로 도착해도 같은 결과를 보장한다.
 
 `BATON_CAL_RECOVERY_MODE=true`이면 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`를 반환하고
-토큰을 발급하지 않는다. 일정 수신·재구축·폐기와 공개 조회는 기존 계약을 유지한다. 복구 완료 시각을
-알 수 없으므로 `Retry-After`는 없으며, 운영자가 최신 전체 스냅샷과 필요한 취소의 재전달 완료를
+토큰을 발급하지 않는다. 일정 수신·상태 조회·재구축·폐기와 공개 조회는 기존 계약을 유지한다.
+복구 완료 시각을 알 수 없으므로 `Retry-After`는 없으며, 운영자가 최신 전체 스냅샷과 필요한 취소의 재전달 완료를
 확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. 응답 유실 시 자동 재시도하거나 같은
 토큰을 다시 받는 계약은 추가하지 않는다. 이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
 응답을 같은 스키마에 검증한다.
@@ -124,7 +133,8 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 로컬 기본값을 상속하지 않게 한다. 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화 픽스처,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
-시간대 규칙 권위 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
+시간대 규칙 권위 회귀 검증, 복구 모드의 발급 차단과 내부 상태 조회도 포함한 다음 검토 후보이며
+아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.

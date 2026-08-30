@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import kotlin.jvm.optionals.getOrNull
 
 @Repository
 class CalendarItemRepository(
@@ -27,6 +28,19 @@ class CalendarItemRepository(
             else -> CalendarItemApplyOutcome.REVISION_CONFLICT
         }
     }
+
+    fun findBySourceItemId(sourceItemId: UUID): CalendarItemRow? =
+        jdbcClient.sql(
+            """
+            SELECT $COLUMNS
+            FROM calendar_item
+            WHERE source_item_id = :sourceItemId
+            """.trimIndent(),
+        )
+            .param("sourceItemId", sourceItemId)
+            .query(CalendarItemRow::class.java)
+            .optional()
+            .getOrNull()
 
     fun listBySeasonId(seasonId: UUID): List<CalendarItemRow> =
         jdbcClient.sql(

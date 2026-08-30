@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import kotlin.io.path.readText
 import java.nio.file.Path
+import java.util.UUID
 
 private const val PUBLIC_BASE_URL = "https://calendar.example.test"
 
@@ -320,6 +321,8 @@ class MvpHttpFlowTest @Autowired constructor(
     @Test
     fun `내부 경로 UUID는 36자 표준 문자열만 허용한다`() {
         listOf(
+            authorizedGet("/internal/api/v1/calendar-items/1-1-1-1-1"),
+            authorizedGet("/internal/api/v1/subscriptions/1-1-1-1-1"),
             authorizedPost("/internal/api/v1/subscriptions/1-1-1-1-1/rotate"),
             delete("/internal/api/v1/subscriptions/1-1-1-1-1")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN"),
@@ -334,6 +337,110 @@ class MvpHttpFlowTest @Autowired constructor(
                 "api-error.v1.schema.json",
                 result.response.contentAsString,
                 "표준 UUID 형식이 아닌 내부 경로 오류 응답",
+            )
+        }
+    }
+
+    @Test
+    fun `일정 상태 조회는 중복과 역순 수신 뒤에도 채택한 개정 번호를 반환한다`() {
+        val current = utcSnapshot(
+            EVENT_1,
+            revision = 2,
+            summary = "변경된 일정",
+            sourceUpdatedAt = "2026-08-11T00:40:00.123456100Z",
+        )
+        ingest(current, "APPLIED")
+        ingest(current, "DUPLICATE")
+        ingest(utcSnapshot(EVENT_2, revision = 1, summary = "이전 일정"), "STALE")
+
+        val response = mockMvc.perform(authorizedGet("/internal/api/v1/calendar-items/$SOURCE_ITEM_ID"))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.sourceItemId").value(SOURCE_ITEM_ID))
+            .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
+            .andExpect(jsonPath("$.revision").value(2))
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.sourceUpdatedAt").value("2026-08-11T00:40:00.123456Z"))
+            .andReturn().response
+        ContractSchemaSupport.assertValid(
+            "calendar-item-status.v1.schema.json",
+            response.contentAsString,
+            "중복과 역순 수신 뒤 채택한 일정 상태 응답",
+        )
+    }
+
+    @Test
+    fun `구독 상태 조회는 세대 불일치와 회전 및 폐기를 구분하고 비밀 필드를 반환하지 않는다`() {
+        val credential = mockMvc.perform(
+            authorizedPost("/internal/api/v1/subscriptions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"$SEASON_ID"}"""),
+        )
+            .andExpect(status().isCreated)
+            .andReturn().response.contentAsString
+        val subscriptionId: String = JsonPath.read(credential, "$.subscriptionId")
+        jdbcClient.sql("UPDATE calendar_subscription SET credential_generation = :generation WHERE id = :id")
+            .param("generation", UUID.fromString("88888888-8888-8888-8888-888888888888"))
+            .param("id", UUID.fromString(subscriptionId))
+            .update()
+
+        val previousGeneration = mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/$subscriptionId"))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.subscriptionId").value(subscriptionId))
+            .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.generationMatches").value(false))
+            .andReturn().response
+        ContractSchemaSupport.assertValid(
+            "subscription-status.v1.schema.json",
+            previousGeneration.contentAsString,
+            "이전 세대 구독의 비밀 필드 없는 상태 응답",
+        )
+
+        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/$subscriptionId/rotate"))
+            .andExpect(status().isOk)
+        mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/$subscriptionId"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.generationMatches").value(true))
+
+        mockMvc.perform(
+            delete("/internal/api/v1/subscriptions/$subscriptionId")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN"),
+        )
+            .andExpect(status().isNoContent)
+        val revoked = mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/$subscriptionId"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("REVOKED"))
+            .andExpect(jsonPath("$.generationMatches").value(true))
+            .andReturn().response
+        ContractSchemaSupport.assertValid(
+            "subscription-status.v1.schema.json",
+            revoked.contentAsString,
+            "폐기된 구독의 비밀 필드 없는 상태 응답",
+        )
+    }
+
+    @Test
+    fun `내부 상태 조회는 인증을 요구하고 없는 자원은 공통 오류로 반환한다`() {
+        listOf(
+            "/internal/api/v1/calendar-items/$SOURCE_ITEM_ID",
+            "/internal/api/v1/subscriptions/$SOURCE_ITEM_ID",
+        ).forEach { path ->
+            mockMvc.perform(get(path))
+                .andExpect(status().isUnauthorized)
+                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+
+            val response = mockMvc.perform(authorizedGet(path))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andReturn().response
+            ContractSchemaSupport.assertValid(
+                "api-error.v1.schema.json",
+                response.contentAsString,
+                "존재하지 않는 내부 자원의 상태 조회 응답",
             )
         }
     }
@@ -382,6 +489,17 @@ class MvpHttpFlowTest @Autowired constructor(
         ingest(Path.of("contracts/examples/schedule-snapshot.zoned-active-r2.json").readText(), "APPLIED")
         val cancelled = Path.of("contracts/examples/schedule-snapshot.zoned-cancelled.json").readText()
         ingest(cancelled, "APPLIED")
+        val cancelledStatus = mockMvc.perform(
+            authorizedGet("/internal/api/v1/calendar-items/$ZONED_CONTRACT_SOURCE_ITEM_ID"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(content().json(Path.of("contracts/examples/calendar-item-status.cancelled.json").readText()))
+            .andReturn().response
+        ContractSchemaSupport.assertValid(
+            "calendar-item-status.v1.schema.json",
+            cancelledStatus.contentAsString,
+            "문서화한 취소 일정 상태 응답",
+        )
         val reactivated = Path.of("contracts/examples/schedule-snapshot.zoned-reactivated.json").readText()
         ingest(reactivated, "APPLIED")
         ingest(reactivated, "DUPLICATE")
@@ -464,6 +582,9 @@ class MvpHttpFlowTest @Autowired constructor(
     private fun authorizedPost(path: String, vararg uriVariables: Any) =
         post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
 
+    private fun authorizedGet(path: String) = get(path)
+        .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+
     private fun ingestionCount(result: String): Double = meterRegistry
         .get("baton.cal.snapshot.ingestion")
         .tag("result", result)
@@ -543,6 +664,7 @@ class MvpHttpFlowTest @Autowired constructor(
         const val OTHER_SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         const val ZONED_SOURCE_ITEM_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        const val ZONED_CONTRACT_SOURCE_ITEM_ID = "b8ca471a-b228-42fa-8d41-28f05ee90d40"
         const val EVENT_1 = "11111111-1111-1111-1111-111111111111"
         const val EVENT_2 = "22222222-2222-2222-2222-222222222222"
         const val EVENT_3 = "33333333-3333-3333-3333-333333333333"
