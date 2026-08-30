@@ -1,6 +1,5 @@
 package io.baton.cal.snapshot
 
-import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
@@ -43,7 +42,7 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         doThrow(SimulatedRenderFailure())
             .doCallRealMethod()
             .`when`(renderer)
-            .render(eqArg(SEASON_ID), anyListArg<CalendarItem>())
+            .render(eqArg(SEASON_ID), ArgumentMatchers.anyList())
 
         assertThatThrownBy { ingestionService.ingest(SNAPSHOT) }
             .isInstanceOf(SimulatedRenderFailure::class.java)
@@ -71,8 +70,6 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
     }
 
     private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
-
-    private fun <T> anyListArg(): List<T> = ArgumentMatchers.anyList<T>() ?: emptyList()
 
     private class SimulatedRenderFailure : RuntimeException()
 
