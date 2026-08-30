@@ -26,6 +26,7 @@ source_item_id=b8ca471a-b228-42fa-8d41-28f05ee90d40
 export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
+export BATON_CAL_RECOVERY_MODE=false
 
 compose=(
   docker compose
@@ -181,6 +182,21 @@ post_snapshot() {
   echo "일정 스냅샷 APPLIED 확인: $fixture_name"
 }
 
+assert_recovery_blocked() {
+  local status
+  status=$(
+    "${http_request[@]}" \
+      --request POST \
+      --header "Authorization: Bearer $internal_token" \
+      --output "$response_body_file" \
+      --write-out '%{http_code}' \
+      "$@"
+  )
+  [[ "$status" == 503 ]] || fail "복구 중 구독 발급이 HTTP 503이 아닌 $status를 반환했습니다."
+  jq --exit-status '.code == "RECOVERY_IN_PROGRESS"' "$response_body_file" >/dev/null \
+    || fail "복구 중 구독 발급 차단 오류 코드가 올바르지 않습니다."
+}
+
 assert_public_ok() {
   local token=$1
   local status
@@ -297,9 +313,10 @@ latest_state=$(database_scalar \
   || fail "백업 이후 원본 DB가 최신 취소 상태가 아닙니다: '${latest_state:-<비어 있음>}'"
 echo "백업 이후 원본 DB의 revision 3 CANCELLED 상태를 확인했습니다."
 
-echo "복원 전에 애플리케이션을 중지하고 런타임 자격 증명 세대를 B로 변경합니다."
+echo "복원 전에 애플리케이션을 중지하고 세대 B와 복구 모드를 설정합니다."
 "${compose[@]}" stop app
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_b"
+export BATON_CAL_RECOVERY_MODE=true
 
 echo "pg_restore --clean --create --exit-on-error로 논리 백업을 실제 복원합니다."
 "${compose[@]}" exec --no-TTY postgres \
@@ -325,10 +342,24 @@ restored_subscription_state=$(database_scalar \
   || fail "복원된 구독이 세대 A의 ACTIVE 상태가 아닙니다: '${restored_subscription_state:-<비어 있음>}'"
 assert_public_not_found "$token_t1"
 echo "복원 직후 세대 A 구독과 토큰의 본문 없는 일반 404를 확인했습니다."
+assert_recovery_blocked \
+  --header 'Content-Type: application/json' \
+  --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
+  "$base_url/internal/api/v1/subscriptions"
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
+echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인했습니다."
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
 echo "최신 ACTIVE 개정과 CANCELLED 스냅샷 재전달을 완료했습니다."
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
+echo "스냅샷 재전달 뒤에도 복구 모드가 자동 해제되지 않는지 확인했습니다."
+
+echo "대표 픽스처 복구를 마친 뒤 세대 B를 유지하고 복구 모드만 해제합니다."
+export BATON_CAL_RECOVERY_MODE=false
+"${compose[@]}" up --detach --force-recreate app
+wait_for_readiness
+assert_public_not_found "$token_t1"
 
 if ! rotated_credential=$(
   "${http_request[@]}" --fail \
