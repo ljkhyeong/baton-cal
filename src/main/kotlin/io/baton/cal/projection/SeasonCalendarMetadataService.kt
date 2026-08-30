@@ -39,7 +39,9 @@ class SeasonCalendarMetadataService(
             acceptedAt = clock.instant().truncatedTo(ChronoUnit.SECONDS),
         )
         repository.upsert(updated)
-        projectionService.rebuildWhileLocked(seasonId)
+        if (current?.displayName != displayName) {
+            projectionService.rebuildWhileLocked(seasonId)
+        }
         return updated.toResponse()
     }
 }

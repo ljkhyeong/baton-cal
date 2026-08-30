@@ -6,6 +6,7 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.micrometer.core.instrument.MeterRegistry
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -37,7 +38,10 @@ import kotlin.io.path.readText
     ],
 )
 @Sql("/reset-database.sql")
-class SeasonCalendarMetadataHttpTest @Autowired constructor(private val mockMvc: MockMvc) {
+class SeasonCalendarMetadataHttpTest @Autowired constructor(
+    private val mockMvc: MockMvc,
+    private val meterRegistry: MeterRegistry,
+) {
     @Test
     fun `이름 변경은 개정 번호를 따르고 일정 표현과 구독을 유지한다`() {
         val initial = Path("contracts/examples/season-calendar-metadata.r0.json").readText()
@@ -94,7 +98,12 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(private val mockMvc:
             .andReturn().response
         ContractSchemaSupport.assertValid("api-error.v1.schema.json", conflict.contentAsString, "시즌 정보 개정 번호 충돌")
 
-        update(updated.replace("\"revision\": 2", "\"revision\": 3"))
+        val rebuildTimer = meterRegistry.get("baton.cal.projection.rebuild").timer()
+        val rebuildCountBefore = rebuildTimer.count()
+        val advancedResponse = update(updated.replace("\"revision\": 2", "\"revision\": 3"))
+        assertThat(JsonPath.read<Int>(advancedResponse, "$.revision")).isEqualTo(3)
+        assertThat(advancedResponse).isEqualTo(update(updated.replace("가을", "겨울")))
+        assertThat(rebuildTimer.count()).isEqualTo(rebuildCountBefore)
         mockMvc.perform(
             post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
                 .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
