@@ -2,6 +2,7 @@ package io.baton.cal.web
 
 import io.baton.cal.config.StandardUuidPath
 import io.baton.cal.projection.SeasonProjectionService
+import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.snapshot.SnapshotIngestionService
 import io.baton.cal.snapshot.SnapshotIngestionResult
 import io.baton.cal.subscription.SubscriptionService
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
@@ -26,6 +28,7 @@ class InternalCalendarController(
     private val snapshotIngestionService: SnapshotIngestionService,
     private val subscriptionService: SubscriptionService,
     private val projectionService: SeasonProjectionService,
+    private val metadataService: SeasonCalendarMetadataService,
     meterRegistry: MeterRegistry,
 ) {
     private val ingestionCounters: Map<SnapshotIngestionResult, Counter> =
@@ -60,6 +63,15 @@ class InternalCalendarController(
         .ok()
         .cacheControl(CacheControl.noStore())
         .body(subscriptionService.getStatus(subscriptionId.value))
+
+    @PutMapping("/seasons/{seasonId}/calendar-metadata")
+    fun updateSeasonCalendarMetadata(
+        @PathVariable seasonId: StandardUuidPath,
+        @Valid @RequestBody request: SeasonCalendarMetadataRequest,
+    ): ResponseEntity<SeasonCalendarMetadataResponse> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(metadataService.update(seasonId.value, request.revision, request.displayName))
 
     @PostMapping("/subscriptions")
     fun createSubscription(

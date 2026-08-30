@@ -155,6 +155,13 @@ class ContractArtifactsTest {
                 "schedule-snapshot.zoned-point-active.json",
                 "schedule-snapshot.zoned-reactivated.json",
             ),
+            "season-calendar-metadata.v1.schema.json" to listOf(
+                "season-calendar-metadata.r0.json",
+                "season-calendar-metadata.r2.json",
+            ),
+            "season-calendar-metadata-result.v1.schema.json" to listOf(
+                "season-calendar-metadata-result.json",
+            ),
             "subscription-create.v1.schema.json" to listOf(
                 "subscription-create.json",
             ),

@@ -23,6 +23,7 @@ internal_token=smoke-only-internal-token-00000000000000000000000000000000
 generation_a=40000000-0000-0000-0000-000000000001
 generation_b=40000000-0000-0000-0000-000000000002
 source_item_id=b8ca471a-b228-42fa-8d41-28f05ee90d40
+season_id=f5316f93-d49e-4230-b1d0-9e9c2d079819
 export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
@@ -159,8 +160,8 @@ assert_flyway_versions() {
   local successful_versions
   successful_versions=$(database_scalar \
     "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "1,2,3,4,5,6" ]] \
-    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6이 아닙니다: '${successful_versions:-<비어 있음>}'"
+  [[ "$successful_versions" == "1,2,3,4,5,6,7" ]] \
+    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6,7이 아닙니다: '${successful_versions:-<비어 있음>}'"
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 
@@ -180,6 +181,24 @@ post_snapshot() {
     | jq --exit-status '.result == "APPLIED"' >/dev/null \
     || fail "일정 스냅샷 '$fixture_name'이 APPLIED로 처리되지 않았습니다."
   echo "일정 스냅샷 APPLIED 확인: $fixture_name"
+}
+
+put_season_metadata() {
+  local fixture_name=$1
+  local response
+  response=$(
+    "${http_request[@]}" --fail --request PUT \
+      --header "Authorization: Bearer $internal_token" \
+      --header 'Content-Type: application/json' \
+      --data-binary "@$project_directory/contracts/examples/$fixture_name" \
+      "$base_url/internal/api/v1/seasons/$season_id/calendar-metadata"
+  )
+  printf '%s' "$response" \
+    | jq --exit-status --arg season "$season_id" \
+      --slurpfile expected "$project_directory/contracts/examples/$fixture_name" \
+      '.seasonId == $season and .revision == $expected[0].revision and .displayName == $expected[0].displayName' \
+      >/dev/null || fail "시즌 표시 이름 '$fixture_name'을 채택하지 못했습니다."
+  echo "시즌 표시 이름 채택 확인: $fixture_name"
 }
 
 assert_recovery_blocked() {
@@ -273,6 +292,7 @@ pid1_uid=$(
 echo "실행 중인 컨테이너 PID 1 비루트 확인: UID $pid1_uid"
 
 post_snapshot schedule-snapshot.zoned-active-r0.json
+put_season_metadata season-calendar-metadata.r0.json
 
 if ! initial_credential=$(
   "${http_request[@]}" --fail \
@@ -307,6 +327,7 @@ echo "pg_dump -Fc 아카이브 생성과 pg_restore 목록 검증을 완료했�
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
+put_season_metadata season-calendar-metadata.r2.json
 latest_state=$(database_scalar \
   "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
 [[ "$latest_state" == "3:CANCELLED" ]] \
@@ -336,6 +357,10 @@ restored_item_state=$(database_scalar \
   "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
 [[ "$restored_item_state" == "0:ACTIVE" ]] \
   || fail "복원된 일정이 백업 시점의 revision 0 ACTIVE 상태가 아닙니다: '${restored_item_state:-<비어 있음>}'"
+restored_metadata_revision=$(database_scalar \
+  "SELECT revision FROM season_calendar_metadata WHERE season_id = '$season_id'::uuid;")
+[[ "$restored_metadata_revision" == 0 ]] \
+  || fail "복원된 시즌 이름이 백업 시점의 revision 0이 아닙니다: '${restored_metadata_revision:-<비어 있음>}'"
 restored_subscription_state=$(database_scalar \
   "SELECT credential_generation || ':' || status FROM calendar_subscription WHERE id = '$subscription_id'::uuid;")
 [[ "$restored_subscription_state" == "$generation_a:ACTIVE" ]] \
@@ -351,7 +376,8 @@ echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인�
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
-echo "최신 ACTIVE 개정과 CANCELLED 스냅샷 재전달을 완료했습니다."
+put_season_metadata season-calendar-metadata.r2.json
+echo "최신 ACTIVE 개정과 CANCELLED 스냅샷, 시즌 표시 이름 재전달을 완료했습니다."
 assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 echo "스냅샷 재전달 뒤에도 복구 모드가 자동 해제되지 않는지 확인했습니다."
 
@@ -383,7 +409,9 @@ final_feed_status=$(
 awk '{ sub(/\r$/, ""); if ($0 == "SEQUENCE:3") sequence = 1; if ($0 == "STATUS:CANCELLED") cancelled = 1 } END { exit !(sequence && cancelled) }' \
   "$feed_file" \
   || fail "회전한 공개 피드에 SEQUENCE:3과 STATUS:CANCELLED가 모두 없습니다."
-echo "동일 구독의 세대 B 전환과 새 피드의 SEQUENCE 3, CANCELLED 상태를 확인했습니다."
+grep --quiet '^X-WR-CALNAME:BATON 가을' "$feed_file" \
+  || fail "회전한 공개 피드에 최신 시즌 표시 이름이 없습니다."
+echo "동일 구독의 세대 B 전환과 새 피드의 SEQUENCE 3, CANCELLED 상태, 최신 시즌 이름을 확인했습니다."
 
 running_before_stop=$(docker inspect --format '{{.State.Running}}' "$container_id")
 [[ "$running_before_stop" == true ]] \

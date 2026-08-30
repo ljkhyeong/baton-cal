@@ -42,6 +42,7 @@ class IcsCalendarRenderer {
     fun render(
         seasonId: UUID,
         items: List<CalendarItem>,
+        displayName: String? = null,
     ): RenderedCalendar {
         val sortedItems = items.sortedBy { it.sourceItemId.toKotlinUuid() }
         val calendar = Calendar(
@@ -50,7 +51,7 @@ class IcsCalendarRenderer {
                     ProdId(PRODUCT_ID),
                     ImmutableVersion.VERSION_2_0,
                     ImmutableCalScale.GREGORIAN,
-                    XProperty("X-WR-CALNAME", "BATON season $seasonId"),
+                    XProperty("X-WR-CALNAME", displayName ?: "BATON season $seasonId"),
                 ),
             ),
             ComponentList(timeZones(sortedItems) + sortedItems.map(::event)),

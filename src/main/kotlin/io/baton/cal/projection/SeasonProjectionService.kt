@@ -6,6 +6,7 @@ import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
+import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
@@ -33,6 +34,7 @@ class SeasonProjectionService(
     private val lockRepository: SeasonProjectionLockRepository,
     private val itemRepository: CalendarItemRepository,
     private val projectionRepository: SeasonFeedProjectionRepository,
+    private val metadataRepository: SeasonCalendarMetadataRepository,
     private val renderer: IcsCalendarRenderer,
     private val clock: Clock,
     meterRegistry: MeterRegistry,
@@ -79,13 +81,23 @@ class SeasonProjectionService(
     ): ProjectionResult =
         rebuildTimer.record(Supplier {
             val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
-            val rendered = renderer.render(seasonId = seasonId, items = items)
+            val metadata = metadataRepository.findBySeasonId(seasonId)
+            val rendered = renderer.render(seasonId = seasonId, items = items, displayName = metadata?.displayName)
+            val initialLastModified = when {
+                metadata == null -> rendered.lastModified
+                items.isEmpty() -> metadata.acceptedAt
+                else -> maxOf(rendered.lastModified, metadata.acceptedAt)
+            }
             projectionRepository.upsert(
                 SeasonFeedProjectionRow(
                     seasonId = seasonId,
                     representation = rendered.bytes,
                     etag = rendered.etag,
-                    lastModified = resolveLastModified(existing, rendered.etag, rendered.lastModified),
+                    lastModified = resolveLastModified(
+                        existing,
+                        rendered.etag,
+                        initialLastModified,
+                    ),
                 ),
             )
             itemCountSummary.record(items.size.toDouble())

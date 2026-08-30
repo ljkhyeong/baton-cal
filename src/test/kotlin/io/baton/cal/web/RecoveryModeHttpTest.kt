@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -87,6 +88,14 @@ class RecoveryModeHttpTest @Autowired constructor(
 
         ingest("schedule-snapshot.zoned-active-r2.json")
         ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.perform(
+            put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(Path("contracts/examples/season-calendar-metadata.r2.json").readText()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.revision").value(2))
         mockMvc.perform(
             get("/internal/api/v1/calendar-items/b8ca471a-b228-42fa-8d41-28f05ee90d40")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),

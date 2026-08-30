@@ -7,6 +7,7 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -36,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @Sql("/reset-database.sql")
 class SnapshotIngestionConcurrencyTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
+    private val metadataService: SeasonCalendarMetadataService,
     private val itemRepository: CalendarItemRepository,
     private val jdbcClient: JdbcClient,
 ) {
@@ -80,6 +82,30 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
                 .query(Int::class.java)
                 .single(),
         ).isEqualTo(2)
+    }
+
+    @Test
+    fun `시즌 이름과 일정을 동시에 갱신해도 피드에 두 변경이 모두 남는다`() {
+        synchronizeSeasonLockAcquisition()
+        val snapshot = snapshot(number = 1)
+        Executors.newFixedThreadPool(2).use { executor ->
+            executor.invokeAll(
+                listOf(
+                    Callable<Unit> { metadataService.update(SEASON_ID, 2, "가을 시즌") },
+                    Callable<Unit> { ingestionService.ingest(snapshot) },
+                ),
+                TIMEOUT_SECONDS,
+                TimeUnit.SECONDS,
+            ).forEach { it.get() }
+        }
+        val calendar = jdbcClient.sql("SELECT representation FROM season_feed_projection WHERE season_id = :seasonId")
+            .param("seasonId", SEASON_ID)
+            .query(ByteArray::class.java)
+            .single()
+            .parseIcalendar()
+        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
+        assertThat(calendar.events().map { it.requiredPropertyValue(Property.UID) })
+            .containsExactly("${snapshot.sourceItemId}@cal.baton")
     }
 
     private fun synchronizeSeasonLockAcquisition() {

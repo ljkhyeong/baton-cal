@@ -4,6 +4,8 @@ import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.RenderedCalendar
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
+import io.baton.cal.persistence.SeasonCalendarMetadataRepository
+import io.baton.cal.persistence.SeasonCalendarMetadataRow
 import io.baton.cal.persistence.SeasonFeedProjectionMetadata
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
@@ -26,6 +28,7 @@ import java.util.UUID
 class SeasonProjectionServiceTest {
     private val itemRepository = mock(CalendarItemRepository::class.java)
     private val projectionRepository = mock(SeasonFeedProjectionRepository::class.java)
+    private val metadataRepository = mock(SeasonCalendarMetadataRepository::class.java)
     private val lockRepository = mock(SeasonProjectionLockRepository::class.java)
     private val renderer = mock(IcsCalendarRenderer::class.java)
     private val meterRegistry = SimpleMeterRegistry()
@@ -33,6 +36,7 @@ class SeasonProjectionServiceTest {
         lockRepository = lockRepository,
         itemRepository = itemRepository,
         projectionRepository = projectionRepository,
+        metadataRepository = metadataRepository,
         renderer = renderer,
         clock = Clock.fixed(NOW, ZoneOffset.UTC),
         meterRegistry = meterRegistry,
@@ -98,6 +102,20 @@ class SeasonProjectionServiceTest {
         service.rebuildWhileLocked(SEASON_ID)
 
         assertThat(savedProjection().lastModified).isEqualTo(NOW)
+    }
+
+    @Test
+    fun `일정 없는 시즌의 첫 이름은 이름 채택 시각을 Last-Modified로 사용한다`() {
+        val acceptedAt = NOW.minusSeconds(10)
+        doReturn(SeasonCalendarMetadataRow(SEASON_ID, 0, "가을 시즌", acceptedAt))
+            .`when`(metadataRepository).findBySeasonId(SEASON_ID)
+        doReturn(emptyList<CalendarItemRow>()).`when`(itemRepository).listBySeasonId(SEASON_ID)
+        doReturn(RenderedCalendar("calendar".encodeToByteArray(), "\"named\"", Instant.EPOCH))
+            .`when`(renderer).render(SEASON_ID, emptyList(), "가을 시즌")
+
+        service.rebuildWhileLocked(SEASON_ID)
+
+        assertThat(savedProjection().lastModified).isEqualTo(acceptedAt)
     }
 
     private fun stubRendering(

@@ -28,6 +28,22 @@ class IcsCalendarRendererTest {
     }
 
     @Test
+    fun `시즌 표시 이름은 한글과 TEXT 특수문자를 보존하고 안정적으로 출력한다`() {
+        val displayName = "가을 시즌, A팀; B팀\\모임\n" + "한글😀".repeat(15)
+        val rendered = renderer.render(seasonId, emptyList(), displayName)
+        val calendar = rendered.bytes.parseIcalendar()
+
+        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo(displayName)
+        assertThat(calendar.events()).isEmpty()
+        assertThat(rendered.bytes).isEqualTo(renderer.render(seasonId, emptyList(), displayName).bytes)
+        assertThat(rendered.etag).isNotEqualTo(renderer.render(seasonId, emptyList()).etag)
+        assertThat(rendered.bytes.decodeToString().split("\r\n").dropLast(1)).allSatisfy { line ->
+            assertThat(line.encodeToByteArray().size).isLessThanOrEqualTo(75)
+        }
+        assertCanonicalCrLf(rendered.bytes)
+    }
+
+    @Test
     fun `UTC snapshot is rendered deterministically with stable identity and revision`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
