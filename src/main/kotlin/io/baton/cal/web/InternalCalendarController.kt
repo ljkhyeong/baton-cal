@@ -1,5 +1,6 @@
 package io.baton.cal.web
 
+import io.baton.cal.config.StandardUuidPath
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.snapshot.SnapshotIngestionService
 import io.baton.cal.snapshot.SnapshotIngestionResult
@@ -17,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
 
 @RestController
 @RequestMapping("/internal/api/v1")
@@ -54,24 +54,24 @@ class InternalCalendarController(
 
     @PostMapping("/subscriptions/{subscriptionId}/rotate")
     fun rotateSubscription(
-        @PathVariable subscriptionId: UUID,
+        @PathVariable subscriptionId: StandardUuidPath,
     ): ResponseEntity<SubscriptionCredential> = ResponseEntity
         .ok()
         .cacheControl(CacheControl.noStore())
-        .body(subscriptionService.rotate(subscriptionId))
+        .body(subscriptionService.rotate(subscriptionId.value))
 
     @DeleteMapping("/subscriptions/{subscriptionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun revokeSubscription(
-        @PathVariable subscriptionId: UUID,
+        @PathVariable subscriptionId: StandardUuidPath,
     ) {
-        subscriptionService.revoke(subscriptionId)
+        subscriptionService.revoke(subscriptionId.value)
     }
 
     @PostMapping("/projections/seasons/{seasonId}/rebuild")
     fun rebuildProjection(
-        @PathVariable seasonId: UUID,
-    ) = projectionService.rebuild(seasonId)
+        @PathVariable seasonId: StandardUuidPath,
+    ) = projectionService.rebuild(seasonId.value)
 
     private companion object {
         const val INGESTION_METRIC = "baton.cal.snapshot.ingestion"

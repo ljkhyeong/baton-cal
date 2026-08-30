@@ -45,12 +45,14 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
-    fun `UUID 필드는 Jackson Base64 표현을 거부한다`() {
+    fun `UUID 필드는 36자 표준 문자열만 허용한다`() {
         listOf(
             "AAAAAAAAAAAAAAAAAAAAAA",
             "AAAAAAAAAAAAAAAAAAAAAA==",
-        ).forEach { base64Uuid ->
-            assertInvalid(utcSnapshot(eventId = base64Uuid))
+            "1-1-1-1-1",
+            "00000000-00000-000-0000-000000000000",
+        ).forEach { invalidUuid ->
+            assertInvalid(utcSnapshot(eventId = invalidUuid))
         }
     }
 

@@ -318,17 +318,24 @@ class MvpHttpFlowTest @Autowired constructor(
     }
 
     @Test
-    fun `Spring MVC 요청 오류는 API 오류 응답 형태를 유지한다`() {
-        val result = mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/not-a-uuid/rotate"))
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            .andReturn()
+    fun `내부 경로 UUID는 36자 표준 문자열만 허용한다`() {
+        listOf(
+            authorizedPost("/internal/api/v1/subscriptions/1-1-1-1-1/rotate"),
+            delete("/internal/api/v1/subscriptions/1-1-1-1-1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN"),
+            authorizedPost("/internal/api/v1/projections/seasons/1-1-1-1-1/rebuild"),
+        ).forEach { request ->
+            val result = mockMvc.perform(request)
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andReturn()
 
-        ContractSchemaSupport.assertValid(
-            "api-error.v1.schema.json",
-            result.response.contentAsString,
-            "실제 Spring MVC 오류 응답",
-        )
+            ContractSchemaSupport.assertValid(
+                "api-error.v1.schema.json",
+                result.response.contentAsString,
+                "표준 UUID 형식이 아닌 내부 경로 오류 응답",
+            )
+        }
     }
 
     @Test

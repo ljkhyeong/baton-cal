@@ -10,8 +10,10 @@ class CalProperties(
     val internalToken: String,
     val publicBaseUrl: URI = URI.create("http://localhost:8080"),
     val previousInternalToken: String? = null,
-    val subscriptionGeneration: UUID = DEFAULT_SUBSCRIPTION_GENERATION,
+    subscriptionGeneration: String = DEFAULT_SUBSCRIPTION_GENERATION.toString(),
 ) {
+    val subscriptionGeneration: UUID = StandardUuid.parse(subscriptionGeneration)
+
     init {
         require(internalToken.isValidInternalToken()) {
             "internalToken은 RFC 6750 Bearer 형식으로 32자 이상이어야 한다"
@@ -35,7 +37,7 @@ class CalProperties(
             "publicBaseUrl에는 쿼리나 프래그먼트를 넣을 수 없다"
         }
         require(publicBaseUrl.userInfo == null) { "publicBaseUrl에는 사용자 정보를 넣을 수 없다" }
-        require(subscriptionGeneration != NIL_UUID) {
+        require(this.subscriptionGeneration != NIL_UUID) {
             "subscriptionGeneration은 NIL UUID일 수 없다"
         }
     }

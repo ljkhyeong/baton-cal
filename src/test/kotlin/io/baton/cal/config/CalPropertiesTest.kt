@@ -111,14 +111,14 @@ class CalPropertiesTest {
         assertThat(
             CalProperties(
                 internalToken = token,
-                subscriptionGeneration = configuredGeneration,
+                subscriptionGeneration = configuredGeneration.toString(),
             ).subscriptionGeneration,
         ).isEqualTo(configuredGeneration)
         assertThatIllegalArgumentException()
             .isThrownBy {
                 CalProperties(
                     internalToken = token,
-                    subscriptionGeneration = UUID(0, 0),
+                    subscriptionGeneration = UUID(0, 0).toString(),
                 )
             }
             .withMessageContaining("NIL UUID")
@@ -147,11 +147,7 @@ class CalPropertiesTest {
     @Test
     fun `설정 바인딩 실패 출력은 거부된 내부 토큰을 노출하지 않는다`(output: CapturedOutput) {
         val rejectedSecret = "leaky-short-secret"
-        val application = SpringApplication(PropertiesBindingApplication::class.java).apply {
-            setWebApplicationType(WebApplicationType.NONE)
-            setLogStartupInfo(false)
-            setRegisterShutdownHook(false)
-        }
+        val application = propertiesBindingApplication()
 
         assertThatThrownBy {
             application.run(
@@ -162,6 +158,29 @@ class CalPropertiesTest {
 
         assertThat(output.all).doesNotContain(rejectedSecret)
     }
+
+    @Test
+    fun `구독 세대 설정은 36자 표준 UUID만 허용한다`() {
+        listOf(
+            "1-1-1-1-1",
+            "00000000-00000-000-0000-000000000000",
+        ).forEach { invalidGeneration ->
+            assertThatThrownBy {
+                propertiesBindingApplication().run(
+                    "--baton.cal.internal-token=secret-internal-token-that-is-long-enough",
+                    "--baton.cal.public-base-url=https://calendar.example.test",
+                    "--baton.cal.subscription-generation=$invalidGeneration",
+                )
+            }.hasRootCauseInstanceOf(IllegalArgumentException::class.java)
+        }
+    }
+
+    private fun propertiesBindingApplication() =
+        SpringApplication(PropertiesBindingApplication::class.java).apply {
+            setWebApplicationType(WebApplicationType.NONE)
+            setLogStartupInfo(false)
+            setRegisterShutdownHook(false)
+        }
 
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(CalProperties::class)
