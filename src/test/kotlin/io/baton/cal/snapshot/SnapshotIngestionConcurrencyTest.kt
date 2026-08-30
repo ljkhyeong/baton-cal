@@ -21,6 +21,7 @@ import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.util.AopTestUtils
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -46,30 +47,15 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
         synchronizeSeasonLockAcquisition()
         val firstSnapshot = snapshot(number = 1)
         val secondSnapshot = snapshot(number = 2)
-        val ready = CountDownLatch(2)
-        val start = CountDownLatch(1)
 
         val results = Executors.newFixedThreadPool(2).use { executor ->
-            val first = executor.submit<SnapshotIngestionResult> {
-                ready.countDown()
-                start.await()
-                ingestionService.ingest(firstSnapshot)
-            }
-            val second = executor.submit<SnapshotIngestionResult> {
-                ready.countDown()
-                start.await()
-                ingestionService.ingest(secondSnapshot)
-            }
-
-            try {
-                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue()
-            } finally {
-                start.countDown()
-            }
-            listOf(
-                first.get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
-                second.get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
-            )
+            executor.invokeAll(
+                listOf(firstSnapshot, secondSnapshot).map { snapshot ->
+                    Callable { ingestionService.ingest(snapshot) }
+                },
+                TIMEOUT_SECONDS,
+                TimeUnit.SECONDS,
+            ).map { it.get() }
         }
 
         assertThat(results).containsOnly(SnapshotIngestionResult.APPLIED)
