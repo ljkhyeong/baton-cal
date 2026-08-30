@@ -152,14 +152,18 @@ Spring Boot, Kotlin, iCal4j 또는 JSON Schema 검증기 버전은 한 종류씩
 잠금 파일을 갱신하고 계약·캘린더 테스트를 먼저 실행한다.
 
 ```shell
-./gradlew --no-daemon --write-locks --write-verification-metadata sha256 dependencies
+BATON_CAL_GRADLE_HOME="$(mktemp -d /tmp/baton-cal-gradle.XXXXXX)"
+GRADLE_USER_HOME="$BATON_CAL_GRADLE_HOME" ./gradlew --no-daemon \
+  --write-locks --write-verification-metadata sha256 help dependencies
 git diff -- gradle.lockfile gradle/verification-metadata.xml
 ./gradlew --no-daemon test --tests io.baton.cal.contract.ContractArtifactsTest
 ./gradlew --no-daemon test --tests io.baton.cal.calendar.IcsCalendarRendererTest
 ```
 
 잠금 파일은 선택된 버전을, 검증 메타데이터는 실제로 내려받은 플러그인과 의존성 파일의 SHA-256을
-고정한다. 두 파일의 변경이 의도한 의존성과 전이 의존성에만 해당하는지 확인한 뒤 테스트한다.
+고정한다. 깨끗한 Gradle 저장소와 `help` 작업을 함께 사용해 기존 로컬 캐시에 가려질 수 있는 빌드
+플러그인 메타데이터까지 기록한다. 두 파일의 변경이 의도한 의존성과 전이 의존성에만 해당하는지
+확인한 뒤 테스트한다.
 
 골든이 달라지면 테스트에서 자동 덮어쓰지 않는다. 후보 `.ics`를 임시 위치에 생성해 속성·컴포넌트
 순서, TEXT 재파싱 결과, TZID·VTIMEZONE, UTF-8 물리 줄 길이와 ETag 변화를 검토한다. 의도한
