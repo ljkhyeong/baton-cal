@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/season-calendar-metadata.v1.schema.json",
+  "title": "SeasonCalendarMetadataV1",
+  "description": "BATON이 확정한 시즌 표시 이름과 시즌 정보 개정 번호입니다. 일정 항목 개정 번호와 별도로 관리합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["revision", "displayName"],
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![\\s\\S]*[\\u0000-\\u0008\\u000B-\\u001F\\u007F\\uD800-\\uDFFF])"
+    }
+  }
+}

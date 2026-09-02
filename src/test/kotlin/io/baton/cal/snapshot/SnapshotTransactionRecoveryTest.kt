@@ -1,12 +1,12 @@
 package io.baton.cal.snapshot
 
-import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
+import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.support.PostgreSqlTestContainer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -33,6 +33,7 @@ import java.util.UUID
 @Sql("/reset-database.sql")
 class SnapshotTransactionRecoveryTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
+    private val metadataService: SeasonCalendarMetadataService,
     private val jdbcClient: JdbcClient,
 ) {
     @MockitoSpyBean
@@ -43,7 +44,7 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         doThrow(SimulatedRenderFailure())
             .doCallRealMethod()
             .`when`(renderer)
-            .render(eqArg(SEASON_ID), anyListArg<CalendarItem>())
+            .render(eqArg(SEASON_ID), ArgumentMatchers.anyList(), ArgumentMatchers.isNull())
 
         assertThatThrownBy { ingestionService.ingest(SNAPSHOT) }
             .isInstanceOf(SimulatedRenderFailure::class.java)
@@ -64,6 +65,29 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
     }
 
+    @Test
+    fun `렌더링 실패 시 시즌 이름 저장도 롤백하고 같은 개정 번호로 재시도한다`() {
+        doThrow(SimulatedRenderFailure())
+            .doCallRealMethod()
+            .`when`(renderer)
+            .render(eqArg(SEASON_ID), ArgumentMatchers.anyList(), eqArg("가을 시즌"))
+
+        assertThatThrownBy { metadataService.update(SEASON_ID, 2, "가을 시즌") }
+            .isInstanceOf(SimulatedRenderFailure::class.java)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_calendar_metadata")).isZero()
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_feed_projection")).isZero()
+
+        val result = metadataService.update(SEASON_ID, 2, "가을 시즌")
+        assertThat(result.revision).isEqualTo(2)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_calendar_metadata")).isEqualTo(1)
+        val calendar = jdbcClient.sql("SELECT representation FROM season_feed_projection WHERE season_id = :seasonId")
+            .param("seasonId", SEASON_ID)
+            .query(ByteArray::class.java)
+            .single()
+            .parseIcalendar()
+        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
+    }
+
     private fun assertDurableRowCounts(expected: Int) {
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "source_event_inbox")).isEqualTo(expected)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_item")).isEqualTo(expected)
@@ -71,8 +95,6 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
     }
 
     private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
-
-    private fun <T> anyListArg(): List<T> = ArgumentMatchers.anyList<T>() ?: emptyList()
 
     private class SimulatedRenderFailure : RuntimeException()
 

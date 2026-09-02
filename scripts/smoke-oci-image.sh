@@ -23,9 +23,11 @@ internal_token=smoke-only-internal-token-00000000000000000000000000000000
 generation_a=40000000-0000-0000-0000-000000000001
 generation_b=40000000-0000-0000-0000-000000000002
 source_item_id=b8ca471a-b228-42fa-8d41-28f05ee90d40
+season_id=f5316f93-d49e-4230-b1d0-9e9c2d079819
 export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
+export BATON_CAL_RECOVERY_MODE=false
 
 compose=(
   docker compose
@@ -33,6 +35,7 @@ compose=(
   --project-name "$project_name"
   --file "$compose_file"
 )
+http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
 
 fail() {
   echo "오류: $*" >&2
@@ -131,7 +134,7 @@ wait_for_readiness() {
 assert_prometheus_metrics() {
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --output "$readiness_file" \
       --write-out '%{http_code}' \
       "$management_url/actuator/prometheus"
@@ -157,8 +160,8 @@ assert_flyway_versions() {
   local successful_versions
   successful_versions=$(database_scalar \
     "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "1,2,3,4,5,6" ]] \
-    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6이 아닙니다: '${successful_versions:-<비어 있음>}'"
+  [[ "$successful_versions" == "1,2,3,4,5,6,7,8" ]] \
+    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6,7,8이 아닙니다: '${successful_versions:-<비어 있음>}'"
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 
@@ -166,7 +169,7 @@ post_snapshot() {
   local fixture_name=$1
   local response
   if ! response=$(
-    curl --silent --show-error --fail \
+    "${http_request[@]}" --fail \
       --header "Authorization: Bearer $internal_token" \
       --header 'Content-Type: application/json' \
       --data-binary "@$project_directory/contracts/examples/$fixture_name" \
@@ -180,11 +183,44 @@ post_snapshot() {
   echo "일정 스냅샷 APPLIED 확인: $fixture_name"
 }
 
+put_season_metadata() {
+  local fixture_name=$1
+  local response
+  response=$(
+    "${http_request[@]}" --fail --request PUT \
+      --header "Authorization: Bearer $internal_token" \
+      --header 'Content-Type: application/json' \
+      --data-binary "@$project_directory/contracts/examples/$fixture_name" \
+      "$base_url/internal/api/v1/seasons/$season_id/calendar-metadata"
+  )
+  printf '%s' "$response" \
+    | jq --exit-status --arg season "$season_id" \
+      --slurpfile expected "$project_directory/contracts/examples/$fixture_name" \
+      '.seasonId == $season and .revision == $expected[0].revision and .displayName == $expected[0].displayName' \
+      >/dev/null || fail "시즌 표시 이름 '$fixture_name'을 채택하지 못했습니다."
+  echo "시즌 표시 이름 채택 확인: $fixture_name"
+}
+
+assert_recovery_blocked() {
+  local status
+  status=$(
+    "${http_request[@]}" \
+      --request POST \
+      --header "Authorization: Bearer $internal_token" \
+      --output "$response_body_file" \
+      --write-out '%{http_code}' \
+      "$@"
+  )
+  [[ "$status" == 503 ]] || fail "복구 중 구독 발급이 HTTP 503이 아닌 $status를 반환했습니다."
+  jq --exit-status '.code == "RECOVERY_IN_PROGRESS"' "$response_body_file" >/dev/null \
+    || fail "복구 중 구독 발급 차단 오류 코드가 올바르지 않습니다."
+}
+
 assert_public_ok() {
   local token=$1
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --output /dev/null \
       --write-out '%{http_code}' \
       "$base_url/calendars/v1/$token.ics"
@@ -196,7 +232,7 @@ assert_public_not_found() {
   local token=$1
   local status
   status=$(
-    curl --silent --show-error \
+    "${http_request[@]}" \
       --dump-header "$response_header_file" \
       --output "$response_body_file" \
       --write-out '%{http_code}' \
@@ -256,9 +292,10 @@ pid1_uid=$(
 echo "실행 중인 컨테이너 PID 1 비루트 확인: UID $pid1_uid"
 
 post_snapshot schedule-snapshot.zoned-active-r0.json
+put_season_metadata season-calendar-metadata.r0.json
 
 if ! initial_credential=$(
-  curl --silent --show-error --fail \
+  "${http_request[@]}" --fail \
     --header "Authorization: Bearer $internal_token" \
     --header 'Content-Type: application/json' \
     --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
@@ -290,15 +327,17 @@ echo "pg_dump -Fc 아카이브 생성과 pg_restore 목록 검증을 완료했�
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
+put_season_metadata season-calendar-metadata.r2.json
 latest_state=$(database_scalar \
   "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
 [[ "$latest_state" == "3:CANCELLED" ]] \
   || fail "백업 이후 원본 DB가 최신 취소 상태가 아닙니다: '${latest_state:-<비어 있음>}'"
 echo "백업 이후 원본 DB의 revision 3 CANCELLED 상태를 확인했습니다."
 
-echo "복원 전에 애플리케이션을 중지하고 런타임 자격 증명 세대를 B로 변경합니다."
+echo "복원 전에 애플리케이션을 중지하고 세대 B와 복구 모드를 설정합니다."
 "${compose[@]}" stop app
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_b"
+export BATON_CAL_RECOVERY_MODE=true
 
 echo "pg_restore --clean --create --exit-on-error로 논리 백업을 실제 복원합니다."
 "${compose[@]}" exec --no-TTY postgres \
@@ -318,19 +357,38 @@ restored_item_state=$(database_scalar \
   "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
 [[ "$restored_item_state" == "0:ACTIVE" ]] \
   || fail "복원된 일정이 백업 시점의 revision 0 ACTIVE 상태가 아닙니다: '${restored_item_state:-<비어 있음>}'"
+restored_metadata_revision=$(database_scalar \
+  "SELECT revision FROM season_calendar_metadata WHERE season_id = '$season_id'::uuid;")
+[[ "$restored_metadata_revision" == 0 ]] \
+  || fail "복원된 시즌 이름이 백업 시점의 revision 0이 아닙니다: '${restored_metadata_revision:-<비어 있음>}'"
 restored_subscription_state=$(database_scalar \
   "SELECT credential_generation || ':' || status FROM calendar_subscription WHERE id = '$subscription_id'::uuid;")
 [[ "$restored_subscription_state" == "$generation_a:ACTIVE" ]] \
   || fail "복원된 구독이 세대 A의 ACTIVE 상태가 아닙니다: '${restored_subscription_state:-<비어 있음>}'"
 assert_public_not_found "$token_t1"
 echo "복원 직후 세대 A 구독과 토큰의 본문 없는 일반 404를 확인했습니다."
+assert_recovery_blocked \
+  --header 'Content-Type: application/json' \
+  --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
+  "$base_url/internal/api/v1/subscriptions"
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
+echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인했습니다."
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
-echo "최신 ACTIVE 개정과 CANCELLED 스냅샷 재전달을 완료했습니다."
+put_season_metadata season-calendar-metadata.r2.json
+echo "최신 ACTIVE 개정과 CANCELLED 스냅샷, 시즌 표시 이름 재전달을 완료했습니다."
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
+echo "스냅샷 재전달 뒤에도 복구 모드가 자동 해제되지 않는지 확인했습니다."
+
+echo "대표 픽스처 복구를 마친 뒤 세대 B를 유지하고 복구 모드만 해제합니다."
+export BATON_CAL_RECOVERY_MODE=false
+"${compose[@]}" up --detach --force-recreate app
+wait_for_readiness
+assert_public_not_found "$token_t1"
 
 if ! rotated_credential=$(
-  curl --silent --show-error --fail \
+  "${http_request[@]}" --fail \
     --request POST \
     --header "Authorization: Bearer $internal_token" \
     "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
@@ -341,7 +399,7 @@ token_t2=$(printf '%s' "$rotated_credential" | jq --exit-status --raw-output '.t
 rotated_credential=
 
 final_feed_status=$(
-  curl --silent --show-error \
+  "${http_request[@]}" \
     --output "$feed_file" \
     --write-out '%{http_code}' \
     "$base_url/calendars/v1/$token_t2.ics"
@@ -351,7 +409,9 @@ final_feed_status=$(
 awk '{ sub(/\r$/, ""); if ($0 == "SEQUENCE:3") sequence = 1; if ($0 == "STATUS:CANCELLED") cancelled = 1 } END { exit !(sequence && cancelled) }' \
   "$feed_file" \
   || fail "회전한 공개 피드에 SEQUENCE:3과 STATUS:CANCELLED가 모두 없습니다."
-echo "동일 구독의 세대 B 전환과 새 피드의 SEQUENCE 3, CANCELLED 상태를 확인했습니다."
+grep --quiet '^X-WR-CALNAME:BATON 가을' "$feed_file" \
+  || fail "회전한 공개 피드에 최신 시즌 표시 이름이 없습니다."
+echo "동일 구독의 세대 B 전환과 새 피드의 SEQUENCE 3, CANCELLED 상태, 최신 시즌 이름을 확인했습니다."
 
 running_before_stop=$(docker inspect --format '{{.State.Running}}' "$container_id")
 [[ "$running_before_stop" == true ]] \

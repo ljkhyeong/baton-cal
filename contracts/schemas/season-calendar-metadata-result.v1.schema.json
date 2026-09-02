@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/season-calendar-metadata-result.v1.schema.json",
+  "title": "SeasonCalendarMetadataResultV1",
+  "description": "요청 처리 뒤 CAL이 채택한 시즌 표시 이름입니다. 낮은 개정 번호 요청에는 이미 채택한 최신 값을 반환합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seasonId", "revision", "displayName"],
+  "properties": {
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![\\s\\S]*[\\u0000-\\u0008\\u000B-\\u001F\\u007F\\uD800-\\uDFFF])"
+    }
+  }
+}

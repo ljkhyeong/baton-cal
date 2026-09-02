@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/recovery-run-completion-result.v1.schema.json",
+  "title": "RecoveryRunCompletionResultV1",
+  "description": "CAL이 전체 시즌의 최신 일정·취소·시즌 이름 수렴을 확인한 완료 신호입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recoveryId", "result", "seasonCount", "completedAt"],
+  "properties": {
+    "recoveryId": { "type": "string", "format": "uuid" },
+    "result": { "const": "COMPLETED" },
+    "seasonCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

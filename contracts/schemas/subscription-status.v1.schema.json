@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/subscription-status.v1.schema.json",
+  "title": "SubscriptionStatusV1",
+  "description": "토큰, 해시, 피드 URL과 세대 UUID를 제외한 구독 상태입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "subscriptionId",
+    "seasonId",
+    "status",
+    "generationMatches"
+  ],
+  "properties": {
+    "subscriptionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "REVOKED"
+      ]
+    },
+    "generationMatches": {
+      "type": "boolean",
+      "description": "저장된 구독 세대와 요청을 처리한 인스턴스의 현재 세대가 같은지 나타냅니다. 구독 상태나 전체 일정의 동기화 완료 여부와는 별개입니다."
+    }
+  }
+}

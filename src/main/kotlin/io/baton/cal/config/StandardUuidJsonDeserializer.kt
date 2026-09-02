@@ -10,16 +10,13 @@ class StandardUuidJsonDeserializer : UUIDDeserializer() {
     override fun _shouldTrim(): Boolean = false
 
     override fun _deserialize(value: String, context: DeserializationContext): UUID {
-        if (value.length != STANDARD_UUID_LENGTH) {
-            return context.reportInputMismatch(
+        return try {
+            StandardUuid.parse(value)
+        } catch (_: IllegalArgumentException) {
+            context.reportInputMismatch(
                 UUID::class.java,
-                "UUID는 하이픈을 포함한 36자 표준 문자열이어야 합니다",
+                StandardUuid.ERROR_MESSAGE,
             )
         }
-        return super._deserialize(value, context)
-    }
-
-    private companion object {
-        const val STANDARD_UUID_LENGTH = 36
     }
 }

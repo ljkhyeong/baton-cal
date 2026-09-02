@@ -28,6 +28,22 @@ class IcsCalendarRendererTest {
     }
 
     @Test
+    fun `시즌 표시 이름은 한글과 TEXT 특수문자를 보존하고 안정적으로 출력한다`() {
+        val displayName = "가을 시즌, A팀; B팀\\모임\n" + "한글😀".repeat(15)
+        val rendered = renderer.render(seasonId, emptyList(), displayName)
+        val calendar = rendered.bytes.parseIcalendar()
+
+        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo(displayName)
+        assertThat(calendar.events()).isEmpty()
+        assertThat(rendered.bytes).isEqualTo(renderer.render(seasonId, emptyList(), displayName).bytes)
+        assertThat(rendered.etag).isNotEqualTo(renderer.render(seasonId, emptyList()).etag)
+        assertThat(rendered.bytes.decodeToString().split("\r\n").dropLast(1)).allSatisfy { line ->
+            assertThat(line.encodeToByteArray().size).isLessThanOrEqualTo(75)
+        }
+        assertCanonicalCrLf(rendered.bytes)
+    }
+
+    @Test
     fun `UTC snapshot is rendered deterministically with stable identity and revision`() {
         val item = CalendarItem(
             sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -211,20 +227,31 @@ class IcsCalendarRendererTest {
     }
 
     @Test
-    fun `입력 순서와 무관하게 이벤트 바이트 순서가 안정적이다`() {
+    fun `입력 순서와 무관하게 UID 사전순의 바이트와 ETag를 유지한다`() {
         val laterId = item(
             sourceItemId = "ffffffff-ffff-ffff-ffff-ffffffffffff",
             summary = "나중 일정",
+        )
+        val middleId = item(
+            sourceItemId = "00000000-0000-0000-8000-000000000000",
+            summary = "중간 일정",
         )
         val earlierId = item(
             sourceItemId = "00000000-0000-0000-0000-000000000001",
             summary = "먼저 일정",
         )
 
-        val first = renderer.render(seasonId, listOf(laterId, earlierId))
-        val second = renderer.render(seasonId, listOf(earlierId, laterId))
+        val first = renderer.render(seasonId, listOf(laterId, middleId, earlierId))
+        val second = renderer.render(seasonId, listOf(earlierId, middleId, laterId))
 
         assertThat(first.bytes).isEqualTo(second.bytes)
+        assertThat(first.etag).isEqualTo(second.etag)
+        assertThat(first.bytes.parseIcalendar().events().map { it.requiredPropertyValue(Property.UID) })
+            .containsExactly(
+                "${earlierId.sourceItemId}@cal.baton",
+                "${middleId.sourceItemId}@cal.baton",
+                "${laterId.sourceItemId}@cal.baton",
+            )
     }
 
     @Test

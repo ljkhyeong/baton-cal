@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:18.4-alpine
+    image: postgres:18.6-alpine
     environment:
       POSTGRES_DB: baton_cal_smoke
       POSTGRES_USER: baton_cal_smoke
@@ -26,6 +26,7 @@ services:
       BATON_CAL_INTERNAL_TOKEN: ${BATON_CAL_INTERNAL_TOKEN:?BATON_CAL_INTERNAL_TOKEN 환경 변수가 필요합니다}
       BATON_CAL_PUBLIC_BASE_URL: https://calendar.smoke.invalid
       BATON_CAL_SUBSCRIPTION_GENERATION: ${BATON_CAL_SUBSCRIPTION_GENERATION:?BATON_CAL_SUBSCRIPTION_GENERATION 환경 변수가 필요합니다}
+      BATON_CAL_RECOVERY_MODE: ${BATON_CAL_RECOVERY_MODE:-false}
     depends_on:
       postgres:
         condition: service_healthy

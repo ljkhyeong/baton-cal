@@ -22,12 +22,12 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 애플리케이션 실행 환경
 
-- Kotlin/JVM 2.3.21과 Gradle 9.6.1 Kotlin DSL을 쓴다.
-- 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수와 파일 편의 기능에는 Kotlin 표준
-  라이브러리를 우선한다. 시간, 암호화, URI, 네트워크와 UUID처럼 Kotlin 표준 라이브러리가
-  소유하지 않는 JVM 기능은 JDK API를 사용한다.
+- Kotlin/JVM 2.4.10과 Gradle 9.7.1 Kotlin DSL을 쓴다.
+- 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수, UUID 문자열 파싱과 파일 편의 기능에는
+  Kotlin 표준 라이브러리를 우선한다. 시간, 암호화, URI와 네트워크 등 필요한 JVM 기능은 JDK API를
+  사용한다. JDBC·Spring에 전달하는 UUID는 `java.util.UUID` 타입을 유지한다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
-- Spring Boot 4.1.0과 동기식 Spring MVC를 쓴다.
+- Spring Boot 4.1.1과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
 - Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
   16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
@@ -47,7 +47,7 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 영속성
 
-- PostgreSQL 18.4를 유일한 영구 저장소로 쓴다.
+- PostgreSQL 18.6을 유일한 영구 저장소로 쓴다.
 - 스키마 마이그레이션의 유일한 기준은 Flyway다.
 - 영속성 접근에는 Spring `JdbcClient`와 명시적인 SQL을 쓴다.
 - JPA/Hibernate 스키마 생성과 엔티티 수명주기를 사용하지 않는다.
@@ -71,6 +71,16 @@ BATON CAL MVP는 다음 특성을 가진다.
 - V6는 UTC·시간대 지정 시점과 종일 날짜 구간을 위한 열과 제약을 추가한다. 기존 구간 행은 그대로
   유효하지만 pre-V6 애플리케이션은 새 열거형을 읽을 수 없으므로, 모든 pre-V6 인스턴스가 종료된 뒤
   BATON이 새 시간 형태를 보내며 이후에는 pre-V6와 공존하거나 롤백하지 않는다.
+- V7는 시즌별 표시 이름·원본 개정 번호·채택 시각을 `season_calendar_metadata`에 보관한다.
+  이름을 항목·구독마다 복제하지 않으며, 일정과 같은 시즌 잠금 안에서 현재 개정 번호를 비교하고
+  저장과 필요한 재구축을 한 트랜잭션으로 처리한다. 최초 수신 또는 이름 변경 때만 재구축하며,
+  같은 이름의 높은 개정 번호는 시즌 정보만 갱신한다. 입력 형식은 MVC Bean Validation이 맡고 SQL은 행을 매핑한다.
+  과거 이름 이력·봉투 수신함·별도 해시는 필요하지 않아 두지 않는다. 채택 시각은 이름만 있는 첫 피드의
+  Last-Modified를 결정한다. pre-V7는 재구축 때 이름을 무시하므로 모든 구버전 종료 뒤 이름을 전달하며,
+  이름 수신 뒤 구버전 공존·롤백을 허용하지 않는다.
+- V8은 복구 실행별 시즌 상태 검증과 전체 완료를 별도 테이블에 보관한다. 목록 원문은 복제하지 않고
+  SHA-256 다이제스트와 개수만 저장하며, 완료 트랜잭션이 현재 일정·시즌 이름 테이블과 검증 시즌
+  집합을 함께 잠가 재전달 중간 상태를 완료로 기록하지 않게 한다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
 - 투영의 ETag가 같으면 기존 Last-Modified를 보존하고 ETag가 달라지면 현재 UTC 시각의 초 단위 값을
@@ -114,9 +124,9 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 현재 패키지 책임은 다음과 같다.
 
 1. `calendar`: 일정 항목/시간 불변식과 정규 iCalendar 렌더링
-2. `snapshot`: 지문값과 멱등 수신 사용 사례
-3. `subscription`: 토큰 인코딩과 생성/회전/폐기/캘린더 피드 조회 사용 사례
-4. `projection`: 시즌 투영 재구축과 잠금 조정
+2. `snapshot`: 지문값, 멱등 수신과 채택한 항목 상태 조회 사용 사례
+3. `subscription`: 토큰 인코딩과 생성/회전/폐기/구독 상태·캘린더 피드 조회 사용 사례
+4. `projection`: 시즌 표시 이름 수신, 투영 재구축과 잠금 조정
 5. `persistence`: JdbcClient SQL 행과 리포지토리
 6. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑
 7. `config`: 타입이 지정된 실행 환경 설정과 `Clock`
@@ -172,8 +182,15 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
-  `BATON_CAL_SUBSCRIPTION_GENERATION`을 명시적으로 요구한다. UUID 형식과 NIL 여부는 Java UUID
-  타입과 설정 경계에서 한 번만 검증하며 별도 생성 로직을 애플리케이션에 두지 않는다.
+  `BATON_CAL_SUBSCRIPTION_GENERATION`을 명시적으로 요구한다. UUID 문자열은 Kotlin의
+  `Uuid.parseHexDashOrNull`로 36자 표준 형식을 검사하고 NIL 여부는 설정 경계에서 한 번만 검증한다.
+  별도 UUID 생성 로직은 애플리케이션에 두지 않는다.
+- 복구 모드는 기본 `false`인 `recoveryMode`를 `BATON_CAL_RECOVERY_MODE`에서 Spring Boot 설정
+  바인딩으로 읽는다. 구독 서비스의 생성·회전 진입점에서만 검사하고 기존 `ApiException` 처리로
+  `503 RECOVERY_IN_PROGRESS`를 반환한다. 복원되는 DB에는 모드를 저장하지 않으며 별도 필터,
+  상태 관리 테이블이나 자동 해제 작업은 두지 않는다. 수신·재구축·폐기·공개 조회와 readiness는
+  유지한다. 복원 전 모든 인스턴스를 중지하고 새 구독 세대와 모드를 적용하며, 운영자가 전체
+  재전달 완료를 확인한 뒤 같은 세대를 유지한 채 모드만 해제해 모든 인스턴스를 재시작한다.
 - 공개 피드 URL의 기준 주소는 타입이 지정된 `publicBaseUrl` 설정으로 주입한다. 외부 또는
   비루프백 주소는 HTTPS만 허용하고 루프백 HTTP는 로컬 개발에서만 허용한다.
 - `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시적으로 요구하며 HTTPS가 아니면 시작을
@@ -237,7 +254,7 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   세대 변경 뒤 과거 토큰은 일반 `404`가 되는지 PostgreSQL 통합 테스트로 검증한다.
 - 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 배포 환경에서 검증한다.
 - GitHub Actions는 `main` 푸시와 풀 리퀘스트에서 Java 25로 테스트와 OCI 이미지를 만든다. 실제
-  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V6, DB 포함 준비 상태,
+  이미지에 `prod` 설정과 PostgreSQL을 연결해 Java 25, Flyway V1~V8, DB 포함 준비 상태,
   Prometheus 메트릭, 비루트 실행과 35초 유예 안의 SIGTERM 정상 종료를 스모크 검증한다. 종료 상태와
   `OOMKilled=false`, 종료 코드 `0` 또는 `143`을 확인하고 SIGKILL 종료 코드 `137`은 거부한다. 같은 외부
   구독 세대로 컨테이너를 강제 재생성한 뒤 기존 공개 피드가 계속 `200`인지도 확인한다.
@@ -253,6 +270,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
 - 이 저장소 훈련은 대표 픽스처와 절차 순서의 회귀 검증이다. 실제 BATON 전체 매니페스트·재전달
   완료 신호, 운영 RTO/RPO, 백업 저장소·암호화, 비밀 관리 시스템과 실제 환경 복원 훈련은 별도
   운영 경계다.
+- 시즌 이름은 실제 HTTP 응답 스키마, 중복·역순·충돌, 이름만 있는 빈 피드와 일정 식별자 보존을
+  검증한다. 같은 시즌의 이름·일정 동시 갱신과 렌더링 실패 시 롤백도 확인한다. 복원 훈련은 이름의
+  백업 시점 개정 번호 복원과 최신 이름 재전달을 포함한다.
 
 실행 명령은 저장소에 실제 Gradle 작업이 있고 해당 작업 트리에서 검증한 것만 별도 운영
 문서에 기록한다.
@@ -297,9 +317,9 @@ GitHub Actions의 `upload-artifact`는 이 단일 ZIP에 `retention-days: 90` �
   검토해야 한다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤
   버전이 일치하는 태그와 검증 가능한 GitHub 릴리스 자산을 별도로 운영해야 한다.
-- CAL은 BATON 전체 재전달 완료를 판단하는 매니페스트나 완료 신호가 없어 재생 전 create·rotate를
-  자동 차단하지 않는다. 해당 계약을 추가하기 전에는 BATON 또는 운영 오케스트레이션이 절차 순서를
-  보장해야 한다.
+- CAL은 BATON 전체 재전달 완료를 판단하는 매니페스트나 완료 신호가 없다. 복구 모드를 켜면
+  create·rotate를 차단하지만, 모드 설정과 전체 재전달 완료 확인 뒤의 해제는 BATON 또는 운영
+  오케스트레이션이 보장해야 한다.
 
 ## 보류한 대안
 

@@ -8,14 +8,39 @@
 | 경로 | 요청 스키마 | 성공 응답 스키마 | 예시 |
 | --- | --- | --- | --- |
 | `POST /internal/api/v1/schedule-snapshots` | `schemas/schedule-snapshot.v1.schema.json` | `schemas/schedule-snapshot-result.v1.schema.json` | `examples/schedule-snapshot.*.json`, `examples/schedule-snapshot-result.*.json` |
+| `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
+| `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
+| `PUT /internal/api/v1/seasons/{seasonId}/calendar-metadata` | `schemas/season-calendar-metadata.v1.schema.json` | `schemas/season-calendar-metadata-result.v1.schema.json` | `examples/season-calendar-metadata.*.json`, `examples/season-calendar-metadata-result.json` |
+| `PUT /internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest` | `schemas/recovery-season-manifest.v1.schema.json` | `schemas/recovery-season-manifest-result.v1.schema.json` | `examples/recovery-season-manifest.json`, `examples/recovery-season-manifest-result.json` |
+| `PUT /internal/api/v1/recovery-runs/{recoveryId}/completion` | `schemas/recovery-run-completion.v1.schema.json` | `schemas/recovery-run-completion-result.v1.schema.json` | `examples/recovery-run-completion.json`, `examples/recovery-run-completion-result.json` |
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
-| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json` |
+| 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json`, `examples/api-error.recovery-in-progress.json` |
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
 `text/calendar` 계약을 따른다.
+
+두 내부 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
+일정 조회는 CAL이 채택한
+개정 번호·상태·원본 수정 시각을, 구독 조회는 저장된 상태와 현재 인스턴스의 구독 세대 일치 여부를
+반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
+반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
+오류는 PRD-0002의 각 경로 계약을 따른다.
+
+시즌 표시 이름은 `{revision, displayName}`으로 전달한다. 개정 번호는 일정과 별도로 관리하며,
+응답은 CAL이 채택한 `{seasonId, revision, displayName}`이다. 같은 이름·개정 번호의 중복과 낮은
+개정 번호는 저장하지 않고 현재 값을 반환한다. 현재 개정 번호에 다른 이름을 보내면
+`409 SEASON_METADATA_REVISION_CONFLICT`다. 이름 미수신 시즌은 기존 `BATON season {seasonId}`를
+유지한다. 이름을 받으면 iCal4j로 `X-WR-CALNAME`에 반영하며 일정 UID·SEQUENCE와 토큰은 바꾸지 않는다.
+
+복구 모드의 시즌 매니페스트는 현재 일정 항목의 수·다이제스트와 선택적인 시즌 이름 개정·
+다이제스트를 대조한다. 전체 완료 요청은 검증한 시즌 수·전체 다이제스트가 현재 CAL 데이터의 시즌
+집합 및 상태와 정확히 같을 때만 `COMPLETED`를 반환한다. 완료 전 시즌 매니페스트는 최신 상태로
+다시 검증할 수 있고, 완료 뒤에는 같은 내용만 멱등하게 조회할 수 있다. 불일치는
+`409 RECOVERY_MANIFEST_MISMATCH`, 같은 복구 ID의 완료 내용 변경은 `409 RECOVERY_RUN_CONFLICT`,
+일반 모드의 새 검증은 `409 RECOVERY_MODE_REQUIRED`다.
 
 ## 기준과 버전 관리
 
@@ -65,16 +90,27 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 검증하고, 최종 피드의 같은 UID가
 `SEQUENCE:4`, `STATUS:CONFIRMED`로 복원되는지 확인한다. 세 시점·종일 예시도 같은 수신 경로로
 실행한다. 기존 전체 HTTP 흐름을 실행하는 `MvpHttpFlowTest`는 같은 스키마 지원 코드를 재사용해
-MockMvc의 일정 수신 결과, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을 각 응답 스키마에
-직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
+MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·회전, 투영 재구축과 공통 오류 응답 JSON을
+각 응답 스키마에 직접 대조한다. 따라서 별도 Spring 테스트 컨텍스트나 중복 시나리오를 만들지 않으면서, 예제가
 유효하더라도 실제 직렬화 결과에 필드가 빠지거나 예고 없이 추가되면 계약 검증이 실패한다. 예상 밖
 `500`은 고정 오류 응답을 반환하고 예외 메시지의 비밀값을 응답과 애플리케이션 로그에 남기지 않는지
 별도 MVC 회귀 테스트로 확인한다.
 
+`SeasonCalendarMetadataHttpTest`는 이름의 수신·변경·중복·역순·충돌 응답을 실제 MVC 경로로 확인하고
+성공 응답을 `season-calendar-metadata-result.v1`에 대조한다. 피드 재구축과 이름만 같은 개정 전진이
+바이트·ETag·Last-Modified를 유지하는지도 검증한다.
+
 데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
-`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 호출자는 같은 요청을 즉시 반복하지 않고
+`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
 `Retry-After` 이후 재시도한다. 스냅샷 수신의 이벤트 식별자와 원본 개정 번호 계약은 이 재시도가
 중복으로 도착해도 같은 결과를 보장한다.
+
+`BATON_CAL_RECOVERY_MODE=true`이면 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`를 반환하고
+토큰을 발급하지 않는다. 일정·시즌 이름 수신·상태 조회·재구축·폐기와 공개 조회는 기존 계약을 유지한다.
+복구 중 완료 시각을 미리 알 수 없으므로 `Retry-After`는 없으며, 운영자가 전체 완료 응답을
+확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. 응답 유실 시 자동 재시도하거나 같은
+토큰을 다시 받는 계약은 추가하지 않는다. 이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
+응답을 같은 스키마에 검증한다.
 
 이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 안정 버전 `1.0.0`은 사전 릴리스
 `1.0.0-rc.2`를 고정한 BATON 생산자 테스트와 실제 CAL 컨테이너 교차 서비스 테스트로 운영
@@ -117,7 +153,8 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 로컬 기본값을 상속하지 않게 한다. 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화 픽스처,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
-시간대 규칙 권위 회귀 검증도 포함한 다음 검토 후보이며 아직 게시하거나 BATON에 고정하지 않았다.
+시간대 규칙 권위 회귀 검증, 복구 모드의 발급 차단, 내부 상태 조회와 시즌 표시 이름도 포함한 다음 검토 후보이며
+아직 게시하거나 BATON에 고정하지 않았다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.
@@ -152,14 +189,18 @@ Spring Boot, Kotlin, iCal4j 또는 JSON Schema 검증기 버전은 한 종류씩
 잠금 파일을 갱신하고 계약·캘린더 테스트를 먼저 실행한다.
 
 ```shell
-./gradlew --no-daemon --write-locks --write-verification-metadata sha256 dependencies
+BATON_CAL_GRADLE_HOME="$(mktemp -d /tmp/baton-cal-gradle.XXXXXX)"
+GRADLE_USER_HOME="$BATON_CAL_GRADLE_HOME" ./gradlew --no-daemon \
+  --write-locks --write-verification-metadata sha256 help dependencies
 git diff -- gradle.lockfile gradle/verification-metadata.xml
 ./gradlew --no-daemon test --tests io.baton.cal.contract.ContractArtifactsTest
 ./gradlew --no-daemon test --tests io.baton.cal.calendar.IcsCalendarRendererTest
 ```
 
 잠금 파일은 선택된 버전을, 검증 메타데이터는 실제로 내려받은 플러그인과 의존성 파일의 SHA-256을
-고정한다. 두 파일의 변경이 의도한 의존성과 전이 의존성에만 해당하는지 확인한 뒤 테스트한다.
+고정한다. 깨끗한 Gradle 저장소와 `help` 작업을 함께 사용해 기존 로컬 캐시에 가려질 수 있는 빌드
+플러그인 메타데이터까지 기록한다. 두 파일의 변경이 의도한 의존성과 전이 의존성에만 해당하는지
+확인한 뒤 테스트한다.
 
 골든이 달라지면 테스트에서 자동 덮어쓰지 않는다. 후보 `.ics`를 임시 위치에 생성해 속성·컴포넌트
 순서, TEXT 재파싱 결과, TZID·VTIMEZONE, UTF-8 물리 줄 길이와 ETag 변화를 검토한다. 의도한

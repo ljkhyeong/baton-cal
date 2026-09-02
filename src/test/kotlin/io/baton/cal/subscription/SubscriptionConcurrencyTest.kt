@@ -8,6 +8,7 @@ import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.SnapshotConflictException
 import io.baton.cal.web.SubscriptionCredential
 import java.util.UUID
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -121,27 +122,14 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         }.`when`(repository).findById(subscriptionId)
     }
 
-    private fun <T> runConcurrently(first: () -> T, second: () -> T): List<T> {
-        val ready = CountDownLatch(2)
-        val start = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(2)
-
-        return try {
-            val futures = listOf(first, second).map { operation ->
-                executor.submit<T> {
-                    ready.countDown()
-                    check(start.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-                    operation()
-                }
-            }
-            check(ready.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-            start.countDown()
-            futures.map { it.get(TIMEOUT_SECONDS, TimeUnit.SECONDS) }
-        } finally {
-            start.countDown()
-            executor.shutdownNow()
+    private fun <T> runConcurrently(first: () -> T, second: () -> T): List<T> =
+        Executors.newFixedThreadPool(2).use { executor ->
+            executor.invokeAll(
+                listOf(Callable(first), Callable(second)),
+                TIMEOUT_SECONDS,
+                TimeUnit.SECONDS,
+            ).map { it.get() }
         }
-    }
 
     private fun attempt(operation: () -> OperationOutcome): OperationOutcome =
         runCatching(operation).fold(onSuccess = { it }, onFailure = ::Failed)

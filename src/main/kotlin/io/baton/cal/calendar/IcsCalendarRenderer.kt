@@ -29,6 +29,7 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import kotlin.uuid.toKotlinUuid
 
 data class RenderedCalendar(
     val bytes: ByteArray,
@@ -41,15 +42,16 @@ class IcsCalendarRenderer {
     fun render(
         seasonId: UUID,
         items: List<CalendarItem>,
+        displayName: String? = null,
     ): RenderedCalendar {
-        val sortedItems = items.sortedBy { it.sourceItemId.toString() }
+        val sortedItems = items.sortedBy { it.sourceItemId.toKotlinUuid() }
         val calendar = Calendar(
             PropertyList(
                 listOf(
                     ProdId(PRODUCT_ID),
                     ImmutableVersion.VERSION_2_0,
                     ImmutableCalScale.GREGORIAN,
-                    XProperty("X-WR-CALNAME", "BATON season $seasonId"),
+                    XProperty("X-WR-CALNAME", displayName ?: "BATON season $seasonId"),
                 ),
             ),
             ComponentList(timeZones(sortedItems) + sortedItems.map(::event)),

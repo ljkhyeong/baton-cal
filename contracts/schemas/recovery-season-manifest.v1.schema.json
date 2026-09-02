@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/recovery-season-manifest.v1.schema.json",
+  "title": "RecoverySeasonManifestV1",
+  "description": "BATON이 계산한 한 시즌의 최신 일정과 시즌 이름 상태 다이제스트입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemCount", "itemDigest", "metadataRevision", "metadataDigest"],
+  "properties": {
+    "itemCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "itemDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "metadataRevision": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "metadataDigest": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "metadataRevision": { "type": "integer" },
+        "metadataDigest": { "type": "string" }
+      }
+    },
+    {
+      "properties": {
+        "metadataRevision": { "type": "null" },
+        "metadataDigest": { "type": "null" }
+      }
+    }
+  ]
+}
