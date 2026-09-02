@@ -11,6 +11,8 @@
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
 | `PUT /internal/api/v1/seasons/{seasonId}/calendar-metadata` | `schemas/season-calendar-metadata.v1.schema.json` | `schemas/season-calendar-metadata-result.v1.schema.json` | `examples/season-calendar-metadata.*.json`, `examples/season-calendar-metadata-result.json` |
+| `PUT /internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest` | `schemas/recovery-season-manifest.v1.schema.json` | `schemas/recovery-season-manifest-result.v1.schema.json` | `examples/recovery-season-manifest.json`, `examples/recovery-season-manifest-result.json` |
+| `PUT /internal/api/v1/recovery-runs/{recoveryId}/completion` | `schemas/recovery-run-completion.v1.schema.json` | `schemas/recovery-run-completion-result.v1.schema.json` | `examples/recovery-run-completion.json`, `examples/recovery-run-completion-result.json` |
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
@@ -32,6 +34,13 @@
 개정 번호는 저장하지 않고 현재 값을 반환한다. 현재 개정 번호에 다른 이름을 보내면
 `409 SEASON_METADATA_REVISION_CONFLICT`다. 이름 미수신 시즌은 기존 `BATON season {seasonId}`를
 유지한다. 이름을 받으면 iCal4j로 `X-WR-CALNAME`에 반영하며 일정 UID·SEQUENCE와 토큰은 바꾸지 않는다.
+
+복구 모드의 시즌 매니페스트는 현재 일정 항목의 수·다이제스트와 선택적인 시즌 이름 개정·
+다이제스트를 대조한다. 전체 완료 요청은 검증한 시즌 수·전체 다이제스트가 현재 CAL 데이터의 시즌
+집합 및 상태와 정확히 같을 때만 `COMPLETED`를 반환한다. 완료 전 시즌 매니페스트는 최신 상태로
+다시 검증할 수 있고, 완료 뒤에는 같은 내용만 멱등하게 조회할 수 있다. 불일치는
+`409 RECOVERY_MANIFEST_MISMATCH`, 같은 복구 ID의 완료 내용 변경은 `409 RECOVERY_RUN_CONFLICT`,
+일반 모드의 새 검증은 `409 RECOVERY_MODE_REQUIRED`다.
 
 ## 기준과 버전 관리
 
@@ -98,7 +107,7 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 
 `BATON_CAL_RECOVERY_MODE=true`이면 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`를 반환하고
 토큰을 발급하지 않는다. 일정·시즌 이름 수신·상태 조회·재구축·폐기와 공개 조회는 기존 계약을 유지한다.
-복구 완료 시각을 알 수 없으므로 `Retry-After`는 없으며, 운영자가 최신 전체 스냅샷과 필요한 취소의 재전달 완료를
+복구 중 완료 시각을 미리 알 수 없으므로 `Retry-After`는 없으며, 운영자가 전체 완료 응답을
 확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. 응답 유실 시 자동 재시도하거나 같은
 토큰을 다시 받는 계약은 추가하지 않는다. 이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
 응답을 같은 스키마에 검증한다.
