@@ -296,12 +296,13 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
 [계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 
-`1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
+불변 사전 릴리스 [`1.1.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1)은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 또한 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화,
 예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일 시간대
-규칙 권위 회귀 검증, 복구 모드의 발급 차단, 내부 상태 조회와 시즌 표시 이름을 포함한 다음 검토 후보다.
-아직 게시하거나 BATON 생산자 기준으로 고정하지 않았으므로 현재 운영 기준은 계속 `1.0.0`이다.
+규칙 권위 회귀 검증, 복구 모드의 발급 차단, 내부 상태 조회, 시즌 표시 이름과 전체 복구 완료 계약을
+포함한다. BATON이 게시 자산과 요청 스키마를 고정해 실제 컨테이너 교차 서비스 검증을 완료했다.
+정식 `1.1.0` 승격 전까지 현재 운영 안정 기준은 계속 `1.0.0`이다.
 
 ## OCI 이미지 검증
 

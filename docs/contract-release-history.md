@@ -39,17 +39,20 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 `1.0.1`을 별도로 재포장한다. BATON은 게시된 태그·자산·SHA-256으로 다시 고정하고 생산자 계약
 테스트를 실행해야 한다.
 
-## 다음 검토 후보
+## 게시된 검토 후보
 
 | 항목 | 값 |
 | --- | --- |
 | 버전 | `1.1.0-rc.1` |
-| 예정 태그 | `contracts-v1.1.0-rc.1` |
+| 불변 태그 | `contracts-v1.1.0-rc.1` |
+| 태그 커밋 | `f1573edef1adf900570cd55f9bd7d7044566b6bd` |
 | 자산 | `baton-cal-contracts-1.1.0-rc.1.zip` |
+| 자산 SHA-256 | `7ac97568c8b10e4ac2dadb9d463312c1a5985c424a3a3a9e69c2bd8ee6dd376f` |
 | 변경 의미 | JSON 구조 제한, `prod` 데이터베이스 기본값 차단, HTTP 표준에 맞춘 Last-Modified 상한과 ETag 우선 판정, 재활성화·500 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`, iCal4j 4.3.0 단일 시간대 규칙 권위 회귀 검증, 시즌 이름과 전체 복구 매니페스트·완료 계약 |
-| 상태 | 로컬 기본 테스트·실행 JAR·계약 ZIP과 BATON 생산자 교차 서비스 검증 완료, 미게시, BATON 미고정 |
+| 릴리스 | [BATON CAL 계약 1.1.0-rc.1](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1) |
+| 상태 | 릴리스·자산 증명, BATON 자산·요청 스키마 고정과 실제 컨테이너 생산자 교차 서비스 검증 완료 |
 
-이 후보가 게시되고 BATON 교차 서비스 테스트를 통과하기 전까지 생산자 기준은 `1.0.0`이다.
+이 후보는 생산자 검증 기준이며 운영 안정 기준은 정식 버전 승격 전까지 `1.0.0`이다.
 
 ## 게시 이력
 
@@ -58,6 +61,7 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 | `1.0.0-rc.1` | `ce613f2ed72aa7ada61592664ca8feb8077eac75` | `0ca23e9e5189d41383d21c334005870446aa52a80e7bcb23e9183d8869acc546` | 단일 시점과 종일 날짜 형태가 없어 이력으로 보존 |
 | `1.0.0-rc.2` | `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549` | `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf` | 세 시간 형태와 실제 BATON 생산자 연동 검증 완료 |
 | `1.0.0` | `fd081a742b7c09a7ace53bb445ce1380c533c19e` | `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7` | 계약 의미 변경 없이 안정 버전으로 승격하고 BATON 고정 완료 |
+| `1.1.0-rc.1` | `f1573edef1adf900570cd55f9bd7d7044566b6bd` | `7ac97568c8b10e4ac2dadb9d463312c1a5985c424a3a3a9e69c2bd8ee6dd376f` | 시즌 이름·복구 완료 계약을 게시하고 BATON 생산자 교차 서비스 검증 완료 |
 
 게시된 사전 릴리스와 안정 릴리스는 교체하거나 같은 태그로 다시 만들지 않는다.
 
