@@ -3,6 +3,7 @@ package io.baton.cal.web
 import io.baton.cal.config.StandardUuidPath
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.projection.SeasonCalendarMetadataService
+import io.baton.cal.recovery.RecoveryManifestService
 import io.baton.cal.snapshot.SnapshotIngestionService
 import io.baton.cal.snapshot.SnapshotIngestionResult
 import io.baton.cal.subscription.SubscriptionService
@@ -29,6 +30,7 @@ class InternalCalendarController(
     private val subscriptionService: SubscriptionService,
     private val projectionService: SeasonProjectionService,
     private val metadataService: SeasonCalendarMetadataService,
+    private val recoveryManifestService: RecoveryManifestService,
     meterRegistry: MeterRegistry,
 ) {
     private val ingestionCounters: Map<SnapshotIngestionResult, Counter> =
@@ -72,6 +74,25 @@ class InternalCalendarController(
         .ok()
         .cacheControl(CacheControl.noStore())
         .body(metadataService.update(seasonId.value, request.revision, request.displayName))
+
+    @PutMapping("/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest")
+    fun verifyRecoverySeasonManifest(
+        @PathVariable recoveryId: StandardUuidPath,
+        @PathVariable seasonId: StandardUuidPath,
+        @Valid @RequestBody request: RecoverySeasonManifestRequest,
+    ): ResponseEntity<RecoverySeasonManifestResponse> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(recoveryManifestService.verifySeason(recoveryId.value, seasonId.value, request))
+
+    @PutMapping("/recovery-runs/{recoveryId}/completion")
+    fun completeRecoveryRun(
+        @PathVariable recoveryId: StandardUuidPath,
+        @Valid @RequestBody request: RecoveryRunCompletionRequest,
+    ): ResponseEntity<RecoveryRunCompletionResponse> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(recoveryManifestService.complete(recoveryId.value, request))
 
     @PostMapping("/subscriptions")
     fun createSubscription(

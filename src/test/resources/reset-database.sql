@@ -1,4 +1,6 @@
 TRUNCATE TABLE
+    recovery_run_completion,
+    recovery_season_manifest,
     calendar_subscription,
     season_feed_projection,
     calendar_item,

@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -49,6 +50,31 @@ class MvpHttpFlowTest @Autowired constructor(
     private val jdbcClient: JdbcClient,
     private val meterRegistry: MeterRegistry,
 ) {
+
+    @Test
+    fun `복구 모드가 아니면 새 복구 매니페스트를 검증하지 않는다`() {
+        mockMvc.perform(
+            put(
+                "/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest",
+                UUID.randomUUID(),
+                SEASON_ID,
+            )
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "itemCount": 0,
+                      "itemDigest": "${"0".repeat(64)}",
+                      "metadataRevision": null,
+                      "metadataDigest": null
+                    }
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RECOVERY_MODE_REQUIRED"))
+    }
 
     @Test
     fun `MVP는 멱등 스냅샷과 조건부 피드 재구축 및 토큰 수명주기를 지원한다`() {

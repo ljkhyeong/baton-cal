@@ -131,6 +131,7 @@ class ContractArtifactsTest {
         private val EXAMPLES_BY_SCHEMA = linkedMapOf(
             "api-error.v1.schema.json" to listOf(
                 "api-error.recovery-in-progress.json",
+                "api-error.recovery-manifest-mismatch.json",
                 "api-error.service-busy.json",
                 "api-error.source-revision-conflict.json",
             ),
@@ -139,6 +140,18 @@ class ContractArtifactsTest {
             ),
             "projection-rebuild-result.v1.schema.json" to listOf(
                 "projection-rebuild-result.json",
+            ),
+            "recovery-season-manifest.v1.schema.json" to listOf(
+                "recovery-season-manifest.json",
+            ),
+            "recovery-season-manifest-result.v1.schema.json" to listOf(
+                "recovery-season-manifest-result.json",
+            ),
+            "recovery-run-completion.v1.schema.json" to listOf(
+                "recovery-run-completion.json",
+            ),
+            "recovery-run-completion-result.v1.schema.json" to listOf(
+                "recovery-run-completion-result.json",
             ),
             "schedule-snapshot-result.v1.schema.json" to listOf(
                 "schedule-snapshot-result.applied.json",

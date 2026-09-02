@@ -160,8 +160,8 @@ assert_flyway_versions() {
   local successful_versions
   successful_versions=$(database_scalar \
     "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "1,2,3,4,5,6,7" ]] \
-    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6,7이 아닙니다: '${successful_versions:-<비어 있음>}'"
+  [[ "$successful_versions" == "1,2,3,4,5,6,7,8" ]] \
+    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6,7,8이 아닙니다: '${successful_versions:-<비어 있음>}'"
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 

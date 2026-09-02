@@ -39,3 +39,25 @@ class RecoveryInProgressException : ApiException(
     code = "RECOVERY_IN_PROGRESS",
     message = "subscription issuance is disabled during recovery",
 )
+
+class RecoveryConflictException private constructor(
+    code: String,
+    message: String,
+) : ApiException(HttpStatus.CONFLICT, code, message) {
+    companion object {
+        fun manifestMismatch() = RecoveryConflictException(
+            code = "RECOVERY_MANIFEST_MISMATCH",
+            message = "recovery manifest does not match the current calendar state",
+        )
+
+        fun runConflict() = RecoveryConflictException(
+            code = "RECOVERY_RUN_CONFLICT",
+            message = "recoveryId already represents another manifest",
+        )
+
+        fun modeRequired() = RecoveryConflictException(
+            code = "RECOVERY_MODE_REQUIRED",
+            message = "recovery manifest verification requires recovery mode",
+        )
+    }
+}

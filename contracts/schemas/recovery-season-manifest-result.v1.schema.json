@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/recovery-season-manifest-result.v1.schema.json",
+  "title": "RecoverySeasonManifestResultV1",
+  "description": "CAL이 현재 시즌 상태와 매니페스트가 일치함을 확인한 결과입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recoveryId", "seasonId", "result", "itemCount", "metadataRevision"],
+  "properties": {
+    "recoveryId": { "type": "string", "format": "uuid" },
+    "seasonId": { "type": "string", "format": "uuid" },
+    "result": { "const": "VERIFIED" },
+    "itemCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "metadataRevision": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  }
+}

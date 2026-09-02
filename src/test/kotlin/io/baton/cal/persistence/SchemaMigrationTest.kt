@@ -15,7 +15,7 @@ import java.util.UUID
 @Testcontainers
 class SchemaMigrationTest {
     @Test
-    fun `V3부터 V7까지 기존 구독과 일정 표현을 보존한다`() {
+    fun `V3부터 V8까지 기존 구독과 일정 표현을 보존한다`() {
         val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
         val jdbcClient = JdbcClient.create(dataSource)
         val seasonId = UUID.fromString(SEASON_ID)
@@ -192,6 +192,16 @@ class SchemaMigrationTest {
             )?.representation,
         ).isEqualTo("feed".encodeToByteArray())
         assertThat(SeasonCalendarMetadataRepository(jdbcClient).findBySeasonId(seasonId)).isNull()
+        assertThat(
+            jdbcClient.sql(
+                """
+                SELECT count(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('recovery_season_manifest', 'recovery_run_completion')
+                """.trimIndent(),
+            ).query(Int::class.java).single(),
+        ).isEqualTo(2)
     }
 
     private companion object {
