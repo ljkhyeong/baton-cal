@@ -2,6 +2,22 @@
 
 ## 현재 상태
 
+- BATON의 **내 계정 → 내 캘린더 구독**에 여러 구독 선택 해제를 추가하고 원본
+  `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`에 `f937d1c1`로 반영했다.
+  검증 폴더 `/Users/lim/devProject/personal/manager-cal-subscription`의
+  `codex/calendar-bulk-revocation-20260905` 커밋 `d2a92591`과 커밋의 파일 내용은 같다.
+  재확인할 자료 표시 `c89927d0`까지 포함하며 원본에서 진행 중인 다른 미커밋 변경은 보존했다.
+  불러온 구독 중 최대 20개를 선택하고 팀·시즌 목록 확인 후 기존 소유자 API로 차례로 해제한다.
+  해제된 항목은 선택에서 제외하며 검색·필터·계정 변경 때 선택을 지운다. 항목별 사전 조회에서
+  구독 ID가 달라졌으면 건너뛴다. 해제 응답 유실은 상태 GET 한 번으로 확인하고 완료·처리 중·확인 필요를
+  표시하며 DELETE는 자동 반복하지 않는다. 계정 확인 실패·화면 이탈·사용자 중단은 남은 요청을 막는다.
+  이미 보낸 요청은 서버에서 완료될 수 있다. 공용 요청 처리의 응답 직후 취소 확인과 계정 화면의
+  중복 식별자도 보완했다. 사용자 절차는 [구독 안내](docs/calendar-subscription-guide.md)에 반영했다.
+  구독 화면 72건과 공용 요청 처리 16건이 통과했다. 공용 요청 처리의 모바일 중복 15건은 기존 설정에
+  따라 제외됐다. 최신 BATON 커밋 통합 뒤 선택 해제 21건을 PC·모바일·WebKit에서 다시 통과했고
+  프런트 타입 검사·프로덕션 빌드도 통과했다. 서버·CAL 계약 변경은 없으며 서버 테스트와 실제 외부
+  캘린더 앱 검증은 다시 실행하지 않았다. 원격 푸시·운영 활성화도 하지 않았다.
+
 - 구독 해제 완료 후 목록 갱신과 자동 확인 종료 안내를 `b22d5c2`로 원본 BATON에 반영했다.
   원본 `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`와 검증 폴더
   `/Users/lim/devProject/personal/manager-cal-subscription`의
