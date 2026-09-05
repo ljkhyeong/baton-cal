@@ -56,13 +56,22 @@ class RecoveryManifestHttpTest @Autowired constructor(
     fun `복구 상태 조회는 진행과 완료를 구분하고 이후 원본 변경에도 완료 기록을 유지한다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
         val state = repository.currentSeasonState(SEASON_ID)
-        verifySeason(state.itemCount, state.itemDigest, null, null)
+        val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         val before = repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))
 
         readRunStatus("IN_PROGRESS", 1)
         val completed = complete(completionPayload(listOf(state)))
         val completedAt: String = JsonPath.read(completed, "$.completedAt")
         ingest("schedule-snapshot.zoned-cancelled.json")
+        assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
+        mockMvc.perform(
+            put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, SEASON_ID)
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(Path("contracts/examples/recovery-season-manifest.json").readText()),
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
         val status = readRunStatus("COMPLETED", 1)
 
         assertThat(JsonPath.read<String>(status, "$.completedAt")).isEqualTo(completedAt)

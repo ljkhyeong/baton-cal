@@ -10,7 +10,8 @@
   브랜치·미커밋 변경부터 확인한다.
 - 표준 API 검토의 4건을 반영했다. PostgreSQL 예외 변환을 공통 설정으로 옮기고, 복구의 수동 행 매핑·
   중복 정렬·완료 직후 재조회와 같은 값 재검증을 제거했다. 추가 검토한 일정 상태 조회도 응답에 필요한
-  5개 열만 읽도록 반영했다. [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
+  5개 열만 읽도록 반영했다. 복구 시즌 검증은 완료 재시도에 필요한 매니페스트만 조회하고,
+  완료 상태 조회는 저장된 시즌 수를 사용한다. [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
 - 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
@@ -26,16 +27,13 @@
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
 | 검증 스크립트 `45dd445`, 문서 수정 중 | 로컬 Python 3.14·PyYAML 6.0.3, `bash -n`, 스킬 검증 최초 실행·환경 재사용·입력 오류 2건 | 성공. 문서 로컬 링크 32개도 확인. 앱·Gradle 동작 변경이 없어 서버 테스트는 실행하지 않음 |
-| CAL `dcc264d` + 일정 상태 조회 구현 미커밋 변경 | Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.MvpHttpFlowTest'` | 기존 HTTP 테스트 13개 새 실행 성공. 전체 테스트·계약 ZIP·운영 검증은 반복하지 않음. 앞선 공통 JDBC·복구의 116개 결과는 [검토 기록](docs/reviews/2026-09-05-standard-api-review.md)에 보존 |
+| CAL `f0dbf7e` + 복구 조회 구현·테스트 미커밋 변경 | Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'` | 복구 HTTP 테스트 11개 새 실행 성공. 전체 테스트·계약 ZIP·운영 검증은 반복하지 않음. 앞선 검증은 [검토 기록](docs/reviews/2026-09-05-standard-api-review.md)에 보존 |
 | BATON `68179922` | 문구 변경 관련 Playwright 38건, PC·모바일·WebKit, 타입 검사 포함 프로덕션 빌드 | 성공. 서버·외부 앱 검증은 제외. [기록](docs/reviews/2026-09-05-wording-followup-review.md) |
 
 이전 서버·OCI·복원 검증과 WebKit 시간 초과 기록은 `git show 6c8eec6:HANDOFF.md`에서 확인할 수 있다.
 과거 테스트 개수와 브랜치 목록을 새 인수인계에 반복해서 추가하지 않는다.
 
 ## 남은 작업
-
-소규모 코드 정리 후보는 복구 시즌 검증의 사용하지 않는 매니페스트 조회와 완료 상태 조회의 중복
-COUNT 2건이다. 아직 구현하지 않았다. [추가 검토](docs/reviews/2026-09-05-standard-api-review.md)
 
 1. `1.1.0-rc.2` 검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
    승격한다. `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
