@@ -2,9 +2,12 @@
 
 ## 현재 상태
 
-- [추가 문구 검토](docs/reviews/2026-09-05-wording-followup-review.md)에 수정안 11개를 정리했다.
-  구독 해제 후 앱에 남은 일정과 같은 탭에서의 초안 복원 안내를 우선 수정할 항목으로 꼽았다.
-  검토 중 다른 작업에서 고친 문구는 제외했으며 이번에는 제품 코드를 변경하지 않았다.
+- [추가 문구 검토](docs/reviews/2026-09-05-wording-followup-review.md)의 11개 항목을 BATON
+  원본 `codex/review-feature-readiness`에 `68179922`로 반영했다. 검증 폴더
+  `/Users/lim/devProject/personal/manager-cal-subscription`의 `codex/wording-followup-20260905`도
+  같은 커밋이다. 구독 해제 후 앱에 남은 일정, 같은 탭에서의 초안 복원, 중복 제목과 완료·복원
+  안내를 정리했다. 관련 화면 38건과 타입 검사를 포함한 프로덕션 빌드가 통과했다. CAL 구독
+  안내도 맞췄다. 서버·API·저장 방식 변경은 없으며 서버 테스트는 다시 실행하지 않았다.
 
 - [문구 검토](docs/reviews/2026-09-05-wording-review.md)의 36개 항목을 화면·구독 오류 안내·제품
   문서에 반영했다. BATON 검증 폴더 `/Users/lim/devProject/personal/manager-cal-subscription`의
