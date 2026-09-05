@@ -231,6 +231,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [마이크로서비스 경계](docs/ADR/0001_microservice-boundary/adr.md)
 - [기술 스택 결정](docs/ADR/0002_technology-stack/adr.md)
 - [기계 판독형 계약](contracts/README.md)
+- [개발 검증 절차와 스킬 검증 환경](docs/development.md)
 - [계약 릴리스 현황](docs/contract-release-history.md)
 - [시즌 투영·실제 HTTP 수신 성능 기준](docs/performance-baseline.md)
 - [cal.b4ton.com HTTPS·프록시·모니터링 운영 구성](docs/operations.md)
@@ -270,15 +271,15 @@ BATON_CAL_INTERNAL_TOKEN=local-development-internal-token-change-me ./gradlew --
 docker compose down
 ```
 
-Docker 데몬이 실행 중인 환경에서 전체 검증은 다음 명령으로 실행한다.
+변경별 검증 선택과 결과 재사용 기준은 [개발 검증 절차](docs/development.md)를 따른다.
+Docker 데몬이 실행 중인 환경에서 일반 테스트와 계약 ZIP을 함께 검증하려면 다음 명령을 사용한다.
 
 ```shell
-./gradlew --no-daemon test bootJar verifyContractsZip
-./gradlew --no-daemon projectionLoadTest
+./gradlew --no-daemon check
 ```
 
-`projectionLoadTest`는 기본 `test`에서 제외한 수동 부하 측정이다. 로컬 Docker PostgreSQL에서 시즌
-전체 재구축의 현재 기준을 확인하며 운영 SLO로 사용하지 않는다.
+실행 JAR 검증이 필요하면 `bootJar`를 추가한다. `projectionLoadTest`와 `ingestionLoadTest`는
+[성능 측정](docs/performance-baseline.md)이 필요한 작업에서 별도로 실행한다.
 
 ## 계약 팩 검증과 배포
 
