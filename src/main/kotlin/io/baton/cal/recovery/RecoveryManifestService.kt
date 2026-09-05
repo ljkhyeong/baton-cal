@@ -67,7 +67,6 @@ class RecoveryManifestService(
     ): RecoverySeasonManifestResponse {
         request.requireValidMetadataPair()
         repository.lockRecoveryRun(recoveryId)
-        seasonLockRepository.acquire(seasonId)
         val expected = request.toState(seasonId)
         val completion = repository.findCompletion(recoveryId)
         if (completion != null) {
@@ -76,6 +75,7 @@ class RecoveryManifestService(
             return stored.toResponse()
         }
         requireRecoveryMode()
+        seasonLockRepository.acquire(seasonId)
         if (repository.currentSeasonState(seasonId) != expected) {
             throw RecoveryConflictException.manifestMismatch()
         }

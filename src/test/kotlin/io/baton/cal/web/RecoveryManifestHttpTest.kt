@@ -3,6 +3,7 @@ package io.baton.cal.web
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.persistence.RecoveryManifestRepository
+import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.support.PostgreSqlTestContainer
 import org.assertj.core.api.Assertions.assertThat
@@ -47,6 +48,7 @@ import kotlin.io.path.readText
 class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
+    private val seasonLockRepository: SeasonProjectionLockRepository,
     private val jdbcClient: JdbcClient,
     transactionManager: PlatformTransactionManager,
 ) {
@@ -201,6 +203,38 @@ class RecoveryManifestHttpTest @Autowired constructor(
         complete(payload)
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = [false, true])
+    fun `매니페스트 검증은 복구 완료 전까지만 시즌 잠금을 기다린다`(completed: Boolean) {
+        ingest("schedule-snapshot.zoned-active-r0.json")
+        val state = repository.currentSeasonState(SEASON_ID)
+        val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
+        if (completed) complete(completionPayload(listOf(state)))
+
+        Executors.newSingleThreadExecutor().use { executor ->
+            transaction.executeWithoutResult {
+                seasonLockRepository.acquire(SEASON_ID)
+                executor.submit {
+                    transaction.executeWithoutResult { rollback ->
+                        rollback.setRollbackOnly()
+                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
+                        if (completed) {
+                            assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
+                            mockMvc.perform(seasonManifestRequest(state.itemCount, "0".repeat(64), null, null))
+                                .andExpect(status().isConflict)
+                                .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
+                        } else {
+                            mockMvc.perform(seasonManifestRequest(state.itemCount, state.itemDigest, null, null))
+                                .andExpect(status().isServiceUnavailable)
+                                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                                .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
+                        }
+                    }
+                }.get(5, TimeUnit.SECONDS)
+            }
+        }
+    }
+
     @Test
     fun `동시 완료 요청은 먼저 저장한 완료 시각으로 응답한다`() {
         val payload = completionPayload(emptyList())
@@ -308,24 +342,32 @@ class RecoveryManifestHttpTest @Autowired constructor(
         metadataDigest: String?,
         seasonId: UUID = SEASON_ID,
     ): String = mockMvc.perform(
-        put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
-            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(
-                """
-                {
-                  "itemCount": $itemCount,
-                  "itemDigest": "$itemDigest",
-                  "metadataRevision": ${metadataRevision ?: "null"},
-                  "metadataDigest": ${metadataDigest?.let { "\"$it\"" } ?: "null"}
-                }
-                """.trimIndent(),
-            ),
+        seasonManifestRequest(itemCount, itemDigest, metadataRevision, metadataDigest, seasonId),
     )
         .andExpect(status().isOk)
         .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("VERIFIED"))
         .andReturn().response.contentAsString
+
+    private fun seasonManifestRequest(
+        itemCount: Int,
+        itemDigest: String,
+        metadataRevision: Int?,
+        metadataDigest: String?,
+        seasonId: UUID = SEASON_ID,
+    ) = put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
+        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(
+            """
+            {
+              "itemCount": $itemCount,
+              "itemDigest": "$itemDigest",
+              "metadataRevision": ${metadataRevision ?: "null"},
+              "metadataDigest": ${metadataDigest?.let { "\"$it\"" } ?: "null"}
+            }
+            """.trimIndent(),
+        )
 
     private fun completionPayload(states: List<io.baton.cal.recovery.RecoverySeasonState>): String =
         """
