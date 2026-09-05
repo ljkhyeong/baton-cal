@@ -22,7 +22,8 @@ BATON에서 발급한 `https://cal.b4ton.com/calendars/v1/...ics` 주소를 캘�
 [Microsoft 가져오기·구독 안내](https://support.microsoft.com/en-us/outlook/import-or-subscribe-to-a-calendar-in-outlook-com-or-outlook-on-the-web)다.
 이 안내는 실제 CAL 호환성 테스트 통과 기록이 아니다.
 
-BATON의 URL 발급 화면에는 다음 문구를 함께 표시하는 것을 권장한다. 화면 구현은 BATON 담당이다.
+BATON 개발 브랜치의 오늘 화면 **내 캘린더에 추가**에서 발급·복사·재발급·해제와 아래 안내를
+제공한다. 로컬 화면·서버 검증은 완료했으며 원본 BATON 브랜치 통합과 실제 앱 검증은 별도다.
 
 > 캘린더 앱에서 ‘URL로 구독’을 선택해 이 주소를 등록하세요. 일정 변경과 취소는 앱의 갱신 주기에
 > 따라 반영됩니다. 주소는 다시 표시되지 않으니 등록을 마칠 때까지 이 화면을 유지하세요.
