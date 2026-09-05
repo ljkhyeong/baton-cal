@@ -2,6 +2,16 @@
 
 ## 현재 상태
 
+- 구독 해제 완료 후 목록 갱신과 자동 확인 종료 안내를 `b22d5c2`로 원본 BATON에 반영했다.
+  원본 `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`와 검증 폴더
+  `/Users/lim/devProject/personal/manager-cal-subscription`의
+  `codex/cal-subscription-completion-20260905`는 같은 커밋이다. 계정 비활성화 `b19f032`를 포함한다.
+  해제 완료를 확인하면 현재 검색·포함 조건으로 목록을 새로 조회한다. 90초 종료와 조회 실패에
+  맞는 중단 안내를 표시하며, 상태 다시 확인을 누르면 종료 안내를 지우고 90초 확인을 다시 시작한다.
+  핵심 화면 9건에 이어 최종 구독 화면 51건이 PC·모바일·WebKit에서 재시도 없이 통과했다.
+  프런트 타입 검사·프로덕션 빌드도 통과했다. 화면·제품 문서 변경이며 서버·CAL 계약은 변경하지 않았다.
+  이번에는 서버 테스트와 실제 캘린더 앱 검증을 다시 실행하지 않았고 원격 푸시·운영 활성화도 하지 않았다.
+
 - BATON의 **내 계정 → 내 캘린더 구독**에 팀·시즌 이름 검색, 해제된 구독 숨기기,
   확인한 상태·시각 표시와 처리 중 상태 자동 확인을 추가했다. 기존 목록 `4a9060b`의 후속 변경이며
   원본 `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`에 `21d3de3`으로
