@@ -6,7 +6,10 @@ import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.support.PostgreSqlTestContainer
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
@@ -23,7 +26,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.Path
 import kotlin.io.path.readText
 
@@ -40,7 +48,10 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
     private val jdbcClient: JdbcClient,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val transaction = TransactionTemplate(transactionManager)
+
     @Test
     fun `복구 상태 조회는 진행과 완료를 구분하고 이후 원본 변경에도 완료 기록을 유지한다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
@@ -146,6 +157,65 @@ class RecoveryManifestHttpTest @Autowired constructor(
             first,
             "전체 복구 완료 응답",
         )
+        mockMvc.perform(completionRequest(completionPayload(emptyList())))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
+        assertThat(complete(completionPayload)).isEqualTo(first)
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["run", "state"])
+    fun `복구 잠금 대기가 끝나면 503과 재시도 간격을 반환한다`(lock: String) {
+        val payload = completionPayload(emptyList())
+        Executors.newSingleThreadExecutor().use { executor ->
+            transaction.executeWithoutResult {
+                if (lock == "run") {
+                    repository.lockRecoveryRun(UUID.fromString(RECOVERY_ID))
+                } else {
+                    jdbcClient.sql("LOCK TABLE calendar_item IN ROW EXCLUSIVE MODE").update()
+                }
+                executor.submit {
+                    transaction.executeWithoutResult { rollback ->
+                        rollback.setRollbackOnly()
+                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
+                        val response = mockMvc.perform(completionRequest(payload))
+                            .andExpect(status().isServiceUnavailable)
+                            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                            .andExpect(content().json(Path("contracts/examples/api-error.service-busy.json").readText()))
+                            .andReturn().response.contentAsString
+                        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 잠금 시간 초과")
+                    }
+                }.get(5, TimeUnit.SECONDS)
+            }
+        }
+        assertThat(repository.findCompletion(UUID.fromString(RECOVERY_ID))).isNull()
+        complete(payload)
+    }
+
+    @Test
+    fun `동시 완료 요청은 먼저 저장한 완료 시각으로 응답한다`() {
+        val payload = completionPayload(emptyList())
+        Executors.newSingleThreadExecutor().use { executor ->
+            lateinit var duplicate: Future<String>
+            val first = transaction.execute {
+                val response = complete(payload)
+                val blocker = jdbcClient.sql("SELECT pg_backend_pid()").query(Int::class.java).single()
+                duplicate = executor.submit<String> { complete(payload) }
+                await().atMost(3, TimeUnit.SECONDS).untilAsserted {
+                    assertThat(
+                        jdbcClient.sql(
+                            """
+                            SELECT count(*) FROM pg_locks
+                            WHERE locktype = 'advisory' AND NOT granted
+                              AND :blocker = ANY(pg_blocking_pids(pid))
+                            """.trimIndent(),
+                        ).param("blocker", blocker).query(Int::class.java).single(),
+                    ).isEqualTo(1)
+                }
+                response
+            }
+            assertThat(duplicate.get(5, TimeUnit.SECONDS)).isEqualTo(first)
+        }
     }
 
     @Test

@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.QueryTimeoutException
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
@@ -42,6 +43,16 @@ class PersistenceRepositoryTest @Autowired constructor(
     transactionManager: PlatformTransactionManager,
 ) {
     private val transaction = TransactionTemplate(transactionManager)
+
+    @Test
+    fun `SQL 실행 시간 초과를 Spring 표준 예외로 변환한다`() {
+        assertThatThrownBy {
+            transaction.executeWithoutResult {
+                jdbcClient.sql("SET LOCAL statement_timeout TO '100ms'").update()
+                jdbcClient.sql("SELECT pg_sleep(1)").query { _, _ -> true }.single()
+            }
+        }.isInstanceOf(QueryTimeoutException::class.java)
+    }
 
     @Test
     fun `inbox preserves every envelope while event id remains idempotent`() {

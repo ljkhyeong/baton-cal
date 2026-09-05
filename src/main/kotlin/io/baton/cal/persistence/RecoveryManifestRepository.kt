@@ -58,7 +58,7 @@ class RecoveryManifestRepository(
     fun currentSeasonState(seasonId: UUID): RecoverySeasonState {
         val items = jdbcClient.sql(
             """
-            SELECT item.source_item_id, item.revision, inbox.payload_hash
+            SELECT item.source_item_id, item.revision, inbox.payload_hash AS payload_digest
             FROM calendar_item item
             JOIN LATERAL (
                 SELECT payload_hash
@@ -69,17 +69,10 @@ class RecoveryManifestRepository(
                 LIMIT 1
             ) inbox ON TRUE
             WHERE item.season_id = :seasonId
-            ORDER BY item.source_item_id
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
-            .query { resultSet, _ ->
-                RecoveryItemState(
-                    sourceItemId = resultSet.getObject("source_item_id", UUID::class.java),
-                    revision = resultSet.getInt("revision"),
-                    payloadDigest = resultSet.getString("payload_hash"),
-                )
-            }
+            .query(RecoveryItemState::class.java)
             .list()
             .requireNoNulls()
         val metadata = jdbcClient.sql(
@@ -152,7 +145,6 @@ class RecoveryManifestRepository(
                metadata_revision, metadata_digest, verified_at
         FROM recovery_season_manifest
         WHERE recovery_id = :recoveryId
-        ORDER BY season_id
         """.trimIndent(),
     )
         .param("recoveryId", recoveryId)
@@ -193,12 +185,11 @@ class RecoveryManifestRepository(
         .optional()
         .getOrNull()
 
-    fun insertCompletion(row: RecoveryRunCompletionRow): RecoveryRunCompletionRow {
+    fun insertCompletion(row: RecoveryRunCompletionRow) {
         jdbcClient.sql(
             """
             INSERT INTO recovery_run_completion (recovery_id, season_count, season_digest, completed_at)
             VALUES (:recoveryId, :seasonCount, :seasonDigest, :completedAt)
-            ON CONFLICT (recovery_id) DO NOTHING
             """.trimIndent(),
         )
             .param("recoveryId", row.recoveryId)
@@ -206,6 +197,5 @@ class RecoveryManifestRepository(
             .param("seasonDigest", row.seasonDigest)
             .param("completedAt", row.completedAt.atOffset(ZoneOffset.UTC))
             .update()
-        return requireNotNull(findCompletion(row.recoveryId))
     }
 }

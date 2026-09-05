@@ -98,7 +98,12 @@ class RecoveryManifestService(
         request: RecoveryRunCompletionRequest,
     ): RecoveryRunCompletionResponse {
         repository.lockRecoveryRun(recoveryId)
-        repository.findCompletion(recoveryId)?.let { return completionResponse(it, request) }
+        repository.findCompletion(recoveryId)?.let { stored ->
+            if (stored.seasonCount != request.seasonCount || stored.seasonDigest != request.seasonDigest) {
+                throw RecoveryConflictException.runConflict()
+            }
+            return stored.toResponse()
+        }
         requireRecoveryMode()
         repository.lockRecoveryState()
         val manifests = repository.listSeasonManifests(recoveryId)
@@ -112,35 +117,26 @@ class RecoveryManifestService(
         ) {
             throw RecoveryConflictException.manifestMismatch()
         }
-        val completed = repository.insertCompletion(
-            RecoveryRunCompletionRow(
-                recoveryId = recoveryId,
-                seasonCount = request.seasonCount,
-                seasonDigest = request.seasonDigest,
-                completedAt = clock.instant().truncatedTo(ChronoUnit.MICROS),
-            ),
+        val completed = RecoveryRunCompletionRow(
+            recoveryId = recoveryId,
+            seasonCount = request.seasonCount,
+            seasonDigest = request.seasonDigest,
+            completedAt = clock.instant().truncatedTo(ChronoUnit.MICROS),
         )
-        return completionResponse(completed, request)
+        repository.insertCompletion(completed)
+        return completed.toResponse()
     }
 
     private fun requireRecoveryMode() {
         if (!properties.recoveryMode) throw RecoveryConflictException.modeRequired()
     }
 
-    private fun completionResponse(
-        row: RecoveryRunCompletionRow,
-        request: RecoveryRunCompletionRequest,
-    ): RecoveryRunCompletionResponse {
-        if (row.seasonCount != request.seasonCount || row.seasonDigest != request.seasonDigest) {
-            throw RecoveryConflictException.runConflict()
-        }
-        return RecoveryRunCompletionResponse(
-            recoveryId = row.recoveryId,
-            result = "COMPLETED",
-            seasonCount = row.seasonCount,
-            completedAt = row.completedAt,
-        )
-    }
+    private fun RecoveryRunCompletionRow.toResponse() = RecoveryRunCompletionResponse(
+        recoveryId = recoveryId,
+        result = "COMPLETED",
+        seasonCount = seasonCount,
+        completedAt = completedAt,
+    )
 
     private fun RecoverySeasonManifestRow.toResponse() = RecoverySeasonManifestResponse(
         recoveryId = recoveryId,

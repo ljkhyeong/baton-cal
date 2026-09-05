@@ -3,8 +3,6 @@ package io.baton.cal.persistence
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import java.util.UUID
-import org.springframework.dao.CannotAcquireLockException
-import org.springframework.jdbc.UncategorizedSQLException
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
@@ -25,37 +23,28 @@ class SeasonProjectionLockRepository(
      */
     @Transactional(propagation = Propagation.MANDATORY)
     fun acquire(seasonId: UUID) {
-        try {
-            acquisitionTimer.record(Runnable {
-                jdbcClient.sql(
-                    """
-                    INSERT INTO season_projection_lock (season_id)
-                    VALUES (:seasonId)
-                    ON CONFLICT (season_id) DO NOTHING
-                    """.trimIndent(),
-                )
-                    .param("seasonId", seasonId)
-                    .update()
+        acquisitionTimer.record(Runnable {
+            jdbcClient.sql(
+                """
+                INSERT INTO season_projection_lock (season_id)
+                VALUES (:seasonId)
+                ON CONFLICT (season_id) DO NOTHING
+                """.trimIndent(),
+            )
+                .param("seasonId", seasonId)
+                .update()
 
-                jdbcClient.sql(
-                    """
-                    SELECT season_id
-                    FROM season_projection_lock
-                    WHERE season_id = :seasonId
-                    FOR UPDATE
-                    """.trimIndent(),
-                )
-                    .param("seasonId", seasonId)
-                    .query(UUID::class.java)
-                    .single()
-            })
-        } catch (exception: UncategorizedSQLException) {
-            if (exception.sqlException?.sqlState != LOCK_NOT_AVAILABLE_SQL_STATE) throw exception
-            throw CannotAcquireLockException("시즌 투영 잠금 획득 제한 시간을 초과했습니다", exception)
-        }
-    }
-
-    private companion object {
-        const val LOCK_NOT_AVAILABLE_SQL_STATE = "55P03"
+            jdbcClient.sql(
+                """
+                SELECT season_id
+                FROM season_projection_lock
+                WHERE season_id = :seasonId
+                FOR UPDATE
+                """.trimIndent(),
+            )
+                .param("seasonId", seasonId)
+                .query(UUID::class.java)
+                .single()
+        })
     }
 }

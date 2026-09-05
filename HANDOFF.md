@@ -8,6 +8,8 @@
 - 2026-09-05 확인 시 CAL 기능 변경은 로컬 `main`의 `592dc8b`, BATON 화면 변경은 `fc3d90f1`에
   포함됐다. 이후 지시 정리는 `codex/streamline-cal-instructions`에서 진행했다. 다음 작업은 실제
   브랜치·미커밋 변경부터 확인한다.
+- 표준 API 검토의 4건을 반영했다. PostgreSQL 예외 변환을 공통 설정으로 옮기고, 복구의 수동 행 매핑·
+  중복 정렬·완료 직후 재조회와 같은 값 재검증을 제거했다. [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
 - 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
@@ -23,16 +25,13 @@
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
 | 검증 스크립트 `45dd445`, 문서 수정 중 | 로컬 Python 3.14·PyYAML 6.0.3, `bash -n`, 스킬 검증 최초 실행·환경 재사용·입력 오류 2건 | 성공. 문서 로컬 링크 32개도 확인. 앱·Gradle 동작 변경이 없어 서버 테스트는 실행하지 않음 |
-| CAL `592dc8b`, 미커밋 변경 없음 | 로컬 `./gradlew --no-daemon check` | 성공. 일반 테스트는 `UP-TO-DATE`, 계약 ZIP은 실행. 새 서버 테스트 실행으로 보지 않음 |
+| CAL `927dce8` + JDBC·복구 구현·테스트 미커밋 변경 | Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon check` | 일반 테스트 116개 새 실행 성공. 계약 ZIP 재사용, ZIP 검증 새 실행 성공. 이미지·운영·BATON 검증 제외 |
 | BATON `68179922` | 문구 변경 관련 Playwright 38건, PC·모바일·WebKit, 타입 검사 포함 프로덕션 빌드 | 성공. 서버·외부 앱 검증은 제외. [기록](docs/reviews/2026-09-05-wording-followup-review.md) |
 
 이전 서버·OCI·복원 검증과 WebKit 시간 초과 기록은 `git show 6c8eec6:HANDOFF.md`에서 확인할 수 있다.
 과거 테스트 개수와 브랜치 목록을 새 인수인계에 반복해서 추가하지 않는다.
 
 ## 남은 작업
-
-운영 외 코드 정리 후보는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md)에 정리했다.
-DB 잠금 오류의 표준 변환을 먼저 검토하고, 나머지 3건은 작은 정리 작업으로 진행할 수 있다. 아직 미반영이다.
 
 1. `1.1.0-rc.2` 검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
    승격한다. `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
