@@ -31,7 +31,7 @@ class SnapshotIngestionService(
 ) {
     @Transactional(readOnly = true)
     fun getItemStatus(sourceItemId: UUID): CalendarItemStatusResponse {
-        val item = itemRepository.findBySourceItemId(sourceItemId)
+        val item = itemRepository.findStatusBySourceItemId(sourceItemId)
             ?: throw InternalResourceNotFoundException("일정 항목을 찾을 수 없습니다")
         return CalendarItemStatusResponse(
             sourceItemId = item.sourceItemId,

@@ -29,16 +29,16 @@ class CalendarItemRepository(
         }
     }
 
-    fun findBySourceItemId(sourceItemId: UUID): CalendarItemRow? =
+    fun findStatusBySourceItemId(sourceItemId: UUID): CalendarItemStatusRow? =
         jdbcClient.sql(
             """
-            SELECT $COLUMNS
+            SELECT source_item_id, season_id, revision, status, source_updated_at
             FROM calendar_item
             WHERE source_item_id = :sourceItemId
             """.trimIndent(),
         )
             .param("sourceItemId", sourceItemId)
-            .query(CalendarItemRow::class.java)
+            .query(CalendarItemStatusRow::class.java)
             .optional()
             .getOrNull()
 

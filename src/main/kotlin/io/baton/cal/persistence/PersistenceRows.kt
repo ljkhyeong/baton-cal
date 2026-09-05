@@ -37,6 +37,14 @@ data class CalendarItemRow(
     val acceptedAt: Instant,
 )
 
+data class CalendarItemStatusRow(
+    val sourceItemId: UUID,
+    val seasonId: UUID,
+    val revision: Int,
+    val status: CalendarItemStatus,
+    val sourceUpdatedAt: Instant,
+)
+
 enum class CalendarItemApplyOutcome {
     APPLIED,
     STALE,

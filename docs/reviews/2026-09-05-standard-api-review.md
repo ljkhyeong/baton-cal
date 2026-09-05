@@ -67,18 +67,21 @@ Java 25.0.3·PostgreSQL 18.6 Testcontainers 환경에서 일반 테스트 116개
 
 ## 추가 검토 — `8f926de` 기준
 
-### 남은 정리 후보: 일정 상태 조회의 불필요한 열 조회
+### 반영 완료: 일정 상태 조회 열 축소
 
 [SnapshotIngestionService.getItemStatus()](../../src/main/kotlin/io/baton/cal/snapshot/SnapshotIngestionService.kt)는
 응답에 `sourceItemId`, `seasonId`, `revision`, `status`, `sourceUpdatedAt` 5개 값만 사용한다.
-그러나 [CalendarItemRepository.findBySourceItemId()](../../src/main/kotlin/io/baton/cal/persistence/CalendarItemRepository.kt)는
-설명·장소·시간 정보 등 17개 열을 모두 조회하고 매핑한다. 이 메서드의 운영 호출자는 상태 조회 하나다.
+기존 저장소 메서드는 설명·장소·시간 정보 등 17개 열을 모두 조회하고 매핑했다.
 
-**변경안:** 필요한 5개 열만 조회하는 상태 전용 행 타입을 두고 `JdbcClient.query(타입::class.java)`로
-매핑한다. 기존 전체 조회 메서드를 교체하면 된다. 조회·매핑 범위를 줄이는 소규모 정리이며,
-성능 문제를 측정한 결과는 아니다. 아직 구현하지 않았다.
+[CalendarItemRepository.findStatusBySourceItemId()](../../src/main/kotlin/io/baton/cal/persistence/CalendarItemRepository.kt)가
+필요한 5개 열만 선택하고 `JdbcClient.query(CalendarItemStatusRow::class.java)`로 매핑하도록 교체했다.
+상태 조회의 응답 필드와 오류 처리는 유지했다. 조회·매핑 범위를 줄인 변경이며 성능 수치를 측정하지는 않았다.
 
-수정하면 `MvpHttpFlowTest`의 중복·역순 수신 후 상태, 인증·없는 자원, 응답 스키마 검증을 실행한다.
+`dcc264d`에 이 구현을 추가한 미커밋 상태에서
+`./gradlew --no-daemon test --tests 'io.baton.cal.web.MvpHttpFlowTest'`를 실행했다.
+Java 25.0.3·PostgreSQL 18.6 Testcontainers 환경에서 기존 테스트 13개를 새로 실행해 모두 통과했다.
+중복·역순 수신 후 상태, 취소, 수정 시각 정밀도, 인증·없는 자원과 응답 스키마를 확인했다.
+API 계약·설정·의존성은 바뀌지 않아 전체 테스트와 계약 ZIP 검증은 반복하지 않았다.
 
 ### UUID 경로 보조 타입은 유지
 
@@ -90,5 +93,5 @@ Java 25.0.3·PostgreSQL 18.6 Testcontainers 환경에서 일반 테스트 116개
 전체 HTTP 재현이 아닌 Spring 타입 변환 경로의 좁은 실행 결과다.
 
 그 밖에 JDBC 시간·enum·nullable 바인딩, 시간대 검증, 조건부 GET과 동시성 제어는 유지 이유가
-확인됐다. 이번 추가 검토에서는 제품 코드·설정·의존성을 바꾸지 않았으며 전체 Gradle 테스트는
-재실행하지 않았다. 바로 앞 구현의 116개 성공 기록과 구분한다.
+확인됐다. `dcc264d`의 추가 검토는 문서만 변경했고, 이후 상태 조회 구현의 검증은 위 13개 결과다.
+앞선 공통 JDBC·복구 구현의 전체 테스트 116개 성공 기록과 구분한다.
