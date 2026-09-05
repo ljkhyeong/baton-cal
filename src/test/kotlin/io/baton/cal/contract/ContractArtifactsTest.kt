@@ -134,6 +134,8 @@ class ContractArtifactsTest {
                 "api-error.recovery-manifest-mismatch.json",
                 "api-error.service-busy.json",
                 "api-error.source-revision-conflict.json",
+                "api-error.subscription-already-exists.json",
+                "api-error.subscription-scope-conflict.json",
             ),
             "calendar-item-status.v1.schema.json" to listOf(
                 "calendar-item-status.cancelled.json",
@@ -143,12 +145,14 @@ class ContractArtifactsTest {
             ),
             "recovery-season-manifest.v1.schema.json" to listOf(
                 "recovery-season-manifest.json",
+                "recovery-season-manifest.zoned-cancelled.json",
             ),
             "recovery-season-manifest-result.v1.schema.json" to listOf(
                 "recovery-season-manifest-result.json",
             ),
             "recovery-run-completion.v1.schema.json" to listOf(
                 "recovery-run-completion.json",
+                "recovery-run-completion.zoned-cancelled.json",
             ),
             "recovery-run-completion-result.v1.schema.json" to listOf(
                 "recovery-run-completion-result.json",

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository
 class CalendarSubscriptionRepository(
     private val jdbcClient: JdbcClient,
 ) {
-    fun insert(row: CalendarSubscriptionRow) {
+    fun insert(row: CalendarSubscriptionRow): Boolean =
         jdbcClient.sql(
             """
             INSERT INTO calendar_subscription (
@@ -25,6 +25,7 @@ class CalendarSubscriptionRepository(
                 :credentialGeneration,
                 :status
             )
+            ON CONFLICT (id) DO NOTHING
             """.trimIndent(),
         )
             .param("id", row.id)
@@ -32,8 +33,7 @@ class CalendarSubscriptionRepository(
             .param("tokenHash", row.tokenHash)
             .param("credentialGeneration", row.credentialGeneration)
             .param("status", row.status.name)
-            .update()
-    }
+            .update() == 1
 
     fun findById(id: UUID): CalendarSubscriptionRow? =
         jdbcClient.sql(

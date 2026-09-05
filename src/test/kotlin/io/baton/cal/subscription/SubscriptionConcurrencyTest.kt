@@ -16,6 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -37,6 +40,39 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 ) {
     @MockitoSpyBean
     private lateinit var repository: CalendarSubscriptionRepository
+
+    @ParameterizedTest
+    @ValueSource(booleans = [false, true])
+    fun `같은 ID의 동시 생성은 한 자격 증명만 저장하고 다른 시즌 재사용을 거부한다`(differentSeason: Boolean) {
+        val otherSeasonId = UUID.randomUUID()
+        val seed = service.create(SEASON_ID)
+        service.create(otherSeasonId)
+        val matcherPlaceholder = requireNotNull(repository.findById(seed.subscriptionId))
+        val subscriptionId = UUID.randomUUID()
+        val bothInserting = CountDownLatch(2)
+        doAnswer { invocation ->
+            bothInserting.countDown()
+            check(bothInserting.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                "두 구독 생성 요청이 저장 지점에 도달하지 못했습니다"
+            }
+            invocation.callRealMethod()
+        }.`when`(repository).insert(any(CalendarSubscriptionRow::class.java) ?: matcherPlaceholder)
+
+        val outcomes = runConcurrently(
+            { runCatching { service.create(SEASON_ID, subscriptionId) } },
+            { runCatching { service.create(if (differentSeason) otherSeasonId else SEASON_ID, subscriptionId) } },
+        )
+
+        val winner = outcomes.single { it.isSuccess }.getOrThrow()
+        assertThat(outcomes.single { it.isFailure }.exceptionOrNull())
+            .isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+                assertThat(it.code).isEqualTo(
+                    if (differentSeason) "SUBSCRIPTION_SCOPE_CONFLICT" else "SUBSCRIPTION_ALREADY_EXISTS",
+                )
+            }
+        assertThat(repository.findById(subscriptionId)?.tokenHash).isEqualTo(tokenCodec.hash(winner.token))
+        assertThat(service.findFeed(winner.token)).isNotNull()
+    }
 
     @Test
     fun `concurrent rotations commit exactly one credential and report one conflict`() {

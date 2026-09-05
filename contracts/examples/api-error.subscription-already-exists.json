@@ -1,0 +1,4 @@
+{
+  "code": "SUBSCRIPTION_ALREADY_EXISTS",
+  "message": "이미 생성된 구독입니다. 상태를 조회한 뒤 필요한 경우 토큰을 다시 발급하세요"
+}

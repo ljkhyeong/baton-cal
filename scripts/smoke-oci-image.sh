@@ -24,6 +24,8 @@ generation_a=40000000-0000-0000-0000-000000000001
 generation_b=40000000-0000-0000-0000-000000000002
 source_item_id=b8ca471a-b228-42fa-8d41-28f05ee90d40
 season_id=f5316f93-d49e-4230-b1d0-9e9c2d079819
+# 각 실행은 빈 격리 DB에서 시작하므로 이 ID의 과거 완료 기록이 없다.
+recovery_id=92490d0d-b82e-4f94-a041-308b184aaef9
 export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
@@ -216,6 +218,27 @@ assert_recovery_blocked() {
     || fail "복구 중 구독 발급 차단 오류 코드가 올바르지 않습니다."
 }
 
+assert_recovery_result() {
+  local path=$1
+  local fixture=$2
+  local expected_status=$3
+  local expected_result=$4
+  local status
+  status=$(
+    "${http_request[@]}" --request PUT \
+      --header "Authorization: Bearer $internal_token" \
+      --header 'Content-Type: application/json' \
+      --data-binary "@$project_directory/contracts/examples/$fixture" \
+      --output "$response_body_file" --write-out '%{http_code}' \
+      "$base_url/internal/api/v1/recovery-runs/$recovery_id/$path"
+  )
+  [[ "$status" == "$expected_status" ]] \
+    || fail "복구 $path 요청이 HTTP $expected_status 대신 $status를 반환했습니다."
+  jq --exit-status --arg expected "$expected_result" \
+    '(.result // .code) == $expected' "$response_body_file" >/dev/null \
+    || fail "복구 $path 요청 결과가 $expected_result가 아닙니다."
+}
+
 assert_public_ok() {
   local token=$1
   local status
@@ -375,13 +398,24 @@ assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_i
 echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인했습니다."
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
+assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 409 RECOVERY_MANIFEST_MISMATCH
+assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 409 RECOVERY_MANIFEST_MISMATCH
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 post_snapshot schedule-snapshot.zoned-cancelled.json
+assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 409 RECOVERY_MANIFEST_MISMATCH
 put_season_metadata season-calendar-metadata.r2.json
-echo "최신 ACTIVE 개정과 CANCELLED 스냅샷, 시즌 표시 이름 재전달을 완료했습니다."
+echo "취소와 최신 이름 누락 시 복구 검증 거부를 확인하고 최신 상태 재전달을 완료했습니다."
 assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 echo "스냅샷 재전달 뒤에도 복구 모드가 자동 해제되지 않는지 확인했습니다."
 
-echo "대표 픽스처 복구를 마친 뒤 세대 B를 유지하고 복구 모드만 해제합니다."
+assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 200 VERIFIED
+assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 200 COMPLETED
+completed_at=$(jq --exit-status --raw-output '.completedAt' "$response_body_file")
+assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 200 COMPLETED
+jq --exit-status --arg expected "$completed_at" '.completedAt == $expected' "$response_body_file" >/dev/null \
+  || fail "같은 완료 요청을 재시도했을 때 최초 완료 시각이 바뀌었습니다."
+assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
+echo "COMPLETED 응답과 재시도 시각을 확인한 뒤 세대 B를 유지하고 복구 모드만 해제합니다."
 export BATON_CAL_RECOVERY_MODE=false
 "${compose[@]}" up --detach --force-recreate app
 wait_for_readiness

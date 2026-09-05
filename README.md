@@ -166,7 +166,23 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 같은 완료 요청은 최초 완료 시각을 유지해 멱등하게 반환한다. 운영자 또는 상위 오케스트레이션은
 이 완료 응답을 확인한 뒤 복구 모드를 해제해야 한다.
 `RECOVERY_IN_PROGRESS`에는 완료 시각을 추측한 `Retry-After`를 넣지 않는다. 생성·회전 호출자는
-모드 해제를 확인한 뒤 명시적으로 다시 요청하며 응답 유실을 이유로 자동 재시도하지 않는다.
+모드 해제를 확인한 뒤 명시적으로 다시 요청한다. POST 생성·회전은 응답 유실을 이유로 자동
+재시도하지 않으며 ID 지정 PUT 생성은 아래 복구 절차를 따른다.
+
+### 구독 생성 응답 유실 복구
+
+새 연동은 BATON이 구독 ID와 승인한 시즌 ID를 먼저 저장하고
+`PUT /internal/api/v1/subscriptions/{subscriptionId}`에 `{seasonId}`를 보낸다. 최초 성공의 `201`만
+토큰·피드 URL을 반환한다. 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은
+`409 SUBSCRIPTION_SCOPE_CONFLICT`이며 기존 토큰·상태·세대를 바꾸지 않는다.
+
+응답을 잃으면 같은 ID로 상태를 조회한다. `404`일 때는 같은 ID·시즌으로 PUT을 재전달할 수 있다.
+활성 구독이 있지만 자격 증명을 받지 못했다면 사용자 요청에 따라 rotate로 다시 발급한다. 폐기된
+구독은 새 ID로 생성한다. 토큰 원문은 계속 저장하지 않으며 회전 응답을 잃었을 때도 다시 명시적으로
+재발급해야 한다. 기존 POST 생성에는 유실된 구독 ID를 찾을 수 없는 제한이 남는다.
+
+새 PUT은 모든 CAL 인스턴스 배포와 BATON의 후보 계약 고정 뒤 활성화한다. CAL 구현만으로 BATON의
+사전 ID 저장·응답 유실 안내까지 완료된 것은 아니다.
 
 ### 내부 상태 조회
 
@@ -272,9 +288,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실�
 ./gradlew --no-daemon verifyContractsZip
 ```
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 따라서 결과는
-`build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`이고, ZIP 안에도 같은
-`contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.1`이며 파일명, ZIP 내부
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.2`이다. 따라서 결과는
+`build/distributions/baton-cal-contracts-1.1.0-rc.2.zip`이고, ZIP 안에도 같은
+`contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.2`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 루트 `LICENSE`, `contracts/**` 전체와 필드 간
 의미, HTTP 상태, 토큰과 iCalendar 규칙의 기준인 `docs/PRD/0002_mvp-contract/spec.md`를 포함한다.
 파일 시각과 항목 순서, 권한을 고정해 같은 입력에서 같은 ZIP 바이트를 만들며, 별도 압축 스크립트나
@@ -305,6 +321,9 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 포함한다. BATON이 게시 자산과 요청 스키마를 고정해 실제 컨테이너 교차 서비스 검증을 완료했다.
 정식 `1.1.0` 승격 전까지 현재 운영 안정 기준은 계속 `1.0.0`이다.
 
+현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성과 고정된 복원 매니페스트 예시를 추가했다.
+아직 게시하거나 BATON 생산자에 고정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
+
 ## OCI 이미지 검증
 
 운영 전달 단위는 Spring Boot의 `bootBuildImage`가 Cloud Native Buildpacks로 만드는 OCI 이미지다.
@@ -332,7 +351,9 @@ Prometheus 메트릭, 35초 유예 안의 SIGTERM 정상 종료와 SIGKILL·OOM 
 아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔
 `pg_restore --clean --create --exit-on-error`로 복원한다. 복원된 기존 토큰의 본문 없는 일반 `404`,
 복구 모드의 생성·회전 `503` 차단, 대표 계약 픽스처의 최신 변경·취소·시즌 이름 재전달, 재전달 뒤에도 발급
-차단 유지, 같은 세대에서 모드 해제·재시작 뒤 기존 구독 rotate, 새 토큰의 `200`과
+차단 유지, 고정 매니페스트의 `VERIFIED`·`COMPLETED`와 완료 재시도 시 최초 시각 보존을 확인한다.
+취소·최신 이름이 빠지면 검증을 거부하고, `COMPLETED`를 확인한 뒤에만 같은 세대에서 모드를
+해제·재시작한다. 이어 기존 구독 rotate, 새 토큰의 `200`과
 `STATUS:CANCELLED`·`SEQUENCE:3`과 최신 이름까지 검증한다. 전용 Compose 프로젝트·네트워크·볼륨과 임시 백업만
 정리하고 입력 이미지는 남긴다. 별도 Dockerfile과 JRE 조립은 buildpack으로 실행 계약을 충족할 수
 없을 때만 검토한다.

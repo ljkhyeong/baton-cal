@@ -14,6 +14,7 @@
 | `PUT /internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest` | `schemas/recovery-season-manifest.v1.schema.json` | `schemas/recovery-season-manifest-result.v1.schema.json` | `examples/recovery-season-manifest.json`, `examples/recovery-season-manifest-result.json` |
 | `PUT /internal/api/v1/recovery-runs/{recoveryId}/completion` | `schemas/recovery-run-completion.v1.schema.json` | `schemas/recovery-run-completion-result.v1.schema.json` | `examples/recovery-run-completion.json`, `examples/recovery-run-completion-result.json` |
 | `POST /internal/api/v1/subscriptions` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-create.json`, `examples/subscription-credential.json` |
+| `PUT /internal/api/v1/subscriptions/{subscriptionId}` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | 같은 생성 예시와 `examples/api-error.subscription-*.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
 | 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json`, `examples/api-error.recovery-in-progress.json` |
@@ -29,6 +30,13 @@
 반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
 오류는 PRD-0002의 각 경로 계약을 따른다.
 
+ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용한다. 최초 `201`에서만 토큰을 반환하고,
+같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은 `409 SUBSCRIPTION_SCOPE_CONFLICT`다.
+재전달은 기존 토큰·상태·세대를 바꾸지 않는다. 응답 유실 뒤에는 알고 있는 ID로 상태를 조회하고,
+활성 구독의 자격 증명이 없으면 사용자 요청에 따라 rotate로 재발급한다. 상태 GET의 `404` 뒤에도
+같은 ID·시즌으로만 PUT을 재전달한다. 기존 POST는 응답 유실 시 ID를 찾을 수 없는 제한을 유지한다.
+모든 CAL 인스턴스가 새 PUT을 지원하고 BATON이 새 계약을 고정한 뒤 이 경로를 활성화한다.
+
 시즌 표시 이름은 `{revision, displayName}`으로 전달한다. 개정 번호는 일정과 별도로 관리하며,
 응답은 CAL이 채택한 `{seasonId, revision, displayName}`이다. 같은 이름·개정 번호의 중복과 낮은
 개정 번호는 저장하지 않고 현재 값을 반환한다. 현재 개정 번호에 다른 이름을 보내면
@@ -41,6 +49,11 @@
 다시 검증할 수 있고, 완료 뒤에는 같은 내용만 멱등하게 조회할 수 있다. 불일치는
 `409 RECOVERY_MANIFEST_MISMATCH`, 같은 복구 ID의 완료 내용 변경은 `409 RECOVERY_RUN_CONFLICT`,
 일반 모드의 새 검증은 `409 RECOVERY_MODE_REQUIRED`다.
+
+`recovery-season-manifest.zoned-cancelled.json`과 `recovery-run-completion.zoned-cancelled.json`은
+`schedule-snapshot.zoned-cancelled.json` 한 항목과 `season-calendar-metadata.r2.json`의 고정된
+기대 다이제스트다. OCI 복원 스모크와 HTTP 테스트가 이 값을 그대로 대조하며 DB의 현재 상태에서
+정답을 다시 생성하지 않는다. 다이제스트를 자동 갱신하지 않고 원본 픽스처와 계약 변경을 함께 검토한다.
 
 ## 기준과 버전 관리
 
@@ -108,8 +121,9 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 `BATON_CAL_RECOVERY_MODE=true`이면 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`를 반환하고
 토큰을 발급하지 않는다. 일정·시즌 이름 수신·상태 조회·재구축·폐기와 공개 조회는 기존 계약을 유지한다.
 복구 중 완료 시각을 미리 알 수 없으므로 `Retry-After`는 없으며, 운영자가 전체 완료 응답을
-확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. 응답 유실 시 자동 재시도하거나 같은
-토큰을 다시 받는 계약은 추가하지 않는다. 이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
+확인하고 모드를 해제한 뒤에만 생성·회전을 다시 요청한다. POST 생성·회전은 응답 유실로 자동
+재시도하지 않는다. ID 지정 PUT 재전달은 위 복구 절차를 따르며 같은 토큰을 다시 반환하지 않는다.
+이 오류도 기존 `api-error.v1` 구조를 사용하며 실제 HTTP
 응답을 같은 스키마에 검증한다.
 
 이 검증은 CAL 계약 팩 자체와 CAL 소비자 구현의 일치를 증명한다. 안정 버전 `1.0.0`은 사전 릴리스
@@ -119,14 +133,14 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 
 ## 계약 팩 생성과 배포
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.1`이다. 계약 팩은
+계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.2`이다. 계약 팩은
 Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 
 ```shell
 ./gradlew --no-daemon verifyContractsZip
 ```
 
-`build/distributions/baton-cal-contracts-1.1.0-rc.1.zip`에는 다음 기준만 들어간다.
+`build/distributions/baton-cal-contracts-1.1.0-rc.2.zip`에는 다음 기준만 들어간다.
 
 - `LICENSE`: 계약 팩 복제·재배포 조건을 설명하는 MIT 라이선스
 - `contracts/**`: JSON Schema, 예시, 정규 iCalendar 골든과 이 안내서
@@ -139,7 +153,7 @@ Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 만들지 않는다. 압축, 체크섬이나 매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과
 GitHub Actions가 제공하는 artifact digest를 사용한다.
 
-ZIP 내부의 `contracts/VERSION`, 파일명과 후보 태그 `contracts-v1.1.0-rc.1`은 모두 같은 버전을
+ZIP 내부의 `contracts/VERSION`, 파일명과 후보 태그 `contracts-v1.1.0-rc.2`는 모두 같은 버전을
 가리켜야 한다. 안정 버전은 새 ZIP과 태그로 게시하며, 게시된 RC 파일과 태그를 덮어쓰지 않는다.
 
 GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
@@ -149,12 +163,9 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 이 자산에는 루트 `LICENSE`가 없어 계약 의미를 유지한 `1.0.1` 호환 보완판으로 재포장하고 BATON이
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
-`1.1.0-rc.1`은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
-로컬 기본값을 상속하지 않게 한다. 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
-취소 후 재활성화 픽스처,
-예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일
-시간대 규칙 권위 회귀 검증, 복구 모드의 발급 차단, 내부 상태 조회와 시즌 표시 이름도 포함한 다음 검토 후보이며
-아직 게시하거나 BATON에 고정하지 않았다.
+`1.1.0-rc.1`의 게시·BATON 생산자 검증은 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
+중복·시즌 충돌 응답과 고정된 복원 다이제스트 예시를 추가한다. `rc.2`는 미게시·BATON 미고정 상태이며
+기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.

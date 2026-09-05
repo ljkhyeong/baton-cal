@@ -70,6 +70,10 @@ class RecoveryModeHttpTest @Autowired constructor(
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"seasonId":"${UUID.randomUUID()}"}"""),
             authorizedPost("/internal/api/v1/subscriptions/${subscription.id}/rotate"),
+            put("/internal/api/v1/subscriptions/{subscriptionId}", UUID.randomUUID())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"${UUID.randomUUID()}"}"""),
         ).forEach { request ->
             val response = mockMvc.perform(request)
                 .andExpect(status().isServiceUnavailable)

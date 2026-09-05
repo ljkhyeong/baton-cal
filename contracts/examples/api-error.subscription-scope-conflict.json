@@ -1,0 +1,4 @@
+{
+  "code": "SUBSCRIPTION_SCOPE_CONFLICT",
+  "message": "같은 구독 ID를 다른 시즌에 사용할 수 없습니다"
+}

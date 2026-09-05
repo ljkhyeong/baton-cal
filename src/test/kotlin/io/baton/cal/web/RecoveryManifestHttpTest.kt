@@ -38,6 +38,29 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private val repository: RecoveryManifestRepository,
 ) {
     @Test
+    fun `복원 스모크의 고정 매니페스트는 최신 취소와 시즌 이름을 모두 요구한다`() {
+        val manifest = Path("contracts/examples/recovery-season-manifest.zoned-cancelled.json").readText()
+        val completion = Path("contracts/examples/recovery-run-completion.zoned-cancelled.json").readText()
+        fun manifestRequest() = put(
+            "/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, SEASON_ID,
+        )
+            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(manifest)
+
+        ingest("schedule-snapshot.zoned-active-r2.json")
+        updateMetadata()
+        mockMvc.perform(manifestRequest()).andExpect(status().isConflict)
+        mockMvc.perform(completionRequest(completion)).andExpect(status().isConflict)
+        ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.perform(manifestRequest())
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.result").value("VERIFIED"))
+        val first = complete(completion)
+        assertThat(complete(completion)).isEqualTo(first)
+    }
+
+    @Test
     fun `전체 시즌 상태가 일치하면 복구 완료 신호를 멱등하게 반환한다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
         updateMetadata()

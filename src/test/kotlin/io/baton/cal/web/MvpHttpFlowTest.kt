@@ -52,6 +52,64 @@ class MvpHttpFlowTest @Autowired constructor(
 ) {
 
     @Test
+    fun `미리 정한 구독 ID로 응답 유실을 복구하고 재전달로 토큰이나 폐기 상태를 바꾸지 않는다`() {
+        val subscriptionId = UUID.randomUUID().toString()
+        val path = "/internal/api/v1/subscriptions/$subscriptionId"
+        fun createRequest(seasonId: String = SEASON_ID) = put(path)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""{"seasonId":"$seasonId"}""")
+
+        mockMvc.perform(put(path).contentType(MediaType.APPLICATION_JSON).content("""{"seasonId":"$SEASON_ID"}"""))
+            .andExpect(status().isUnauthorized)
+        val first = mockMvc.perform(createRequest())
+            .andExpect(status().isCreated)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.subscriptionId").value(subscriptionId))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("subscription-credential.v1.schema.json", first, "ID 지정 구독 생성 응답")
+        val originalToken: String = JsonPath.read(first, "$.token")
+
+        // 첫 응답을 받지 못한 호출자도 미리 저장한 ID만으로 기존 구독을 확인할 수 있다.
+        val duplicate = mockMvc.perform(createRequest())
+            .andExpect(status().isConflict)
+            .andExpect(content().json(Path.of("contracts/examples/api-error.subscription-already-exists.json").readText()))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", duplicate, "중복 구독 생성 응답")
+        mockMvc.perform(authorizedGet(path))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+        mockMvc.perform(get("/calendars/v1/$originalToken.ics")).andExpect(status().isOk)
+
+        val differentSeasonId = UUID.randomUUID().toString()
+        val scopeConflict = mockMvc.perform(createRequest(differentSeasonId))
+            .andExpect(status().isConflict)
+            .andExpect(content().json(Path.of("contracts/examples/api-error.subscription-scope-conflict.json").readText()))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", scopeConflict, "구독 시즌 충돌 응답")
+        assertThat(jdbcClient.sql("SELECT count(*) FROM calendar_subscription").query(Int::class.java).single())
+            .isEqualTo(1)
+        assertThat(jdbcClient.sql("SELECT count(*) FROM season_feed_projection").query(Int::class.java).single())
+            .isEqualTo(1)
+
+        val rotated = mockMvc.perform(authorizedPost("$path/rotate"))
+            .andExpect(status().isOk)
+            .andReturn().response.contentAsString
+        val replacementToken: String = JsonPath.read(rotated, "$.token")
+        mockMvc.perform(get("/calendars/v1/$originalToken.ics")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/calendars/v1/$replacementToken.ics")).andExpect(status().isOk)
+        mockMvc.perform(createRequest()).andExpect(status().isConflict)
+        mockMvc.perform(get("/calendars/v1/$replacementToken.ics")).andExpect(status().isOk)
+
+        mockMvc.perform(delete(path).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN"))
+            .andExpect(status().isNoContent)
+        mockMvc.perform(createRequest()).andExpect(status().isConflict)
+        mockMvc.perform(authorizedGet(path)).andExpect(jsonPath("$.status").value("REVOKED"))
+        mockMvc.perform(get("/calendars/v1/$replacementToken.ics")).andExpect(status().isNotFound)
+    }
+
+    @Test
     fun `복구 모드가 아니면 새 복구 매니페스트를 검증하지 않는다`() {
         mockMvc.perform(
             put(
@@ -350,6 +408,10 @@ class MvpHttpFlowTest @Autowired constructor(
             authorizedGet("/internal/api/v1/calendar-items/1-1-1-1-1"),
             authorizedGet("/internal/api/v1/subscriptions/1-1-1-1-1"),
             authorizedPost("/internal/api/v1/subscriptions/1-1-1-1-1/rotate"),
+            put("/internal/api/v1/subscriptions/1-1-1-1-1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"$SEASON_ID"}"""),
             delete("/internal/api/v1/subscriptions/1-1-1-1-1")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN"),
             authorizedPost("/internal/api/v1/projections/seasons/1-1-1-1-1/rebuild"),

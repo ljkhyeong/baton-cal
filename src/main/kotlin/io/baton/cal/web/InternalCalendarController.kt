@@ -110,6 +110,15 @@ class InternalCalendarController(
         .cacheControl(CacheControl.noStore())
         .body(subscriptionService.rotate(subscriptionId.value))
 
+    @PutMapping("/subscriptions/{subscriptionId}")
+    fun createSubscriptionWithId(
+        @PathVariable subscriptionId: StandardUuidPath,
+        @RequestBody request: CreateSubscriptionRequest,
+    ): ResponseEntity<SubscriptionCredential> = ResponseEntity
+        .status(HttpStatus.CREATED)
+        .cacheControl(CacheControl.noStore())
+        .body(subscriptionService.create(request.seasonId, subscriptionId.value))
+
     @DeleteMapping("/subscriptions/{subscriptionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun revokeSubscription(
