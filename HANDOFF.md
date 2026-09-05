@@ -2,6 +2,10 @@
 
 ## 현재 상태
 
+- [추가 문구 검토](docs/reviews/2026-09-05-wording-followup-review.md)에 수정안 11개를 정리했다.
+  구독 해제 후 앱에 남은 일정과 같은 탭에서의 초안 복원 안내를 우선 수정할 항목으로 꼽았다.
+  검토 중 다른 작업에서 고친 문구는 제외했으며 이번에는 제품 코드를 변경하지 않았다.
+
 - [문구 검토](docs/reviews/2026-09-05-wording-review.md)의 36개 항목을 화면·구독 오류 안내·제품
   문서에 반영했다. BATON 검증 폴더 `/Users/lim/devProject/personal/manager-cal-subscription`의
   `codex/wording-clarity-20260905` 커밋은 `3e263144`이며 원본
