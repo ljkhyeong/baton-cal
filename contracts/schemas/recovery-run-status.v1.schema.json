@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/recovery-run-status.v1.schema.json",
+  "title": "RecoveryRunStatusV1",
+  "description": "저장된 복구 실행의 진행 상태와 이 요청을 처리한 인스턴스의 복구 모드입니다. 완료는 과거 검증 기록입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recoveryId",
+    "status",
+    "recoveryMode",
+    "verifiedSeasonCount",
+    "completedAt"
+  ],
+  "properties": {
+    "recoveryId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "enum": [
+        "IN_PROGRESS",
+        "COMPLETED"
+      ]
+    },
+    "recoveryMode": {
+      "type": "boolean"
+    },
+    "verifiedSeasonCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "completedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "IN_PROGRESS"
+        },
+        "completedAt": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "const": "COMPLETED"
+        },
+        "completedAt": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

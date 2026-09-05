@@ -191,9 +191,14 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 
 - `GET /internal/api/v1/calendar-items/{sourceItemId}`: CAL이 채택한 개정 번호, 일정 상태와 원본 수정 시각.
 - `GET /internal/api/v1/subscriptions/{subscriptionId}`: 구독 상태와 현재 인스턴스의 구독 세대 일치 여부.
+- `GET /internal/api/v1/recovery-runs/{recoveryId}`: 저장된 진행·완료 상태, 검증한 시즌 수, 최초 완료
+  시각과 이 인스턴스의 복구 모드. 완료 기록은 이후 원본 변경에도 유지한다.
+- `GET /internal/api/v1/seasons/{seasonId}/recovery-state`: 현재 일정 수·다이제스트와 이름 개정·
+  다이제스트. BATON이 계산한 기대값과 비교하는 진단용이며 기대 매니페스트를 대신하지 않는다.
 
-취소 일정과 폐기된 구독도 조회할 수 있다. 응답에는 토큰·해시·피드 URL·세대 UUID를 넣지 않는다.
-BATON 전체 재전달 완료나 접근 권한을 증명하는 API는 아니며, 유실된 토큰도 복구하지 않는다.
+취소 일정과 폐기된 구독도 조회할 수 있다. 응답에는 구독 토큰·토큰 해시·피드 URL·세대 UUID를 넣지 않는다. 복구 다이제스트는 진단 대상이다.
+복구 실행 조회는 저장된 완료 기록을 반환한다. 나머지 진단 값은 현재 BATON 전체 원본의 완전성이나
+접근 권한을 증명하지 않으며 유실된 토큰도 복구하지 않는다.
 필드와 오류의 기준은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)의 HTTP 경로 절을 따른다.
 
 ### 시즌 표시 이름
@@ -228,7 +233,9 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [기술 스택 결정](docs/ADR/0002_technology-stack/adr.md)
 - [기계 판독형 계약](contracts/README.md)
 - [계약 릴리스 현황](docs/contract-release-history.md)
-- [시즌 투영 성능 기준](docs/performance-baseline.md)
+- [시즌 투영·실제 HTTP 수신 성능 기준](docs/performance-baseline.md)
+- [cal.b4ton.com HTTPS·프록시·모니터링 운영 구성](docs/operations.md)
+- [캘린더 앱별 구독 안내와 호환성 확인표](docs/calendar-subscription-guide.md)
 - [기능 추가·개선 검토](docs/reviews/2026-09-05-feature-review.md)
 - [다음 작업](HANDOFF.md)
 
@@ -321,7 +328,8 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 포함한다. BATON이 게시 자산과 요청 스키마를 고정해 실제 컨테이너 교차 서비스 검증을 완료했다.
 정식 `1.1.0` 승격 전까지 현재 운영 안정 기준은 계속 `1.0.0`이다.
 
-현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성과 고정된 복원 매니페스트 예시를 추가했다.
+현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 고정된 복원 매니페스트
+예시를 추가했다.
 아직 게시하거나 BATON 생산자에 고정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
 
 ## OCI 이미지 검증
@@ -379,3 +387,21 @@ GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테�
 
 이 프로젝트는 [MIT 라이선스](LICENSE)로 배포한다. 저작권 고지와 라이선스 문구를 유지하면
 소프트웨어를 사용, 복제, 수정, 병합, 게시, 배포, 재허가하거나 판매할 수 있다.
+
+
+## 공개 운영 준비
+
+`cal.b4ton.com`용 단일 호스트 구성을 `compose.operations.yml`에 준비했다. Nginx HTTPS·요청 제한,
+Prometheus·Alertmanager와 준비 상태 점검을 포함한다. 기본 바인드는 루프백이며 실제 서버·DNS·
+공인 인증서·외부 알림 채널은 아직 연결하지 않았다. 배포 환경과 외부 비밀 설정을 준비한 뒤
+[운영 절차](docs/operations.md)를 따른다.
+
+```shell
+./scripts/smoke-operations.sh baton-cal:smoke
+./gradlew --no-daemon ingestionLoadTest -PloadItemCount=1000
+```
+
+운영 스모크는 앞 절에서 만든 로컬 이미지로 격리된 HTTPS 프록시의 피드 200·304, 요청 초과 429,
+내부 경로 차단과 실제 장애·해제 알림 전달 및 로그·메트릭 토큰 비노출을 확인한다. CI도 같은
+스모크를 실행한다. 실제 캘린더 앱의 변경·취소·시즌 이름 갱신은
+[앱별 안내와 확인표](docs/calendar-subscription-guide.md)에 따라 공개 HTTPS 연결 후 확인한다.

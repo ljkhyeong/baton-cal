@@ -143,6 +143,13 @@ class ContractArtifactsTest {
             "projection-rebuild-result.v1.schema.json" to listOf(
                 "projection-rebuild-result.json",
             ),
+            "recovery-run-status.v1.schema.json" to listOf(
+                "recovery-run-status.in-progress.json",
+                "recovery-run-status.completed.json",
+            ),
+            "recovery-season-state.v1.schema.json" to listOf(
+                "recovery-season-state.zoned-cancelled.json",
+            ),
             "recovery-season-manifest.v1.schema.json" to listOf(
                 "recovery-season-manifest.json",
                 "recovery-season-manifest.zoned-cancelled.json",

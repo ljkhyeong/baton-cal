@@ -5,12 +5,17 @@ import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.RecoveryRunCompletionRow
 import io.baton.cal.persistence.RecoverySeasonManifestRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.RecoveryConflictException
 import io.baton.cal.web.RecoveryRunCompletionRequest
 import io.baton.cal.web.RecoveryRunCompletionResponse
+import io.baton.cal.web.RecoveryRunStatus
+import io.baton.cal.web.RecoveryRunStatusResponse
 import io.baton.cal.web.RecoverySeasonManifestRequest
 import io.baton.cal.web.RecoverySeasonManifestResponse
+import io.baton.cal.web.RecoverySeasonStateResponse
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Isolation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.temporal.ChronoUnit
@@ -23,6 +28,37 @@ class RecoveryManifestService(
     private val properties: CalProperties,
     private val clock: Clock,
 ) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    fun getStatus(recoveryId: UUID): RecoveryRunStatusResponse {
+        val completion = repository.findCompletion(recoveryId)
+        val verifiedSeasonCount = repository.countSeasonManifests(recoveryId)
+        if (completion == null && verifiedSeasonCount == 0) {
+            throw InternalResourceNotFoundException("저장된 복구 실행을 찾을 수 없습니다")
+        }
+        return RecoveryRunStatusResponse(
+            recoveryId = recoveryId,
+            status = if (completion == null) RecoveryRunStatus.IN_PROGRESS else RecoveryRunStatus.COMPLETED,
+            recoveryMode = properties.recoveryMode,
+            verifiedSeasonCount = verifiedSeasonCount,
+            completedAt = completion?.completedAt,
+        )
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    fun getSeasonState(seasonId: UUID): RecoverySeasonStateResponse {
+        val state = repository.currentSeasonState(seasonId)
+        if (state.itemCount == 0 && state.metadataRevision == null) {
+            throw InternalResourceNotFoundException("시즌의 일정과 이름 수신 기록이 없습니다")
+        }
+        return RecoverySeasonStateResponse(
+            seasonId = seasonId,
+            itemCount = state.itemCount,
+            itemDigest = state.itemDigest,
+            metadataRevision = state.metadataRevision,
+            metadataDigest = state.metadataDigest,
+        )
+    }
+
     @Transactional
     fun verifySeason(
         recoveryId: UUID,

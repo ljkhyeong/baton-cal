@@ -39,6 +39,13 @@ data class RecoveryRunCompletionRow(
 class RecoveryManifestRepository(
     private val jdbcClient: JdbcClient,
 ) {
+    fun countSeasonManifests(recoveryId: UUID): Int = jdbcClient.sql(
+        "SELECT count(*) FROM recovery_season_manifest WHERE recovery_id = :recoveryId",
+    )
+        .param("recoveryId", recoveryId)
+        .query(Int::class.java)
+        .single()
+
     fun lockRecoveryRun(recoveryId: UUID) {
         jdbcClient.sql(
             "SELECT pg_advisory_xact_lock(hashtextextended(CAST(:recoveryId AS TEXT), CAST(0 AS BIGINT)))",

@@ -6,6 +6,24 @@ import jakarta.validation.constraints.Pattern
 import java.time.Instant
 import java.util.UUID
 
+enum class RecoveryRunStatus { IN_PROGRESS, COMPLETED }
+
+data class RecoveryRunStatusResponse(
+    val recoveryId: UUID,
+    val status: RecoveryRunStatus,
+    val recoveryMode: Boolean,
+    val verifiedSeasonCount: Int,
+    val completedAt: Instant?,
+)
+
+data class RecoverySeasonStateResponse(
+    val seasonId: UUID,
+    val itemCount: Int,
+    val itemDigest: String,
+    val metadataRevision: Int?,
+    val metadataDigest: String?,
+)
+
 data class RecoverySeasonManifestRequest(
     @field:Min(0)
     val itemCount: Int,

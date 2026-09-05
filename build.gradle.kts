@@ -120,7 +120,7 @@ tasks.withType<Test>().configureEach {
 
 tasks.named<Test>("test") {
     useJUnitPlatform {
-        excludeTags("load")
+        excludeTags("load", "ingestion-load")
     }
 }
 
@@ -132,6 +132,16 @@ tasks.register<Test>("projectionLoadTest") {
     useJUnitPlatform {
         includeTags("load")
     }
+    shouldRunAfter(tasks.test)
+}
+
+tasks.register<Test>("ingestionLoadTest") {
+    group = "verification"
+    description = "실제 HTTP 수신과 동시 조건부 조회의 처리량 및 지연을 측정합니다."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("ingestion-load") }
+    systemProperty("baton.cal.load.item-count", providers.gradleProperty("loadItemCount").getOrElse("1000"))
     shouldRunAfter(tasks.test)
 }
 

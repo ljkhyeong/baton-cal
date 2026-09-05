@@ -1,5 +1,6 @@
 package io.baton.cal.web
 
+import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
@@ -12,8 +13,10 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
@@ -36,7 +39,68 @@ import kotlin.io.path.readText
 class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
+    private val jdbcClient: JdbcClient,
 ) {
+    @Test
+    fun `복구 상태 조회는 진행과 완료를 구분하고 이후 원본 변경에도 완료 기록을 유지한다`() {
+        ingest("schedule-snapshot.zoned-active-r0.json")
+        val state = repository.currentSeasonState(SEASON_ID)
+        verifySeason(state.itemCount, state.itemDigest, null, null)
+        val before = repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))
+
+        readRunStatus("IN_PROGRESS", 1)
+        val completed = complete(completionPayload(listOf(state)))
+        val completedAt: String = JsonPath.read(completed, "$.completedAt")
+        ingest("schedule-snapshot.zoned-cancelled.json")
+        val status = readRunStatus("COMPLETED", 1)
+
+        assertThat(JsonPath.read<String>(status, "$.completedAt")).isEqualTo(completedAt)
+        assertThat(repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))).isEqualTo(before)
+    }
+
+    @Test
+    fun `빈 데이터의 완료 기록도 진행 상태 조회에서 찾는다`() {
+        complete(completionPayload(emptyList()))
+        readRunStatus("COMPLETED", 0)
+    }
+
+    @Test
+    fun `시즌 진단은 복구 실행이 없어도 일정과 이름 불일치를 나누어 확인한다`() {
+        ingest("schedule-snapshot.zoned-cancelled.json")
+        val initial = readSeasonState()
+        assertThat(JsonPath.read<Any?>(initial, "$.metadataRevision")).isNull()
+        assertThat(JsonPath.read<Any?>(initial, "$.metadataDigest")).isNull()
+        updateMetadata()
+        val named = readSeasonState()
+        assertThat(JsonPath.read<String>(named, "$.itemDigest"))
+            .isEqualTo(JsonPath.read<String>(initial, "$.itemDigest"))
+        assertThat(JsonPath.read<Int>(named, "$.metadataRevision")).isEqualTo(2)
+        assertThat(JsonPath.read<String>(named, "$.metadataDigest")).hasSize(64)
+        assertThat(jdbcClient.sql("SELECT count(*) FROM recovery_season_manifest").query(Int::class.java).single())
+            .isZero()
+        assertThat(jdbcClient.sql("SELECT count(*) FROM recovery_run_completion").query(Int::class.java).single())
+            .isZero()
+    }
+
+    @Test
+    fun `복구 진단은 인증과 UUID를 확인하고 없는 수신 기록은 404다`() {
+        listOf(
+            "/internal/api/v1/recovery-runs/$RECOVERY_ID",
+            "/internal/api/v1/seasons/$SEASON_ID/recovery-state",
+        ).forEach { path ->
+            mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
+            mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, AUTHORIZATION))
+                .andExpect(status().isNotFound)
+            mockMvc.perform(
+                get(path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid"))
+                    .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
+            ).andExpect(status().isBadRequest)
+        }
+        updateMetadata()
+        val metadataOnly = readSeasonState()
+        assertThat(JsonPath.read<Int>(metadataOnly, "$.itemCount")).isZero()
+    }
+
     @Test
     fun `복원 스모크의 고정 매니페스트는 최신 취소와 시즌 이름을 모두 요구한다`() {
         val manifest = Path("contracts/examples/recovery-season-manifest.zoned-cancelled.json").readText()
@@ -125,6 +189,29 @@ class RecoveryManifestHttpTest @Autowired constructor(
                 .content(Path("contracts/examples", fileName).readText()),
         ).andExpect(status().isOk)
     }
+
+    private fun readRunStatus(expectedStatus: String, seasonCount: Int): String = mockMvc.perform(
+        get("/internal/api/v1/recovery-runs/{recoveryId}", RECOVERY_ID)
+            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
+    )
+        .andExpect(status().isOk)
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(jsonPath("$.status").value(expectedStatus))
+        .andExpect(jsonPath("$.verifiedSeasonCount").value(seasonCount))
+        .andExpect(jsonPath("$.recoveryMode").value(true))
+        .andReturn().response.contentAsString.also {
+            ContractSchemaSupport.assertValid("recovery-run-status.v1.schema.json", it, "복구 실행 조회 응답")
+        }
+
+    private fun readSeasonState(): String = mockMvc.perform(
+        get("/internal/api/v1/seasons/{seasonId}/recovery-state", SEASON_ID)
+            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
+    )
+        .andExpect(status().isOk)
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andReturn().response.contentAsString.also {
+            ContractSchemaSupport.assertValid("recovery-season-state.v1.schema.json", it, "시즌 복구 진단 응답")
+        }
 
     private fun updateMetadata() {
         mockMvc.perform(

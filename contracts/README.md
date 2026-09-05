@@ -10,6 +10,8 @@
 | `POST /internal/api/v1/schedule-snapshots` | `schemas/schedule-snapshot.v1.schema.json` | `schemas/schedule-snapshot-result.v1.schema.json` | `examples/schedule-snapshot.*.json`, `examples/schedule-snapshot-result.*.json` |
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
+| `GET /internal/api/v1/recovery-runs/{recoveryId}` | 본문 없음 | `schemas/recovery-run-status.v1.schema.json` | `examples/recovery-run-status.*.json` |
+| `GET /internal/api/v1/seasons/{seasonId}/recovery-state` | 본문 없음 | `schemas/recovery-season-state.v1.schema.json` | `examples/recovery-season-state.zoned-cancelled.json` |
 | `PUT /internal/api/v1/seasons/{seasonId}/calendar-metadata` | `schemas/season-calendar-metadata.v1.schema.json` | `schemas/season-calendar-metadata-result.v1.schema.json` | `examples/season-calendar-metadata.*.json`, `examples/season-calendar-metadata-result.json` |
 | `PUT /internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest` | `schemas/recovery-season-manifest.v1.schema.json` | `schemas/recovery-season-manifest-result.v1.schema.json` | `examples/recovery-season-manifest.json`, `examples/recovery-season-manifest-result.json` |
 | `PUT /internal/api/v1/recovery-runs/{recoveryId}/completion` | `schemas/recovery-run-completion.v1.schema.json` | `schemas/recovery-run-completion-result.v1.schema.json` | `examples/recovery-run-completion.json`, `examples/recovery-run-completion-result.json` |
@@ -29,6 +31,12 @@
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
 반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
 오류는 PRD-0002의 각 경로 계약을 따른다.
+
+복구 실행 조회는 저장된 `IN_PROGRESS`·`COMPLETED`, 검증한 시즌 수·최초 완료 시각과 현재
+인스턴스의 복구 모드를 반환한다. 시즌 진단은 현재 일정 수·다이제스트와 이름 개정·다이제스트를
+반환하며 이름 미수신은 두 필드가 모두 `null`이다. 기록이 없는 복구 ID 또는 일정·이름이 모두
+없는 시즌은 `404 RESOURCE_NOT_FOUND`다. 두 경로는 일반·복구 모드에서 쓰기 없이 동작한다.
+완료 기록은 과거 대조 결과이며, 현재 CAL 진단 값을 BATON의 기대 매니페스트로 대신 사용하지 않는다.
 
 ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용한다. 최초 `201`에서만 토큰을 반환하고,
 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은 `409 SUBSCRIPTION_SCOPE_CONFLICT`다.

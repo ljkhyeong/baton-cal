@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/recovery-season-state.v1.schema.json",
+  "title": "RecoverySeasonStateV1",
+  "description": "CAL이 현재 보관한 시즌 일정과 이름의 진단용 상태입니다. 원본의 기대값을 대신하지 않습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seasonId",
+    "itemCount",
+    "itemDigest",
+    "metadataRevision",
+    "metadataDigest"
+  ],
+  "properties": {
+    "seasonId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "itemCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "itemDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "metadataRevision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "metadataDigest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "metadataRevision": {
+          "type": "integer"
+        },
+        "metadataDigest": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "properties": {
+        "metadataRevision": {
+          "type": "null"
+        },
+        "metadataDigest": {
+          "type": "null"
+        }
+      }
+    }
+  ]
+}

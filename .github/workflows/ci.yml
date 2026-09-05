@@ -80,6 +80,9 @@ jobs:
       - name: OCI 이미지 스모크 검증
         run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"
 
+      - name: HTTPS 프록시와 운영 알림 스모크 검증
+        run: ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
+
       - name: 계약 팩 업로드
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -121,6 +124,9 @@ jobs:
 
       - name: OCI 이미지 스모크 검증
         run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"
+
+      - name: HTTPS 프록시와 운영 알림 스모크 검증
+        run: ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
 
       - name: GHCR 로그인
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

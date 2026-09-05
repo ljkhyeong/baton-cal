@@ -75,6 +75,22 @@ class InternalCalendarController(
         .cacheControl(CacheControl.noStore())
         .body(metadataService.update(seasonId.value, request.revision, request.displayName))
 
+    @GetMapping("/recovery-runs/{recoveryId}")
+    fun getRecoveryRunStatus(
+        @PathVariable recoveryId: StandardUuidPath,
+    ): ResponseEntity<RecoveryRunStatusResponse> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(recoveryManifestService.getStatus(recoveryId.value))
+
+    @GetMapping("/seasons/{seasonId}/recovery-state")
+    fun getRecoverySeasonState(
+        @PathVariable seasonId: StandardUuidPath,
+    ): ResponseEntity<RecoverySeasonStateResponse> = ResponseEntity
+        .ok()
+        .cacheControl(CacheControl.noStore())
+        .body(recoveryManifestService.getSeasonState(seasonId.value))
+
     @PutMapping("/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest")
     fun verifyRecoverySeasonManifest(
         @PathVariable recoveryId: StandardUuidPath,
