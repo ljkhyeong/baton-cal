@@ -64,3 +64,31 @@ Java 25.0.3·PostgreSQL 18.6 Testcontainers 환경에서 일반 테스트 116개
 동시 완료 요청, 조회 순서에 따른 다이제스트 일치다. 기존 완료 테스트에는 다른 내용의 재시도 거부와
 거부 후 최초 응답 보존을 추가했다. 기존 시즌 잠금·DB 무결성·고정 매니페스트 테스트도 통과했다.
 이미지·운영 구성·BATON 생산자·외부 캘린더 앱은 이번에 변경하거나 다시 검증하지 않았다.
+
+## 추가 검토 — `8f926de` 기준
+
+### 남은 정리 후보: 일정 상태 조회의 불필요한 열 조회
+
+[SnapshotIngestionService.getItemStatus()](../../src/main/kotlin/io/baton/cal/snapshot/SnapshotIngestionService.kt)는
+응답에 `sourceItemId`, `seasonId`, `revision`, `status`, `sourceUpdatedAt` 5개 값만 사용한다.
+그러나 [CalendarItemRepository.findBySourceItemId()](../../src/main/kotlin/io/baton/cal/persistence/CalendarItemRepository.kt)는
+설명·장소·시간 정보 등 17개 열을 모두 조회하고 매핑한다. 이 메서드의 운영 호출자는 상태 조회 하나다.
+
+**변경안:** 필요한 5개 열만 조회하는 상태 전용 행 타입을 두고 `JdbcClient.query(타입::class.java)`로
+매핑한다. 기존 전체 조회 메서드를 교체하면 된다. 조회·매핑 범위를 줄이는 소규모 정리이며,
+성능 문제를 측정한 결과는 아니다. 아직 구현하지 않았다.
+
+수정하면 `MvpHttpFlowTest`의 중복·역순 수신 후 상태, 인증·없는 자원, 응답 스키마 검증을 실행한다.
+
+### UUID 경로 보조 타입은 유지
+
+[Spring MVC의 사용자 변환기 등록](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-config/conversion.html)을
+이용해 `StandardUuidPath`를 일반 `UUID`로 바꾸는 방안도 검토했다. 고정된 Spring 7.0.9에서
+엄격한 `Converter<String, UUID>`와 `SimpleTypeConverter`를 임시 Java 프로그램으로 실행했다.
+직접 변환은 `1-1-1-1-1`을 거부했지만 보조 변환 경로는 `00000001-0001-0001-0001-000000000001`로
+받아들였다. 변환기만 교체하면 입력 제한이 유지되지 않으므로 현재 보조 타입을 삭제하지 않는다.
+전체 HTTP 재현이 아닌 Spring 타입 변환 경로의 좁은 실행 결과다.
+
+그 밖에 JDBC 시간·enum·nullable 바인딩, 시간대 검증, 조건부 GET과 동시성 제어는 유지 이유가
+확인됐다. 이번 추가 검토에서는 제품 코드·설정·의존성을 바꾸지 않았으며 전체 Gradle 테스트는
+재실행하지 않았다. 바로 앞 구현의 116개 성공 기록과 구분한다.
