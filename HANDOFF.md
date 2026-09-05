@@ -2,6 +2,16 @@
 
 ## 현재 상태
 
+- [문구 검토](docs/reviews/2026-09-05-wording-review.md)의 36개 항목을 화면·구독 오류 안내·제품
+  문서에 반영했다. BATON 검증 폴더 `/Users/lim/devProject/personal/manager-cal-subscription`의
+  `codex/wording-clarity-20260905` 커밋은 `3e263144`이며 원본
+  `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`에 같은 파일 내용의
+  커밋 `094e8758`로 반영했다. 원본에서 진행 중인 다른 문구 수정은 보존했으며 겹치는 표현은
+  검토 문서에 기록했다. 검증 브랜치의 화면 106건·서버 11건과 타입 검사·프로덕션 빌드가
+  통과했다. 모바일 전용 테스트의 PC·WebKit 실행 2건은 기존 설정대로 제외됐다. 원본 통합 후
+  구독 화면 72건과 타입 검사를 포함한 프로덕션 빌드도 통과했다. CAL은 문서만 변경했으며
+  서버 테스트는 다시 실행하지 않았다. API 필드·오류 코드·권한·구독 처리 방식은 변경하지 않았다.
+
 - BATON의 **내 계정 → 내 캘린더 구독**에 여러 구독 선택 해제를 추가하고 원본
   `/Users/lim/devProject/personal/manager`의 `codex/review-feature-readiness`에 `f937d1c1`로 반영했다.
   검증 폴더 `/Users/lim/devProject/personal/manager-cal-subscription`의
