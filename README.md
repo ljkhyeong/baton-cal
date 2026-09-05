@@ -213,6 +213,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [기계 판독형 계약](contracts/README.md)
 - [계약 릴리스 현황](docs/contract-release-history.md)
 - [시즌 투영 성능 기준](docs/performance-baseline.md)
+- [기능 추가·개선 검토](docs/reviews/2026-09-05-feature-review.md)
 - [다음 작업](HANDOFF.md)
 
 ## 기술 스택
