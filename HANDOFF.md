@@ -15,6 +15,8 @@
   [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
 - CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
   스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
+- 앱별 무료 구독 등록 안내는 BATON `599e50fd`, `codex/free-calendar-registration`에 있다.
+  작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 BATON main 병합·운영 활성화는 하지 않았다.
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
 - 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
@@ -29,6 +31,7 @@
 
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
+| BATON `599e50fd` | 2026-09-07, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, `npm run e2e -- tests/e2e/calendar-subscription.spec.ts --workers=1` | 타입·빌드 성공, PC·390px 모바일·WebKit 21개 새 실행 성공. 복사 성공/실패·앱 선택·발급·회전·폐기·주소 숨김 확인. 서버·외부 계정 실제 등록·운영 검증 제외. 작업 경로의 `output/verification/latest.md`에 로그 위치 기록 |
 | CAL `f8f7337` | 2026-09-06, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공. 기본 주소 바인딩·UTC 시계 검증 유지, DB 기동 제거. 제품 코드·계약 변경이 없어 전체 테스트·계약 ZIP 제외 |
 | CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
 | CAL `f8f7337` + 스킬 검증 스크립트·문서 미커밋 변경 | 공용 Python 3.14.7·PyYAML 6.0.3, `bash -n scripts/validate-skill.sh`, `./scripts/validate-skill.sh /Users/lim/.codex/skills/baton-cal-flows` | 성공. 기존 공용 환경을 사용해 추가 설치 없이 검증. 문서 변경 뒤 앱 테스트는 반복하지 않음 |
@@ -40,8 +43,8 @@
 
 ## 남은 작업
 
-외부 API는 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 캘린더 직접 연동과
-공휴일 활용 중 먼저 구현할 기능은 사용자 답변 대기 중이며, 두 기능 모두 미구현·미연결이다.
+외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
+앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
 
 1. `1.1.0-rc.2` 검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
    승격한다. `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.

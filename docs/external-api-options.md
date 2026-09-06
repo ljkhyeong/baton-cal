@@ -2,7 +2,7 @@
 
 - 확인일: 2026-09-07
 - 기준: CAL `30f88e7`, 외부 서비스 이용료를 추가하지 않는다는 사용자 요청
-- 상태: 비용·연동 방식 검토 완료. 직접 연동과 공휴일 기능은 미구현·미연결
+- 선택: 기존 `.ics` 구독의 앱별 등록 편의 개선. 제공자 API 직접 연동은 보류
 
 ## 적용 기준
 
@@ -24,9 +24,15 @@ Google 공식 문서의 일일 기준은 프로젝트당 1,000,000회다. 실제
 설정에 따라 확인해야 한다. 서비스 자체 호출량과 재시도를 제한하고, 제공자 측의 무료 한도 차단 조건을
 확인한 뒤 활성화한다. 이 문서는 한도 차단 구현이나 비용 보장을 완료했다는 뜻이 아니다.
 
-## 구현 범위 결정
+## 이번 적용 범위
 
-캘린더 직접 연동과 공휴일 활용은 별도 기능이다. 먼저 구현할 기능을 정한 뒤 해당 제품·API 계약을 갱신한다.
+추가 요금과 연동 코드를 늘리지 않도록 기존 구독을 활용한다. BATON에서 주소 발급 후 등록 안내를
+자동으로 펼치고 Google·Apple·Outlook 개인/회사·학교 계정 중 선택한 앱의 절차만 표시한다.
+Google의 공식 URL 등록 화면과 앱별 공식 페이지를 새 탭으로 연다. 구독 주소는 링크에 넣지 않으며,
+주소 복사 실패 시 직접 선택해 복사할 수 있다. 앱별 갱신 주기는 유지되며 실시간 동기화를 뜻하지 않는다.
+
+공휴일 활용은 BATON의 별도 기능이다. 제공자 API 직접 연동은 빠른 갱신이 실제 요구사항으로 확정될 때
+아래 조건과 비용을 다시 확인한다.
 
 - 직접 연동: BATON에서 변경이 확정된 뒤 외부 캘린더로 전달한다. 외부 캘린더의 수정으로 BATON 원본을
   변경하지 않는다. 기존 `.ics` 주소 구독과 API를 통한 일정 복사 사이의 중복 등록도 처리해야 한다.
@@ -41,3 +47,6 @@ Google 공식 문서의 일일 기준은 프로젝트당 1,000,000회다. 실제
 - [Google Calendar API: 무료 범위·초과 사용 과금 계획·요청 제한](https://developers.google.com/workspace/calendar/api/guides/quota)
 - [Microsoft Graph: 표준 API와 과금 API 구분](https://learn.microsoft.com/en-us/graph/metered-api-overview)
 - [Microsoft Graph: 일정 생성과 계정별 권한](https://learn.microsoft.com/en-us/graph/api/calendar-post-events?view=graph-rest-1.0)
+- [Google Calendar: URL 등록 화면과 절차](https://support.google.com/calendar/answer/37100?hl=en)
+- [Apple Calendar: 구독 등록](https://support.apple.com/en-ie/guide/iphone/iph3d1110d4/ios)
+- [Outlook: 계정별 URL 구독 절차](https://support.microsoft.com/en-us/outlook/import-or-subscribe-to-a-calendar-in-outlook-com-or-outlook-on-the-web)
