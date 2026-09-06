@@ -12,11 +12,25 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Import
 import java.net.URI
+import java.time.Clock
+import java.time.ZoneOffset
 import java.util.UUID
 
 @ExtendWith(OutputCaptureExtension::class)
 class CalPropertiesTest {
+    @Test
+    fun `기본 공개 주소와 UTC 시계를 적용한다`() {
+        propertiesBindingApplication().run(
+            "--baton.cal.internal-token=secret-internal-token-that-is-long-enough",
+        ).use { context ->
+            assertThat(context.getBean(CalProperties::class.java).publicBaseUrl)
+                .isEqualTo(URI.create("http://localhost:8080"))
+            assertThat(context.getBean(Clock::class.java).zone).isEqualTo(ZoneOffset.UTC)
+        }
+    }
+
     @Test
     fun `내부 토큰은 오류와 문자열 표현에 노출되지 않는다`() {
         val currentSecret = "current-internal-token-that-is-long-enough"
@@ -184,5 +198,6 @@ class CalPropertiesTest {
 
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(CalProperties::class)
+    @Import(TimeConfiguration::class)
     private class PropertiesBindingApplication
 }

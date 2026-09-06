@@ -26,13 +26,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
-      - name: Java 25 설정
+      - &setup-java
+        name: Java 25 설정
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "25"
 
-      - name: Gradle 설정
+      - &setup-gradle
+        name: Gradle 설정
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
         with:
           cache-provider: basic
@@ -58,32 +60,29 @@ jobs:
       BATON_CAL_IMAGE: baton-cal:${{ github.sha }}
 
     steps:
-      - name: 소스 체크아웃
+      - &checkout
+        name: 소스 체크아웃
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - name: Java 25 설정
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: "25"
+      - *setup-java
+      - *setup-gradle
 
-      - name: Gradle 설정
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
-        with:
-          cache-provider: basic
-
-      - name: 전체 테스트, 계약 팩 검증과 OCI 이미지 빌드
+      - &build-and-test
+        name: 전체 테스트, 계약 팩 검증과 OCI 이미지 빌드
         run: ./gradlew --no-daemon test verifyContractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
 
-      - name: OCI 이미지 스모크 검증
+      - &smoke-oci
+        name: OCI 이미지 스모크 검증
         run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"
 
-      - name: HTTPS 프록시와 운영 알림 스모크 검증
+      - &smoke-operations
+        name: HTTPS 프록시와 운영 알림 스모크 검증
         run: ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
 
-      - name: 계약 팩 업로드
+      - &upload-contracts
+        name: 계약 팩 업로드
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           path: build/distributions/baton-cal-contracts-*.zip
@@ -103,30 +102,12 @@ jobs:
       BATON_CAL_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
 
     steps:
-      - name: 소스 체크아웃
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Java 25 설정
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Gradle 설정
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
-        with:
-          cache-provider: basic
-
-      - name: 전체 테스트, 계약 팩 검증과 OCI 이미지 빌드
-        run: ./gradlew --no-daemon test verifyContractsZip bootBuildImage --imageName="$BATON_CAL_IMAGE"
-
-      - name: OCI 이미지 스모크 검증
-        run: ./scripts/smoke-oci-image.sh "$BATON_CAL_IMAGE"
-
-      - name: HTTPS 프록시와 운영 알림 스모크 검증
-        run: ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
+      - *checkout
+      - *setup-java
+      - *setup-gradle
+      - *build-and-test
+      - *smoke-oci
+      - *smoke-operations
 
       - name: GHCR 로그인
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -138,10 +119,4 @@ jobs:
       - name: 검증한 OCI 이미지 게시
         run: docker push "$BATON_CAL_IMAGE"
 
-      - name: 계약 팩 업로드
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          path: build/distributions/baton-cal-contracts-*.zip
-          archive: false
-          if-no-files-found: error
-          retention-days: 90
+      - *upload-contracts
