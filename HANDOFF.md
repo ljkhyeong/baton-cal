@@ -13,6 +13,8 @@
   5개 열만 읽도록 반영했다. 복구 시즌 검증은 완료 재시도에 필요한 매니페스트만 조회하고,
   완료 상태 조회는 저장된 시즌 수를 사용하고, 완료 후 매니페스트 재시도는 시즌 잠금을 잡지 않는다.
   [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
+- CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
+  스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
 - 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
@@ -27,8 +29,10 @@
 
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
-| 검증 스크립트 `45dd445`, 문서 수정 중 | 로컬 Python 3.14·PyYAML 6.0.3, `bash -n`, 스킬 검증 최초 실행·환경 재사용·입력 오류 2건 | 성공. 문서 로컬 링크 32개도 확인. 앱·Gradle 동작 변경이 없어 서버 테스트는 실행하지 않음 |
-| CAL `3514a97` + 복구 재시도 잠금 구현·테스트 미커밋 변경 | 2026-09-06, Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'` | 복구 HTTP 테스트 13개 새 실행 성공. 다른 트랜잭션의 시즌 잠금 중 완료 재시도 `200`·충돌 `409`, 진행 중 검증의 시간 초과 `503` 확인. 전체 테스트·계약 ZIP·운영 검증 제외 |
+| CAL `f8f7337` | 2026-09-06, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공. 기본 주소 바인딩·UTC 시계 검증 유지, DB 기동 제거. 제품 코드·계약 변경이 없어 전체 테스트·계약 ZIP 제외 |
+| CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
+| CAL `f8f7337` + 스킬 검증 스크립트·문서 미커밋 변경 | 공용 Python 3.14.7·PyYAML 6.0.3, `bash -n scripts/validate-skill.sh`, `./scripts/validate-skill.sh /Users/lim/.codex/skills/baton-cal-flows` | 성공. 기존 공용 환경을 사용해 추가 설치 없이 검증. 문서 변경 뒤 앱 테스트는 반복하지 않음 |
+| CAL `465d2c3` | 2026-09-06, Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'` | 복구 HTTP 테스트 13개 새 실행 성공. 다른 트랜잭션의 시즌 잠금 중 완료 재시도 `200`·충돌 `409`, 진행 중 검증의 시간 초과 `503` 확인. 전체 테스트·계약 ZIP·운영 검증 제외 |
 | BATON `68179922` | 문구 변경 관련 Playwright 38건, PC·모바일·WebKit, 타입 검사 포함 프로덕션 빌드 | 성공. 서버·외부 앱 검증은 제외. [기록](docs/reviews/2026-09-05-wording-followup-review.md) |
 
 이전 서버·OCI·복원 검증과 WebKit 시간 초과 기록은 `git show 6c8eec6:HANDOFF.md`에서 확인할 수 있다.

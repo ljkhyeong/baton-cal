@@ -45,13 +45,16 @@ DB 통합 테스트에는 Docker가 필요하다. `check`는 일반 테스트와
 
 ## 스킬 검증 환경
 
-`validate-skill.sh`는 Python 3으로 `.gradle/agent-validation` 가상환경을 만들고 PyYAML 6.0.3을
-처음 한 번 설치한다. 이후에는 같은 환경에서 설치된 `skill-creator` 검증기를 실행한다. 최초 설치에는
-패키지 다운로드가 필요하며 대상 스킬과 검증기 파일을 먼저 확인한다. 환경은 Git에서 제외되어 있다.
+`validate-skill.sh`는 공통 지침의 `~/.codex/venvs/skill-validation/bin/python`을 사용한다.
 검증기 위치는 `${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py`다.
 
-다른 Python으로 같은 의존성 오류를 반복 확인하지 않는다. 검증기·Python 변경으로 환경이 깨졌을 때만
-이 전용 환경을 다시 준비한다. 시스템 Python이나 다른 프로젝트 환경은 수정하지 않는다.
+공용 환경이나 PyYAML이 없으면 다음 명령으로 준비한다. 이후에는 같은 환경을 재사용하며,
+프로젝트별 가상환경을 만들거나 시스템 Python에 패키지를 설치하지 않는다.
+
+```bash
+python3 -m venv ~/.codex/venvs/skill-validation
+~/.codex/venvs/skill-validation/bin/python -m pip install 'PyYAML==6.0.3'
+```
 
 ## 작업 기록에서 확인한 개선 근거
 
