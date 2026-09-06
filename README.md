@@ -236,6 +236,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [시즌 투영·실제 HTTP 수신 성능 기준](docs/performance-baseline.md)
 - [cal.b4ton.com HTTPS·프록시·모니터링 운영 구성](docs/operations.md)
 - [캘린더 앱별 구독 안내와 호환성 확인표](docs/calendar-subscription-guide.md)
+- [추가 요금 없는 외부 API 연동 기준](docs/external-api-options.md)
 - [기능 추가·개선 검토](docs/reviews/2026-09-05-feature-review.md)
 - [다음 작업](HANDOFF.md)
 
