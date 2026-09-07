@@ -383,7 +383,7 @@ BATON 최종 사용자 Bearer 토큰, 워크스페이스 키 또는 세션을 �
 
 JSON 요청은 공백과 구조를 포함한 전체 문서 128 KiB(131,072바이트), 필드명 64자, 중첩 16단계,
 숫자 10자리와 토큰 256개 이하여야 한다. 이 제한은 DTO·JSON Schema의 개별 필드 제약과 별도로
-Jackson 파서에서 먼저 적용한다. 어느 자원 상한이든 초과하면
+Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 기존 계약과 같은 `{"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}`
 고정 오류 본문을 반환한다.
 
@@ -402,14 +402,14 @@ Jackson 파서에서 먼저 적용한다. 어느 자원 상한이든 초과하�
 | `409` | `SUBSCRIPTION_CONFLICT` | 회전/폐기 원자적 비교 후 설정(CAS)의 동시성 충돌 |
 | `409` | `SUBSCRIPTION_ALREADY_EXISTS` | 지정한 ID와 시즌의 구독이 이미 존재함. 기존 토큰·상태를 유지함 |
 | `409` | `SUBSCRIPTION_SCOPE_CONFLICT` | 지정한 구독 ID가 다른 시즌에 사용됨 |
-| `413` | `REQUEST_TOO_LARGE` | JSON 문서 크기·필드명·중첩·숫자·토큰 자원 상한을 넘음 |
+| `413` | `REQUEST_TOO_LARGE` | JSON 요청 크기·필드명 길이·중첩 깊이·숫자 길이·토큰 개수 제한을 넘음 |
 | `503` | `SERVICE_BUSY` | 데이터베이스 잠금·SQL 실행 또는 Spring 트랜잭션 제한 시간을 넘긴 일시적 실패 |
 | `503` | `RECOVERY_IN_PROGRESS` | 복구 모드가 켜져 구독 생성·회전을 차단함 |
 | `500` | `INTERNAL_ERROR` | 호출자에게 내부 세부 정보를 노출하지 않는 예상 밖 실패 |
 
 스냅샷 전달은 네트워크 실패나 `5xx`만 재시도 간격을 두고 재시도하며 `4xx`는 계약/설정
-오류로 처리한다. `413`은 생산자 직렬화나 요청을 자원 상한 안으로 고치기 전에는 재시도하지
-않는다. `503 SERVICE_BUSY`에는 `Retry-After: 1`을 포함하며 호출자는 이 값을 지켜 재시도한다.
+오류로 처리한다. `413`을 받으면 요청 크기나 구조를 제한에 맞게 수정한 뒤 다시 보낸다.
+`503 SERVICE_BUSY`에는 `Retry-After: 1`을 포함하며 호출자는 이 값을 지켜 재시도한다.
 공개 프록시의 `429`는 아래 공개 요청 제한 계약을 따른다. 내부 수신 API에는 현재 요청 제한을 적용하지 않는다.
 
 ### `POST /internal/api/v1/schedule-snapshots`
@@ -589,7 +589,7 @@ IP별 요청률 또는 동시 처리 제한을 넘으면 `429`, `Retry-After: 1`
 10. 외부 구독 세대를 유지한 정상 재시작, 새 세대의 생성·회전, 과거 세대 토큰의 일반 `404`와
    현재 세대 토큰 재발급.
 11. BATON 커밋 이후 전달, CAL 트랜잭션 실패, 재시도와 복구.
-12. DTO·JSON Schema의 필드 제약 위반과 JSON 파서 자원 제한을 구분하고, 문서 128 KiB·필드명
+12. DTO·JSON Schema의 필드 제약 위반과 JSON 요청 크기·구조 제한을 구분하고, 문서 128 KiB·필드명
     64자·중첩 16단계·숫자 10자리·토큰 256개 중 어느 상한이든 넘으면 고정된
     `413 REQUEST_TOO_LARGE` 오류를 반환한다.
 13. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 데이터베이스 설정이 로컬 기본값을 상속하지 않는
@@ -658,7 +658,7 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 정규 iCalendar 표현을 검증한다. 시간대 지정 입력은 iCal4j 4.3.0 내장 Olson `2025a`의 원문 TZID와
 같은 `VTIMEZONE`에서 만든 DST 규칙을 사용한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의
 정규 `.ics` 골든,
-의존성 잠금과 골든 검토 절차도 갖춘다. JSON 문서·구조 자원 상한과 고정 `413` 오류,
+의존성 잠금과 골든 검토 절차도 갖춘다. JSON 요청 크기·구조 제한과 고정 `413` 오류,
 공개 기준 URL의 HTTPS·루프백 규칙, `prod` 공개 URL 시작 검증, 데이터베이스의 로컬 기본값 상속
 차단과 안전한 애플리케이션 로그 기본값도 구현되어 있다. PostgreSQL 잠금 대기는 5초, SQL 실행과
 Spring 트랜잭션은 30초로 제한하며 제한 시간 초과는 `503 SERVICE_BUSY`와 `Retry-After: 1`로

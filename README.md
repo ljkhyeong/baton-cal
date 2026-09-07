@@ -110,7 +110,7 @@ CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모�
 
 구독 세대를 처음 도입하는 V4는 유지보수 배포다. 모든 pre-V4 CAL 인스턴스를 먼저 중지하고
 `BATON_CAL_SUBSCRIPTION_GENERATION=00000000-0000-0000-0000-000000000001`로 신버전만 시작한다.
-V4는 기존 구독을 이 초기 세대로 승격하므로 이 값을 써야 기존 피드 URL이 유지된다.
+V4는 기존 구독에 이 초기 세대 값을 저장하므로 같은 값을 써야 기존 피드 URL이 유지된다.
 
 V4 적용 뒤에는 세대를 검사하지 않는 pre-V4 바이너리를 다시 시작하거나 그 버전으로 롤백하지 않는다.
 문제가 생기면 신버전의 오류를 수정해 재배포하거나, 신버전과 아래 복원 절차를 사용한다. V4 적용 중에는 구·신
@@ -324,7 +324,7 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
 [계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 
-불변 사전 릴리스 [`1.1.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1)은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
+불변 사전 릴리스 [`1.1.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1)은 기존 128 KiB 문서 상한에 JSON 구조 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 또한 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화,
 예상 밖 `500`의 비밀값 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0의
