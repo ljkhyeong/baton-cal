@@ -28,7 +28,7 @@ class CalProperties(
             }
         }
         val publicHost = requireNotNull(publicBaseUrl.host) {
-            "publicBaseUrl은 호스트가 있는 계층형 URI여야 한다"
+            "publicBaseUrl에는 호스트를 포함한 전체 URL을 지정해야 한다"
         }
         require(
             publicBaseUrl.scheme.equals("https", ignoreCase = true) ||
