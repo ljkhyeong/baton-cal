@@ -122,7 +122,7 @@ BATON이 시즌의 캘린더 표시 이름을 확정하고 원본 트랜잭션 �
 
 ## 시간 계약
 
-구간의 종료 시각·날짜는 미포함 경계이며 시작보다 엄격히 뒤에 있어야 한다. 소수점 이하 초를 받아도
+구간의 시작 시각·날짜는 포함하고 종료 시각·날짜는 제외한다. 종료는 시작보다 늦어야 한다. 소수점 이하 초를 받아도
 비교와 저장은 마이크로초, 정규 iCalendar DATE-TIME은 초 단위로 내림한다. 내림 후 구간의
 시작·종료 시각이 같아지면 유효하지 않다. 단일 시점에는 임의 지속 시간을 만들지 않는다.
 
@@ -151,8 +151,8 @@ CAL은 현지 시각 필드를 UTC 시각으로 바꾸지 않고 동일한 `TZID
 
 ### `ALL_DAY`
 
-`startDate`와 `endDate`는 네 자리 연도를 쓰는 ISO 날짜다. `endDate`는 미포함 경계이고
-`startDate`보다 뒤에 있어야 한다. CAL은 둘을 `VALUE=DATE`인 `DTSTART`와 `DTEND`로 투영하며 자정 시각이나
+`startDate`와 `endDate`는 네 자리 연도를 쓰는 ISO 날짜다. `startDate`는 포함하고 `endDate`는 제외하며,
+`endDate`는 `startDate`보다 늦어야 한다. CAL은 둘을 `VALUE=DATE`인 `DTSTART`와 `DTEND`로 투영하며 자정 시각이나
 시간대를 임의로 만들지 않는다.
 
 BATON은 시간대의 DST 공백에 들어가지 않는 현지 시각 값을 보내야 한다. 중첩 구간에서 특정 시각이
@@ -287,7 +287,7 @@ BATON은 발급 전에 새 전역 UUID `subscriptionId`와 승인한 `seasonId`�
 `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 외부 환경에서 모두 명시하지 않으면
 시작을 거부한다. 로컬 기본값을 운영 연결로 승격하지 않는다.
 
-### 복원 펜스
+### 백업 복원 시 기존 구독 주소 무효화
 
 `BATON_CAL_SUBSCRIPTION_GENERATION`은 비밀이 아닌 외부 런타임 UUID다. 정상 재시작과 일반
 배포에서는 같은 값을 유지한다. 호환용 초기값은 `00000000-0000-0000-0000-000000000001`이며,

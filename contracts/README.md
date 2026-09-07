@@ -87,14 +87,14 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
   항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
   관계는 애플리케이션 검증 대상이다.
 
-## JSON 문서 자원 경계
+## JSON 요청 크기·구조 제한
 
 JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 검증한다. 이와 별도로 CAL의 JSON
 파서는 공백과 구조를 포함한 전체 요청 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
 16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이 상한은 JSON Schema에 표현하는 필드 제약이
-아니라, DTO를 만들기 전에 Jackson이 적용하는 자원 경계다.
+아니라, DTO를 만들기 전에 Jackson이 적용하는 파싱 제한이다.
 
-어느 자원 상한이든 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
+어느 제한이든 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
 반환한다. 같은 요청을 그대로 재시도하지 않고 생산자 직렬화 또는 요청 크기를 먼저 고친다.
 
 ```json
@@ -118,8 +118,8 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 별도 MVC 회귀 테스트로 확인한다.
 
 `SeasonCalendarMetadataHttpTest`는 이름의 수신·변경·중복·역순·충돌 응답을 실제 MVC 경로로 확인하고
-성공 응답을 `season-calendar-metadata-result.v1`에 대조한다. 피드 재구축과 이름만 같은 개정 전진이
-바이트·ETag·Last-Modified를 유지하는지도 검증한다.
+성공 응답을 `season-calendar-metadata-result.v1`에 대조한다. 같은 이름의 개정 번호 증가와 피드 재구축이
+캘린더 바이트·ETag·Last-Modified를 유지하는지도 검증한다.
 
 데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
 `503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
@@ -198,7 +198,7 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
   iCal4j 줄 접기 경계에 놓이는 UTC 활성 항목
 - `golden/season-point-and-all-day.ics.b64`: `DTEND`가 없는 UTC 시점과 `VALUE=DATE`인 종일 날짜 구간
 
-iCal4j 4.3.0은 내장 Olson `2025a`를 시간대 지정 입력 검증과 `VTIMEZONE` 출력의 단일 권위로 쓴다.
+시간대 입력 검증과 `VTIMEZONE` 출력은 모두 iCal4j 4.3.0 내장 Olson `2025a`의 규칙을 따른다.
 iCal4j 또는 시간대 데이터를 올려 픽스처 바이트가 바뀌면 자동 갱신하지 않고 변경점과 캘린더
 호환성 영향을 먼저 검토한다.
 
