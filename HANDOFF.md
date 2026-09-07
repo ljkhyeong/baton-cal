@@ -15,7 +15,7 @@
   [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
 - CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
   스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
-- 앱별 무료 구독 등록 안내와 문구 개선은 BATON `129b639a`, `codex/free-calendar-registration`에 있다.
+- 앱별 무료 구독 등록 안내와 문구·문서 개선은 BATON `5a25ef30`, `codex/free-calendar-registration`에 있다.
   작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 BATON main 병합·운영 활성화는 하지 않았다.
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
@@ -31,6 +31,7 @@
 
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
+| CAL `3bec197` + 이번 문서 변경 | 2026-09-08, 상대 링크 48개·변경한 제목 참조 확인, 릴리스 명령 6개 블록 `bash -n`, `git diff --check`, Java 25.0.3의 `./gradlew --no-daemon verifyContractsZip` | 모두 성공. ZIP 작업 2개 새 실행, ZIP 안의 최신 문서 2개가 원본과 일치. 로그: `/private/tmp/baton-cal-docs-clarity-20260908.log`. 코드·테스트·스키마·골든 파일 변경이 없어 앱 테스트는 반복하지 않음. 릴리스·배포 명령은 실행하지 않음 |
 | BATON `129b639a` | 2026-09-08, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, `npm run e2e -- tests/e2e/calendar-subscription.spec.ts tests/e2e/calendar-subscription-list.spec.ts --workers=1` | 타입·빌드 성공, PC·390px 모바일·WebKit 54개 새 실행 성공, 실패·제외 0개. 구독 주소 상태·발급·해제·등록 안내·구독 목록 확인. PC·모바일 배치 확인. 서버·외부 계정 실제 등록·운영 검증 제외. 작업 경로의 `output/verification/latest.md`에 로그 위치 기록 |
 | CAL `5d41971` | 2026-09-08, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공, 실패·제외 0개. URL 오류 안내만 변경하고 기존 검증 유지. 로그: `/private/tmp/baton-cal-wording-config-20260908.log`. HTTP 계약·DB·의존성 변경이 없어 전체 테스트·계약 ZIP 제외 |
 | CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
@@ -46,7 +47,7 @@
 외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
 앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
 
-1. `1.1.0-rc.2` 검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
+1. `1.1.0-rc.2` 릴리스 노트 작성·검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
    승격한다. `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
 2. 실제 서버·DNS 업체와 비밀 관리 시스템을 정하고 `cal.b4ton.com` HTTPS·인증서 갱신·알림 수신·
    외부 점검을 연결한다. 내부 Bearer 회전과 실제 프록시·추적의 토큰 비노출을 검증한다.

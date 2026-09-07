@@ -6,6 +6,9 @@ BATON CAL은 확정된 시즌 일정·회차·마감을 읽기 전용 캘린더 
 > BATON 생산자 검증을 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
+문서에서 **투영**은 확정 일정을 변환해 저장한 캘린더 데이터다. **골든 파일**은 출력 비교에 쓰는
+[기준 `.ics` 바이트](contracts/golden)를 Base64로 보관한 파일이다.
+
 ## 서비스 경계
 
 CAL이 담당한다.
@@ -14,7 +17,7 @@ CAL이 담당한다.
 - 확정된 BATON 일정을 iCalendar로 변환
 - 안정적인 iCalendar `UID`, `SEQUENCE`와 취소 표식
 - `.ics` 피드, `ETag`, `Last-Modified`와 조건부 GET
-- 원천 이벤트 수신함, 멱등성, 재전달과 투영 재구축 상태
+- 일정 이벤트 수신 기록과 멱등 처리, 재전달·캘린더 재생성 상태
 - 구독 요청·오류 모니터링
 
 다른 서비스가 담당한다.
@@ -43,7 +46,7 @@ CAL이 담당한다.
 ## 운영 안전 기본값
 
 - JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트),
-  필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 256개까지 파싱한다. 이 자원 경계를 하나라도
+  필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 256개까지 파싱한다. 이 요청 제한을 하나라도
   넘으면 기존 계약과 같은 `413`, `REQUEST_TOO_LARGE`,
   `request body exceeds the maximum size`를 반환한다.
 - 공개 피드 기준 URL은 외부 또는 비루프백 주소에서 HTTPS만 허용한다. 루프백 HTTP는 로컬
@@ -65,7 +68,7 @@ CAL이 담당한다.
   `baton.cal.internal.authentication`의 `current`, `previous`, `unauthorized` 세 값만 사용한다.
   토큰·시즌·항목 식별자는 메트릭 태그에 넣지 않는다.
 - Prometheus 형식은 `/actuator/prometheus`에서 제공한다. `prod` 프로필은 관리 서버를 기본
-  `8081` 포트로 분리하며, 공개 역방향 프록시는 이 포트를 노출하지 않고 관측 수집기만 접근하게 한다.
+  `8081` 포트로 분리하며, 공개 역방향 프록시는 이 포트를 노출하지 않고 메트릭 수집기만 접근하게 한다.
   포트는 `MANAGEMENT_SERVER_PORT`로 바꿀 수 있다.
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
@@ -296,7 +299,7 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실�
 ./gradlew --no-daemon verifyContractsZip
 ```
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.2`이다. 따라서 결과는
+계약 버전은 `contracts/VERSION`에서 관리하며 현재 작업 후보는 `1.1.0-rc.2`이다. 따라서 결과는
 `build/distributions/baton-cal-contracts-1.1.0-rc.2.zip`이고, ZIP 안에도 같은
 `contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.2`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 루트 `LICENSE`, `contracts/**` 전체와 필드 간
@@ -324,8 +327,8 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 불변 사전 릴리스 [`1.1.0-rc.1`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1)은 기존 128 KiB 문서 상한에 JSON 구조 자원 제한을 추가하고 `prod` 데이터베이스가
 로컬 기본값을 상속하지 않게 한다. 또한 응답 Date를 넘지 않는 Last-Modified와 강한 ETag 우선 판정,
 취소 후 재활성화,
-예상 밖 `500` 비밀 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0 단일 시간대
-규칙 권위 회귀 검증, 복구 모드의 발급 차단, 내부 상태 조회, 시즌 표시 이름과 전체 복구 완료 계약을
+예상 밖 `500`의 비밀값 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`와 iCal4j 4.3.0의
+시간대 입력·출력 규칙 일치 검증, 복구 모드의 발급 차단, 내부 상태 조회, 시즌 표시 이름과 전체 복구 완료 계약을
 포함한다. BATON이 게시 자산과 요청 스키마를 고정해 실제 컨테이너 교차 서비스 검증을 완료했다.
 정식 `1.1.0` 승격 전까지 현재 운영 안정 기준은 계속 `1.0.0`이다.
 

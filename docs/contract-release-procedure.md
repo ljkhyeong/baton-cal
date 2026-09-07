@@ -5,7 +5,7 @@
 
 ## 공통 원칙
 
-- `contracts/VERSION`을 ZIP 파일명과 `contracts-v{버전}` 태그의 단일 원천으로 사용한다.
+- ZIP 파일명과 `contracts-v{버전}` 태그는 `contracts/VERSION` 값을 사용한다.
 - 계약 변경을 풀 리퀘스트로 검토해 `main`에 반영한 뒤, 깨끗하고 원격과 같은 커밋에서 게시한다.
 - 과거 태그에서 갈라져 `main`에 병합하지 않는 호환 브랜치는 풀 리퀘스트의 `계약 릴리스 HEAD 검증`
   작업으로 합성 merge commit이 아닌 브랜치의 정확한 커밋과 계약 ZIP을 검증한다.
@@ -17,7 +17,7 @@
 ## `1.0.1` 호환 보완판 준비
 
 `contracts-v1.0.0`의 계약 ZIP에는 루트 `LICENSE`가 없다. `1.0.1`은 `1.0.0`의 스키마, 예시,
-골든과 PRD 의미를 그대로 두고 라이선스와 새 버전 표식만 추가하는 호환 보완판이다. 현재 배치가
+골든 파일과 PRD의 계약 의미를 유지하고 라이선스와 새 버전 표식만 추가하는 호환 보완판이다. 필요한 빌드 설정이
 `main`에 반영된 뒤 다음과 같이 별도 작업 트리를 만든다.
 
 ```shell
@@ -38,7 +38,7 @@ git restore --source=origin/main -- \
 ```shell
 git diff --exit-code contracts-v1.0.0 -- \
   contracts/examples contracts/golden contracts/schemas docs/PRD/0002_mvp-contract/spec.md
-./gradlew --no-daemon clean verifyContractsZip
+./gradlew --no-daemon verifyContractsZip
 git add LICENSE build.gradle.kts contracts gradle gradlew gradlew.bat docs/releases/contracts-v1.0.1.md
 git commit -m "배포: 계약 1.0.1 호환 보완판 준비"
 git push -u origin release/contracts-v1.0.1
@@ -58,7 +58,7 @@ git switch release/contracts-v1.0.1
 git pull --ff-only
 test "$(git rev-parse HEAD)" = "$(git rev-parse '@{upstream}')"
 git status --short
-./gradlew --no-daemon clean verifyContractsZip
+./gradlew --no-daemon verifyContractsZip
 git status --short
 git tag -a contracts-v1.0.1 -m "계약 1.0.1"
 test "$(git rev-parse HEAD)" = "$(git rev-parse 'contracts-v1.0.1^{}')"
@@ -79,38 +79,45 @@ gh release view contracts-v1.0.1 --json assets \
 ```
 
 검증한 태그 커밋과 SHA-256을 계약 릴리스 현황에 기록하고 BATON이 `1.0.1`로 다시 고정한 뒤
-생산자 계약 테스트를 실행한다. 이 작업은 `1.1.0-rc.1`의 새 계약 의미 검증을 대신하지 않는다.
+생산자 계약 테스트를 실행한다. 이 작업은 새 계약 후보의 검증을 대신하지 않는다.
 
-## `1.1.0-rc.1` 게시
+## 새 사전 릴리스 게시
 
-후보 변경이 `main`에 반영되고 로컬 `main`이 `origin/main`과 같은지 확인한다. 아래 두 `git status`
-명령은 모두 아무 내용도 출력하지 않아야 한다.
+`1.1.0-rc.1`은 이미 게시됐다. 새 후보 버전은 `contracts/VERSION`에서 읽고, 해당 버전의
+`docs/releases/contracts-v{버전}.md`를 준비한다. 현재 후보 `1.1.0-rc.2`의 릴리스 노트 작성은 남아 있다.
+게시한 태그와 자산은 교체하지 않으며, 릴리스 노트에는 새 버전의 변경 사항을 반영한다.
+
+후보 변경과 릴리스 노트가 `main`에 반영되고 로컬 `main`이 `origin/main`과 같은지 확인한다.
+아래 명령은 같은 셸에서 순서대로 실행하고 실패하면 중단한다. 두 `git status` 결과는 모두 비어 있어야 한다.
+검증 재실행 기준은 [개발 검증 절차](development.md)를 따른다.
 
 ```shell
 git switch main
 git pull --ff-only
 test "$(git rev-parse HEAD)" = "$(git rev-parse '@{upstream}')"
+contract_version="$(cat contracts/VERSION)"
+release_tag="contracts-v${contract_version}"
+release_zip="build/distributions/baton-cal-contracts-${contract_version}.zip"
+release_notes="docs/releases/${release_tag}.md"
+test -f "$release_notes"
 git status --short
-./gradlew --no-daemon clean test bootJar verifyContractsZip
+./gradlew --no-daemon test bootJar verifyContractsZip
 git status --short
-git tag -a contracts-v1.1.0-rc.1 -m "계약 1.1.0-rc.1"
-test "$(git rev-parse HEAD)" = "$(git rev-parse 'contracts-v1.1.0-rc.1^{}')"
-git push origin contracts-v1.1.0-rc.1
-gh release create contracts-v1.1.0-rc.1 \
-  build/distributions/baton-cal-contracts-1.1.0-rc.1.zip \
-  --draft --prerelease --verify-tag --title "BATON CAL 계약 1.1.0-rc.1" \
-  --notes-file docs/releases/contracts-v1.1.0-rc.1.md
+git tag -a "$release_tag" -m "계약 $contract_version"
+test "$(git rev-parse HEAD)" = "$(git rev-parse "$release_tag^{}")"
+git push origin "$release_tag"
+gh release create "$release_tag" "$release_zip" \
+  --draft --prerelease --verify-tag --title "BATON CAL 계약 $contract_version" \
+  --notes-file "$release_notes"
 ```
 
 초안을 확인하고 사전 릴리스로 게시한 뒤 릴리스와 자산 증명을 검증한다.
 
 ```shell
-gh release edit contracts-v1.1.0-rc.1 --draft=false --prerelease=true
-gh release verify contracts-v1.1.0-rc.1
-gh release verify-asset contracts-v1.1.0-rc.1 \
-  build/distributions/baton-cal-contracts-1.1.0-rc.1.zip
-gh release view contracts-v1.1.0-rc.1 --json assets \
-  --jq '.assets[] | select(.name == "baton-cal-contracts-1.1.0-rc.1.zip") | .digest'
+gh release edit "$release_tag" --draft=false --prerelease=true
+gh release verify "$release_tag"
+gh release verify-asset "$release_tag" "$release_zip"
+gh release view "$release_tag" --json assets --jq '.assets[] | {name, digest}'
 ```
 
 BATON은 이 사전 릴리스의 버전·태그·자산·SHA-256을 고정해 교차 서비스 테스트를 실행한다. 계약

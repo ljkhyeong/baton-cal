@@ -25,7 +25,7 @@
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
 `text/calendar` 계약을 따른다.
 
-두 내부 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
+일정·구독 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
 일정 조회는 CAL이 채택한
 개정 번호·상태·원본 수정 시각을, 구독 조회는 저장된 상태와 현재 인스턴스의 구독 세대 일치 여부를
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
@@ -141,7 +141,7 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 
 ## 계약 팩 생성과 배포
 
-계약 버전의 단일 원천은 `contracts/VERSION`이며 현재 작업 후보는 `1.1.0-rc.2`이다. 계약 팩은
+계약 버전은 `contracts/VERSION`에서 관리하며 현재 작업 후보는 `1.1.0-rc.2`이다. 계약 팩은
 Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 
 ```shell
@@ -186,7 +186,7 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 
 ## 골든 캘린더
 
-아래 파일은 버전이 고정된 iCal4j 작성기가 한 번 생성한 정규 바이트를 Base64로 고정해 보관한다.
+아래 골든 파일은 고정된 iCal4j 버전으로 생성한 기준 `.ics` 바이트를 Base64로 보관한다.
 테스트는 픽스처를 다시 만들거나 덮어쓰지 않고 디코딩한 뒤 CRLF와 마지막 CRLF까지 바이트 단위로
 비교한다.
 

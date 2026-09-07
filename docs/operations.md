@@ -51,7 +51,7 @@ Compose 파일과 저장소에 운영 비밀을 쓰지 않는다. 실행 관리�
 | `DATABASE_USERNAME`, `DATABASE_PASSWORD` | CAL 전용 DB 계정. 다른 서비스 계정과 공유하지 않음 |
 | `BATON_CAL_INTERNAL_TOKEN` | BATON→CAL 전용 32자 이상 Bearer 값 |
 | `BATON_CAL_PREVIOUS_INTERNAL_TOKEN` | 회전 기간에만 외부에서 주입하는 이전 Bearer 값. 완료하면 환경에서 제거 |
-| `BATON_CAL_SUBSCRIPTION_GENERATION` | 최초 설치 때 생성한 non-NIL UUID. 일반 배포마다 새로 만들지 않음 |
+| `BATON_CAL_SUBSCRIPTION_GENERATION` | 최초 설치 때 생성한 UUID. 모든 자릿수가 0인 값은 금지하며 일반 배포마다 바꾸지 않음 |
 | `BATON_CAL_RECOVERY_MODE` | 정상 `false`, 과거 백업 복원 중 `true` |
 | `CAL_TLS_DIRECTORY` | 외부 인증서 디렉터리. 기본 Certbot 구조이면 `/etc/letsencrypt` |
 | `CAL_ACME_DIRECTORY` | HTTP 인증서 갱신 파일 디렉터리. 예: `/srv/baton-cal/acme` |
@@ -62,7 +62,7 @@ Compose 파일과 저장소에 운영 비밀을 쓰지 않는다. 실행 관리�
 `CAL_ALERTMANAGER_PORT`로 조정한다. 포트 `0`은 스모크에서만 사용해 충돌 없는 동적 포트를 할당한다.
 
 Alertmanager는 표준 JSON webhook을 보낸다. Slack 등의 전용 incoming webhook URL을 이 파일에
-그대로 넣으면 형식이 다를 수 있으므로 수신 서비스가 정해진 뒤 해당 네이티브 receiver 설정으로
+그대로 넣으면 형식이 다를 수 있으므로 수신 서비스가 정해진 뒤 해당 서비스 전용 수신 설정으로
 연결한다. 알림 URL 파일은 Alertmanager 사용자에게 읽기 권한만 부여하고 저장소 밖에서 관리한다.
 [Alertmanager webhook 형식](https://prometheus.io/docs/alerting/latest/configuration/#webhook_config).
 
@@ -141,7 +141,7 @@ Google·Microsoft가 송신 IP를 공유하면 같은 IP의 정상 구독도 함
 시작 설정 오류는 `nginx -t`로 점검하고 요청 장애는 안전한 접근 로그·CAL 메트릭으로 좁힌다.
 프록시는 조건부 GET 헤더와 고정 Host만 CAL에 전달하고 쿼리와 원문 요청 헤더를 버린다.
 
-## 관측과 알림
+## 모니터링과 알림
 
 Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이다. Alertmanager는 발생·해제를
 전달하고 같은 알림은 기본 4시간 후 반복한다. 첫 연결 시 실제 수신 채널에서도 장애·해제 한 쌍을
