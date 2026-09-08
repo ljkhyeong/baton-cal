@@ -138,7 +138,13 @@ alert_offset=$("${request[@]}" --fail "$receiver_url/alerts" | jq length)
 "${compose[@]}" stop app
 # 제한 대기열을 비운 뒤 실제 upstream 실패 경로에서도 비밀 URL을 보내 로그를 검사한다.
 sleep 3
-[[ "$("${request[@]}" "${tls[@]}" -o /dev/null -w '%{http_code}' "$public_url$feed_path?probe=query-smoke-marker")" == 502 ]]
+# 연결 거부는 502, 연결 시간 초과는 504로 응답한다.
+status=$("${request[@]}" "${tls[@]}" -o /dev/null -w '%{http_code}' "$public_url$feed_path?probe=query-smoke-marker")
+if [[ "$status" != 502 && "$status" != 504 ]]; then
+  echo "CAL 중단 후 프록시 응답이 502 또는 504가 아닙니다: $status" >&2
+  exit 1
+fi
+echo "CAL 중단 후 프록시의 $status 응답을 확인했습니다."
 wait_alert firing
 echo "CAL 중단으로 발생한 준비 상태 실패 알림이 로컬 수신기에 도착했습니다."
 alert_offset=$("${request[@]}" --fail "$receiver_url/alerts" | jq length)

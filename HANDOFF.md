@@ -15,8 +15,10 @@
   [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
 - CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
   스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
-- 앱별 무료 구독 등록 안내와 문구·문서 개선은 BATON `a0b0e9be`, `codex/free-calendar-registration`에 있다.
-  작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 BATON main 병합·운영 활성화는 하지 않았다.
+- 앱별 무료 구독 등록 안내와 문구·문서 개선은 BATON 원격 `main`의 `5a7db89f`에 병합했다.
+  작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 운영 활성화는 별도다.
+- CAL `01d8015`까지 원격 `main`에 반영했다. 운영 스모크는 서버 중단 후 연결 거부·시간 초과에 따른
+  `502`·`504`를 모두 검증하도록 보완했다. 최신 필수 CI는 각 저장소의 GitHub Actions에서 확인한다.
 - 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
   과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
 - 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
@@ -31,8 +33,8 @@
 
 | 기준 | 범위·환경 | 결과와 제한 |
 | --- | --- | --- |
-| CAL `6709f74` + 이번 문서 변경 | 2026-09-08, 수정 문서의 상대 링크 확인, V4 마이그레이션과 설명 대조, `git diff --check`, Java 25.0.3의 `./gradlew --no-daemon verifyContractsZip` | 모두 성공. ZIP 작업 2개 새 실행, ZIP 안의 최신 PRD가 원본과 일치. 로그: `/private/tmp/baton-cal-bulk-wording-docs-20260908.log`. 코드·테스트·스키마·골든 파일 변경이 없어 앱 테스트는 반복하지 않음. 릴리스·배포 명령은 실행하지 않음 |
-| BATON `a0b0e9be` | 2026-09-08, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, 여러 구독 해제 E2E | 타입·빌드 성공. 첫 실행 21개 중 18개 성공, 이전 문구를 찾던 3개 실패. 테스트 문구와 모바일 줄바꿈 수정 후 영향받는 4개 시나리오를 PC·390px 모바일·WebKit에서 다시 실행해 12개 성공, 실패·제외 0개. 결과 개수·중단·계정 오류와 PC·모바일 배치 확인. 서버·외부 앱·운영 검증 제외. 작업 경로의 `output/verification/latest.md`에 범위·명령·로그 기록 |
+| CAL `01d8015` + 운영 스모크 보완 | 2026-09-08, [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34171484723), `bash -n scripts/smoke-operations.sh`, `git diff --check` | CI의 전체 테스트·계약 ZIP·이미지 빌드·OCI 스모크 성공. 운영 스모크의 서버 중단 후 응답 검사에서 실패해 `502`·`504`를 구분하도록 보완. 셸 구문·차이 검사 성공. 이후 전체 결과는 main CI 참조. 실패 로그: `/private/tmp/baton-cal-main-ci-failed-20260908.log` |
+| BATON `5a7db89f` | 2026-09-08, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, 캘린더 구독·목록·일괄 해제 E2E | 타입·빌드 성공. 최신 main의 화면 개편에 병합한 뒤 PC·390px 모바일·WebKit 75개 성공, 실패·제외 0개. 테스트 포트는 다른 작업과 겹치지 않는 3137 사용. 백엔드·API 생성물은 원격 기준 `a9d1feb9`와 동일. 명령·로그는 작업 경로의 `output/verification/latest.md` 참조 |
 | CAL `5d41971` | 2026-09-08, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공, 실패·제외 0개. URL 오류 안내만 변경하고 기존 검증 유지. 로그: `/private/tmp/baton-cal-wording-config-20260908.log`. HTTP 계약·DB·의존성 변경이 없어 전체 테스트·계약 ZIP 제외 |
 | CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
 | CAL `f8f7337` + 스킬 검증 스크립트·문서 미커밋 변경 | 공용 Python 3.14.7·PyYAML 6.0.3, `bash -n scripts/validate-skill.sh`, `./scripts/validate-skill.sh /Users/lim/.codex/skills/baton-cal-flows` | 성공. 기존 공용 환경을 사용해 추가 설치 없이 검증. 문서 변경 뒤 앱 테스트는 반복하지 않음 |

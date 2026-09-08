@@ -172,7 +172,7 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 - Compose·Prometheus 규칙·Alertmanager·Nginx 설정 구문.
 - HTTPS 이름 검증, 피드 200·304, 내부·관리 경로 404, 허용하지 않는 메서드 405.
 - ACME 파일, HTTP→HTTPS 이동, 실제 요청 초과 429와 재시도 헤더.
-- CAL 중단→준비 상태 장애→로컬 webhook의 `firing`, 재시작→`resolved` 전달.
+- CAL 중단 후 프록시의 `502` 또는 `504`, 준비 상태 장애→로컬 webhook의 `firing`, 재시작→`resolved` 전달.
 - 정상·제한·upstream 실패 경로의 컨테이너 로그, 원본 메트릭과 Prometheus 저장 라벨에
   구독 토큰·내부 Bearer·쿼리 표식이 없는지 확인.
 
