@@ -23,9 +23,10 @@
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
-`text/calendar` 계약을 따른다.
+`text/calendar` 계약을 따른다. 같은 경로의 HEAD는 본문 없이 상태·ETag·Last-Modified·파일 크기를 반환한다.
+GET·HEAD의 `200` 응답은 UTF-8 바이트 수를 `Content-Length`로 제공한다. 조건부 일치는 `304`, 무효한 구독은 `404`다.
 
-일정·구독 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
+일정·구독 상태 조회는 Bearer 인증을 요구하고 정상 조회와 자원 없음(`404`) 응답에 `Cache-Control: no-store`를 사용한다.
 일정 조회는 CAL이 채택한
 개정 번호·상태·원본 수정 시각을, 구독 조회는 저장된 상태와 현재 인스턴스의 구독 세대 일치 여부를
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는

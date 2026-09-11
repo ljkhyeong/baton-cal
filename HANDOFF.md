@@ -18,7 +18,8 @@
   `/Users/lim/devProject/personal/manager`에서 `git worktree list`로 확인한다.
   이전 `/private/tmp/baton-cal-registration-20260907`은 Git 작업 트리 정보가 삭제되어 작업 경로로 사용하지 않는다.
 - 안정 계약은 `1.0.0`, 게시된 후보는 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다.
-  `rc.2` 게시·BATON 사용 버전 지정·안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
+  [rc.2 릴리스 노트](docs/releases/contracts-v1.1.0-rc.2.md)를 작성했다. 게시·BATON 사용 버전 지정·
+  안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
 - `cal.b4ton.com`용 로컬 HTTPS·프록시·Prometheus·알림 구성은 검증했다. 실제 서버·DNS·공인 인증서·
   운영 알림 채널은 연결하지 않았다.
 
@@ -35,6 +36,11 @@
   최종 로그: `/private/tmp/baton-cal-state-error-cache-check-20260912.log`.
   클래스별 결과: `/private/tmp/baton-cal-state-error-cache-results-20260912.json`.
   이미지·운영 구성 변경이 없어 스모크는 반복하지 않았다. 실제 캐시·캘린더 앱 검증은 미실행이다.
+- 2026-09-12 릴리스 문서 준비: 기준 `697f2b1`에서 계약 안내·릴리스 문서만 변경했다.
+  소스·테스트·의존성·설정이 위 검증과 같아 125개 테스트 결과를 재사용했다.
+  `./gradlew --no-daemon --max-workers=2 verifyContractsZip`으로 변경된 계약 ZIP을 새로 검증하고
+  관련 문서 상대 링크 22개를 확인했다. 로그: `/private/tmp/baton-cal-rc2-notes-contracts-20260912.log`.
+  `rc.1` 이후 기존 JSON 스키마·골든·DB 마이그레이션 변경은 없고, 진단 스키마 두 개가 추가된 것을 확인했다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
@@ -46,7 +52,7 @@
 외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
 앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
 
-1. `1.1.0-rc.2` 릴리스 노트를 작성·검토하고 게시한다. BATON에서 공식 ZIP과 릴리스 증명을 검증한 뒤
+1. 작성한 `1.1.0-rc.2` 릴리스 노트를 게시할 커밋과 대조한 뒤 게시한다. BATON에서 공식 ZIP과 릴리스 증명을 검증한 뒤
    사용할 버전·해시를 지정한다. 연동 검증 후 안정 버전을 게시한다.
    `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
 2. 실제 서버·DNS 업체와 비밀 관리 시스템을 정하고 `cal.b4ton.com` HTTPS·인증서 갱신·알림 수신·
