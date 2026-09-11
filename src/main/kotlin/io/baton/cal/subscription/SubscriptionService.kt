@@ -40,6 +40,7 @@ class SubscriptionService(
     @Transactional
     fun create(seasonId: UUID, subscriptionId: UUID = UUID.randomUUID()): SubscriptionCredential {
         ensureCredentialIssuanceAllowed()
+        repository.findById(subscriptionId)?.let { rejectExistingSubscription(it, seasonId) }
         projectionService.ensureProjection(seasonId)
         val token = tokenCodec.generate()
         val inserted = repository.insert(
@@ -52,19 +53,22 @@ class SubscriptionService(
             ),
         )
         if (!inserted) {
-            val existing = requireNotNull(repository.findById(subscriptionId))
-            if (existing.seasonId != seasonId) {
-                throw SnapshotConflictException(
-                    code = "SUBSCRIPTION_SCOPE_CONFLICT",
-                    message = "같은 구독 ID를 다른 시즌에 사용할 수 없습니다",
-                )
-            }
-            throw SnapshotConflictException(
-                code = "SUBSCRIPTION_ALREADY_EXISTS",
-                message = "이미 생성된 구독입니다. 상태를 조회한 뒤 필요한 경우 토큰을 다시 발급하세요",
-            )
+            rejectExistingSubscription(requireNotNull(repository.findById(subscriptionId)), seasonId)
         }
         return SubscriptionCredential(subscriptionId, token, feedUri(token))
+    }
+
+    private fun rejectExistingSubscription(existing: CalendarSubscriptionRow, seasonId: UUID): Nothing {
+        if (existing.seasonId != seasonId) {
+            throw SnapshotConflictException(
+                code = "SUBSCRIPTION_SCOPE_CONFLICT",
+                message = "같은 구독 ID를 다른 시즌에 사용할 수 없습니다",
+            )
+        }
+        throw SnapshotConflictException(
+            code = "SUBSCRIPTION_ALREADY_EXISTS",
+            message = "이미 생성된 구독입니다. 상태를 조회한 뒤 필요한 경우 토큰을 다시 발급하세요",
+        )
     }
 
     @Transactional

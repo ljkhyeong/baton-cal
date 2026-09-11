@@ -1,8 +1,10 @@
 package io.baton.cal.subscription
 
+import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
+import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.SnapshotConflictException
@@ -20,6 +22,8 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.doCallRealMethod
+import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
@@ -37,9 +41,13 @@ import org.springframework.test.context.jdbc.Sql
 class SubscriptionConcurrencyTest @Autowired constructor(
     private val service: SubscriptionService,
     private val tokenCodec: SubscriptionTokenCodec,
+    private val projectionRepository: SeasonFeedProjectionRepository,
 ) {
     @MockitoSpyBean
     private lateinit var repository: CalendarSubscriptionRepository
+
+    @MockitoSpyBean
+    private lateinit var renderer: IcsCalendarRenderer
 
     @ParameterizedTest
     @ValueSource(booleans = [false, true])
@@ -72,6 +80,39 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             }
         assertThat(repository.findById(subscriptionId)?.tokenHash).isEqualTo(tokenCodec.hash(winner.token))
         assertThat(service.findFeed(winner.token)).isNotNull()
+    }
+
+    @Test
+    fun `다른 시즌의 ID 재사용은 캘린더 생성 실패에 영향받지 않는다`() {
+        val initial = service.create(SEASON_ID)
+        val otherSeasonId = UUID.randomUUID()
+        doThrow(IllegalStateException("캘린더 생성 실패"))
+            .`when`(renderer).render(otherSeasonId, emptyList(), null)
+
+        assertThatThrownBy { service.create(otherSeasonId, initial.subscriptionId) }
+            .isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+                assertThat(it.code).isEqualTo("SUBSCRIPTION_SCOPE_CONFLICT")
+            }
+
+        assertThat(service.findFeed(initial.token)).isNotNull()
+        assertThat(projectionRepository.findMetadataBySeasonId(otherSeasonId)).isNull()
+    }
+
+    @Test
+    fun `캘린더 생성 실패는 구독을 저장하지 않고 같은 ID 재시도를 허용한다`() {
+        val subscriptionId = UUID.randomUUID()
+        val failure = IllegalStateException("캘린더 생성 실패")
+        doThrow(failure).`when`(renderer).render(SEASON_ID, emptyList(), null)
+
+        assertThatThrownBy { service.create(SEASON_ID, subscriptionId) }.isSameAs(failure)
+        assertThat(repository.findById(subscriptionId)).isNull()
+        assertThat(projectionRepository.findMetadataBySeasonId(SEASON_ID)).isNull()
+
+        doCallRealMethod().`when`(renderer).render(SEASON_ID, emptyList(), null)
+        val credential = service.create(SEASON_ID, subscriptionId)
+
+        assertThat(credential.subscriptionId).isEqualTo(subscriptionId)
+        assertThat(service.findFeed(credential.token)).isNotNull()
     }
 
     @Test
