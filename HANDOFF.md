@@ -10,6 +10,8 @@
   같은 ID의 발급 재시도가 정상 처리되는지 실제 연결 풀 고갈 테스트로 확인했다.
 - 이미 저장된 구독의 재요청은 캘린더 준비와 토큰 생성을 생략한다. 동시 생성은 DB 기본키로 판정한다.
   V3의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
+- 일정·구독·복구 상태 조회의 `404`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503`에도
+  `Cache-Control: no-store`를 적용한다. 상태가 바뀐 뒤 이전 오류 응답이 재사용되는 것을 막는다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL 경로는 `/Users/lim/devProject/personal/baton-cal`이다. BATON 작업 경로는
@@ -25,18 +27,14 @@
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
-- 2026-09-12 구독 생성 개선: 기준 `6fd920b`의 변경을 `a9f9800`으로 커밋했다.
-  Java 25 툴체인·PostgreSQL 18.6에서 `./gradlew --no-daemon --max-workers=2 test
-  --tests 'io.baton.cal.subscription.SubscriptionConcurrencyTest' --tests 'io.baton.cal.web.MvpHttpFlowTest'
-  verifyContractsZip` 성공. 테스트 20개와 계약 ZIP을 새로 검증했다. 실패·제외 없음.
-  첫 실행에서 통과한 `RecoveryModeHttpTest` 1개는 발급 차단 경로·테스트·환경이 그대로여서 재사용했다.
-  최종 로그: `/private/tmp/baton-cal-subscription-create-fixed-20260912.log`.
-  클래스별 결과: `/private/tmp/baton-cal-subscription-create-results-20260912.json`.
-  복구 모드 결과: `/private/tmp/baton-cal-subscription-create-first-results-20260912.json`.
-- 이전 전체 검증은 `90884ce`와 동일한 코드·테스트·계약에서 `./gradlew --no-daemon --max-workers=2 check`로
-  123개 테스트·계약 ZIP을 통과했다. 로그: `/private/tmp/baton-cal-db-availability-check-20260912.log`.
-  이번 변경은 구독 생성에 한정되어 관련 테스트만 실행했다. 이미지·운영 스모크는 반복하지 않았고,
-  실제 캘린더 앱 검증은 미실행이다.
+- 2026-09-12 상태 오류 캐시 정책: 기준 `53a9063`의 변경을 `e1551ad`로 커밋했다.
+  공통 오류 처리 변경이 여러 API에 영향을 주므로 `./gradlew --no-daemon --max-workers=2 check`를 실행했다.
+  Java 25 툴체인·PostgreSQL 18.6에서 전체 125개 테스트와 계약 ZIP을 새로 검증했다. 실패·제외 없음.
+  구독 생성 전 `404`와 생성 후 `200`, 중복 생성·시즌 충돌·일정 및 복구 상태 조회·복구 중 발급 차단의
+  캐시 정책을 기존 테스트에서 확인했다. 빌드 작업 2개와 구성 캐시는 재사용했다.
+  최종 로그: `/private/tmp/baton-cal-state-error-cache-check-20260912.log`.
+  클래스별 결과: `/private/tmp/baton-cal-state-error-cache-results-20260912.json`.
+  이미지·운영 구성 변경이 없어 스모크는 반복하지 않았다. 실제 캐시·캘린더 앱 검증은 미실행이다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
