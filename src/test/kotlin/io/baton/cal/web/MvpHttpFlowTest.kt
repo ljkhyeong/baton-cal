@@ -62,6 +62,10 @@ class MvpHttpFlowTest @Autowired constructor(
 
         mockMvc.perform(put(path).contentType(MediaType.APPLICATION_JSON).content("""{"seasonId":"$SEASON_ID"}"""))
             .andExpect(status().isUnauthorized)
+        mockMvc.perform(authorizedGet(path))
+            .andExpect(status().isNotFound)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
         val first = mockMvc.perform(createRequest())
             .andExpect(status().isCreated)
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
@@ -73,11 +77,13 @@ class MvpHttpFlowTest @Autowired constructor(
         // 첫 응답을 받지 못한 호출자도 미리 저장한 ID만으로 기존 구독을 확인할 수 있다.
         val duplicate = mockMvc.perform(createRequest())
             .andExpect(status().isConflict)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(content().json(Path.of("contracts/examples/api-error.subscription-already-exists.json").readText()))
             .andReturn().response.contentAsString
         ContractSchemaSupport.assertValid("api-error.v1.schema.json", duplicate, "중복 구독 생성 응답")
         mockMvc.perform(authorizedGet(path))
             .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
             .andExpect(jsonPath("$.status").value("ACTIVE"))
         mockMvc.perform(get("/calendars/v1/$originalToken.ics")).andExpect(status().isOk)
@@ -85,6 +91,7 @@ class MvpHttpFlowTest @Autowired constructor(
         val differentSeasonId = UUID.randomUUID().toString()
         val scopeConflict = mockMvc.perform(createRequest(differentSeasonId))
             .andExpect(status().isConflict)
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(content().json(Path.of("contracts/examples/api-error.subscription-scope-conflict.json").readText()))
             .andReturn().response.contentAsString
         ContractSchemaSupport.assertValid("api-error.v1.schema.json", scopeConflict, "구독 시즌 충돌 응답")
@@ -523,6 +530,7 @@ class MvpHttpFlowTest @Autowired constructor(
 
             val response = mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
                 .andReturn().response
             ContractSchemaSupport.assertValid(

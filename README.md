@@ -177,6 +177,7 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 `PUT /internal/api/v1/subscriptions/{subscriptionId}`에 `{seasonId}`를 보낸다. 최초 성공의 `201`만
 토큰·피드 URL을 반환한다. 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은
 `409 SUBSCRIPTION_SCOPE_CONFLICT`이며 기존 토큰·상태·세대를 바꾸지 않는다.
+상태 조회의 `404`와 생성 충돌의 `409`에도 `Cache-Control: no-store`를 적용해 이전 오류 응답의 재사용을 막는다.
 
 응답을 잃으면 같은 ID로 상태를 조회한다. `404`일 때는 같은 ID·시즌으로 PUT을 재전달할 수 있다.
 활성 구독이 있지만 자격 증명을 받지 못했다면 사용자 요청에 따라 rotate로 다시 발급한다. 폐기된

@@ -409,6 +409,9 @@ Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 | `503` | `RECOVERY_IN_PROGRESS` | 복구 모드가 켜져 구독 생성·회전을 차단함 |
 | `500` | `INTERNAL_ERROR` | 호출자에게 내부 세부 정보를 노출하지 않는 예상 밖 실패 |
 
+상태 조회의 `404 RESOURCE_NOT_FOUND`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503 RECOVERY_IN_PROGRESS`에는
+`Cache-Control: no-store`를 포함한다. 이후 생성·갱신된 상태를 확인할 때 이전 오류 응답을 재사용하지 않는다.
+
 스냅샷 전달은 네트워크 실패나 `5xx`만 재시도 간격을 두고 재시도하며 `4xx`는 계약/설정
 오류로 처리한다. `413`을 받으면 요청 크기나 구조를 제한에 맞게 수정한 뒤 다시 보낸다.
 `503 SERVICE_BUSY`에는 `Retry-After: 1`과 `Cache-Control: no-store`를 포함하며 호출자는 이 값을 지켜 재시도한다.

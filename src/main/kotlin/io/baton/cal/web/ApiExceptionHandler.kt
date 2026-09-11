@@ -24,6 +24,7 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ApiException::class)
     fun handleApiException(exception: ApiException): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(exception.status)
+        .cacheControl(CacheControl.noStore())
         .body(ApiErrorResponse(exception.code, exception.message))
 
     @ExceptionHandler(

@@ -113,6 +113,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
             mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, AUTHORIZATION))
                 .andExpect(status().isNotFound)
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             mockMvc.perform(
                 get(path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid"))
                     .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),

@@ -77,6 +77,7 @@ class RecoveryModeHttpTest @Autowired constructor(
         ).forEach { request ->
             val response = mockMvc.perform(request)
                 .andExpect(status().isServiceUnavailable)
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(content().json(expectedError))
                 .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
                 .andReturn().response
