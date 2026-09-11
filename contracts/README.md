@@ -121,8 +121,8 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 성공 응답을 `season-calendar-metadata-result.v1`에 대조한다. 같은 이름의 개정 번호 증가와 피드 재구축이
 캘린더 바이트·ETag·Last-Modified를 유지하는지도 검증한다.
 
-데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
-`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
+DB 연결·트랜잭션 시작에 실패하거나 잠금·SQL·트랜잭션 제한 시간을 넘으면 CAL은
+`503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
 `Retry-After` 이후 재시도한다. 스냅샷 수신의 이벤트 식별자와 원본 개정 번호 계약은 이 재시도가
 중복으로 도착해도 같은 결과를 보장한다.
 

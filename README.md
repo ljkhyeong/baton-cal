@@ -56,8 +56,8 @@ CAL이 담당한다.
   `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
-  맞게 조정한다. 잠금·SQL·트랜잭션 제한 시간을 넘으면 `503 SERVICE_BUSY`와 `Retry-After: 1`을
-  반환하므로 내부 호출자는 헤더에 맞춰 재시도한다.
+  맞게 조정한다. DB 연결·트랜잭션 시작 실패나 잠금·SQL·트랜잭션 시간 초과에는
+  `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
 - 공개 `/calendars/v1/**` 요청을 추적할 때 `http.url`에는 실제 토큰 대신

@@ -221,8 +221,10 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   고정한다.
 - Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
   설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
-  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 예외는 Spring 예외 계층에서
-  `503 SERVICE_BUSY`와 `Retry-After: 1`로 변환한다.
+  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 초과와 Spring의
+  `CannotGetJdbcConnectionException`·`CannotCreateTransactionException`은 공통 오류 처리기에서
+  `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`로 응답한다. 메시지 문자열로 예외를 분류하거나
+  서버 내부에서 재시도하지 않는다. 그 밖의 예상하지 못한 실패는 기존 `500` 처리를 유지한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
   `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
@@ -285,8 +287,9 @@ Prometheus는 표준 HTTP·잠금 지표와 DB 포함 준비 상태를 수집한
 - JSON UUID는 스키마와 같은 36자 표준 문자열만 허용하고, 내부 Bearer 설정은 RFC 6750 `b64token`
   문자 범위를 벗어나면 애플리케이션 시작 시 거부한다.
 - 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
-  확인하고, Spring의 쿼리 제한 시간 예외가 고정된 `503 SERVICE_BUSY`와 `Retry-After: 1`로
-  변환되는지 검증한다. Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
+  확인하고, 연결 실패·제한 시간 초과가 `503 SERVICE_BUSY`·`Retry-After: 1`·`Cache-Control: no-store`로
+  응답하는지 검증한다. 실제 Hikari 연결을 모두 점유한 상태에서 발급과 조회를 요청하고, 연결 반환 뒤 정상 처리를 확인한다.
+  Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
   증가량만 확인해 같은 도메인 흐름을 중복 구현하지 않는다.
 - JUnit `load` 태그의 `projectionLoadTest`는 기본 `test`에서 제외하고, 실제 PostgreSQL에서
   500·1,000·5,000·10,000개 시즌의 전체 투영 재구축 시간과 표현 크기를 필요할 때 반복 측정한다.
