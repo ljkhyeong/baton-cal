@@ -320,7 +320,7 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
 `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
 릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 계약 테스트를
 완료했다. 이 자산에는 루트 `LICENSE`가 없으므로 계약 의미를 유지한 `1.0.1` 호환 보완판으로
-재포장해 BATON 고정을 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
+재포장해 BATON이 사용하는 버전과 해시를 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
 [계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 

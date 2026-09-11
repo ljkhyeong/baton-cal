@@ -9,8 +9,8 @@ JSON Schema `$id`는 식별자이므로 도메인에 맞춰 바꾸지 않는다.
 [compose.operations.yml](../compose.operations.yml)은 단일 Docker 호스트용 구성이다.
 Nginx HTTPS·요청 제한, CAL, PostgreSQL, Prometheus, Alertmanager와 준비 상태 점검용
 Blackbox Exporter를 포함한다. 2026-09-05 현재 실제 서버·DNS·공인 인증서·운영 알림 수신기는
-미구축 상태다. 로컬 스모크는 자체 서명 인증서를 명시적으로 신뢰해 실행하며 공인 인증서 발급이나
-Google·Outlook의 외부 수집을 증명하지 않는다.
+미구축 상태다. 로컬 스모크는 자체 서명 인증서를 신뢰하도록 설정해 실행한다. 공인 인증서 발급과
+Google·Outlook의 구독 조회는 별도로 확인해야 한다.
 
 ## 연결과 공개 범위
 
@@ -28,21 +28,21 @@ flowchart LR
 ```
 
 - Nginx는 `/calendars/v1/`만 CAL로 전달하며 GET·HEAD 이외 요청은 `405`다.
-  내부 API·Actuator·그 밖의 경로는 `404`로 닫는다. 공개 피드의 ETag·Last-Modified·304는 보존한다.
+  내부 API·Actuator·그 밖의 경로에는 `404`를 반환한다. 공개 피드의 ETag·Last-Modified·304는 유지한다.
 - HTTP 80은 ACME 갱신 파일과 고정 HTTPS 호스트로의 `308` 이동만 제공한다.
   발급되는 구독 URL은 항상 HTTPS다.
 - 기본 바인드는 모두 `127.0.0.1`이다. 운영 호스트에서 외부 공개 준비를 마친 뒤
   `CAL_GATEWAY_BIND=0.0.0.0`으로 게이트웨이 80·443만 공개한다.
 - CAL 내부 포트 8080과 Prometheus 9090·Alertmanager 9093은 호스트 루프백에만 바인드한다.
-  관리 8081, PostgreSQL과 Blackbox는 호스트에 게시하지 않는다. 다른 서버의 BATON은 VPN·사설
+  관리 8081, PostgreSQL과 Blackbox의 포트는 호스트에 열지 않는다. 다른 서버의 BATON은 VPN·사설
   연결로 접근하게 구성하며 이 파일에서 내부 포트를 공인 주소에 바인드하지 않는다.
 - Prometheus는 내부 메트릭과 준비 상태를 검사한다. 이 서버 전체나 공인 DNS·인증서 장애를
   스스로 통보하지 못할 수 있으므로 운영에서는 다른 호스트의 외부 가용성 점검도 필요하다.
 
 ## 필요한 외부 설정
 
-Compose 파일과 저장소에 운영 비밀을 쓰지 않는다. 실행 관리자가 아래 값을 외부 런타임 환경에
-주입해야 한다. `docker compose config`는 비밀이 포함된 전체 환경을 출력할 수 있으므로 검증에는
+Compose 파일과 저장소에 운영 비밀번호·토큰을 쓰지 않는다. 배포 담당자가 아래 값을 실행 환경에
+설정해야 한다. `docker compose config`는 비밀값이 포함된 전체 환경을 출력할 수 있으므로 검증에는
 `config --quiet`를 사용한다.
 
 | 설정 | 의미 |
@@ -50,7 +50,7 @@ Compose 파일과 저장소에 운영 비밀을 쓰지 않는다. 실행 관리�
 | `BATON_CAL_IMAGE` | 검증된 전체 커밋 SHA 태그 또는 다이제스트로 고정한 CAL OCI 이미지 |
 | `DATABASE_USERNAME`, `DATABASE_PASSWORD` | CAL 전용 DB 계정. 다른 서비스 계정과 공유하지 않음 |
 | `BATON_CAL_INTERNAL_TOKEN` | BATON→CAL 전용 32자 이상 Bearer 값 |
-| `BATON_CAL_PREVIOUS_INTERNAL_TOKEN` | 회전 기간에만 외부에서 주입하는 이전 Bearer 값. 완료하면 환경에서 제거 |
+| `BATON_CAL_PREVIOUS_INTERNAL_TOKEN` | 토큰 교체 기간에만 설정하는 이전 Bearer 값. 교체 후 환경에서 제거 |
 | `BATON_CAL_SUBSCRIPTION_GENERATION` | 최초 설치 때 생성한 UUID. 모든 자릿수가 0인 값은 금지하며 일반 배포마다 바꾸지 않음 |
 | `BATON_CAL_RECOVERY_MODE` | 정상 `false`, 과거 백업 복원 중 `true` |
 | `CAL_TLS_DIRECTORY` | 외부 인증서 디렉터리. 기본 Certbot 구조이면 `/etc/letsencrypt` |
@@ -69,7 +69,7 @@ Alertmanager는 표준 JSON webhook을 보낸다. Slack 등의 전용 incoming w
 ## 최초 HTTPS 연결 순서
 
 아래는 **아직 실행하지 않은 운영 절차**다. 서버 주소와 DNS 제공자를 정한 뒤 실행한다.
-운영 비밀·서버 경로·이미지는 실제 환경에서 준비하며 예시를 임의 자격 증명으로 대체하지 않는다.
+운영 비밀번호·토큰·서버 경로·이미지는 실제 배포에 사용할 값으로 준비한다.
 
 1. 배포 서버에 Docker Compose와 Certbot을 준비한다. DNS에 `cal` A 레코드를 서버의 공인 IPv4로
    연결한다. 실제 IPv6가 준비된 경우에만 AAAA도 추가한다. 최초 구성은 CDN 없이 Nginx가 직접
@@ -87,7 +87,7 @@ sudo certbot certonly --standalone --domain cal.b4ton.com
    Nginx는 `live/cal.b4ton.com/fullchain.pem`과 `privkey.pem`을 사용한다.
    [Nginx HTTPS·인증서 체인 안내](https://nginx.org/en/docs/http/configuring_https_servers.html).
 4. 위 외부 환경을 주입하고 `CAL_GATEWAY_BIND=0.0.0.0`을 설정한 배포 세션에서 검증·기동한다.
-   고정 project 이름 `baton-cal`을 재배포에서도 유지해 DB 볼륨을 바꾸지 않는다.
+   재배포할 때도 Compose 프로젝트 이름 `baton-cal`을 유지해 같은 DB 볼륨을 사용한다.
 
 ```shell
 docker compose --project-name baton-cal --file compose.operations.yml config --quiet
@@ -130,7 +130,7 @@ Nginx 표준 `limit_req`·`limit_conn`을 사용한다. IP별 기본 요청률�
 CAL 내부 API의 JSON 오류 계약과 구분한다.
 
 Google·Microsoft가 송신 IP를 공유하면 같은 IP의 정상 구독도 함께 제한된다. 이 기본값은 운영
-규모나 SLO가 아니며, 실제 갱신 빈도·429 비율과 DB 부하를 보고 조정한다. 앞단에 CDN·다른 프록시를
+처리량이나 서비스 수준 목표(SLO)를 보장하지 않으며, 실제 갱신 빈도·429 비율과 DB 부하를 보고 조정한다. 앞단에 CDN·다른 프록시를
 추가하면 실제 송신 IP와 신뢰 프록시 대역을 먼저 구성해야 한다. 사용자 입력 `X-Forwarded-For`를
 그대로 신뢰하지 않는다.
 [Nginx 요청률 제한](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html),
@@ -138,25 +138,25 @@ Google·Microsoft가 송신 IP를 공유하면 같은 IP의 정상 구독도 함
 
 접근 로그에는 상태 코드, 처리 시간, 제한 결과만 기록한다. 요청 경로·쿼리·Cookie·Authorization은
 기록하지 않는다. 요청 오류 메시지에 원문 URL이 들어갈 수 있어 Nginx error log는 비활성화한다.
-시작 설정 오류는 `nginx -t`로 점검하고 요청 장애는 안전한 접근 로그·CAL 메트릭으로 좁힌다.
+시작 설정 오류는 `nginx -t`로 점검하고 요청 장애 원인은 접근 로그·CAL 메트릭으로 확인한다.
 프록시는 조건부 GET 헤더와 고정 Host만 CAL에 전달하고 쿼리와 원문 요청 헤더를 버린다.
 
 ## 모니터링과 알림
 
 Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이다. Alertmanager는 발생·해제를
-전달하고 같은 알림은 기본 4시간 후 반복한다. 첫 연결 시 실제 수신 채널에서도 장애·해제 한 쌍을
-확인해야 한다. 아래 값은 초기 운영 설정이며 트래픽 관측 뒤 조정한다.
+전달하고 같은 알림은 기본 4시간 후 반복한다. 첫 연결 시 실제 수신 채널에 장애 발생·해제 알림이
+모두 도착하는지 확인한다. 아래 값은 초기 설정이며 실제 트래픽을 확인한 뒤 조정한다.
 
 | 알림 | 조건 | 최초 확인할 내용 |
 | --- | --- | --- |
 | `CalMetricsUnavailable` | 메트릭 수집 실패가 30초 지속 | CAL 프로세스·8081 내부 연결 |
 | `CalReadinessFailed` | 준비 상태 실패 또는 점검기 수집 실패가 30초 지속 | CAL·PostgreSQL·Blackbox |
 | `CalHttpServerErrors` | 최근 5분의 CAL 5xx가 5회 이상인 상태가 1분 지속 | DB·일시적 503·잠금 지연 |
-| `CalProjectionLockSlow` | 최근 5분 평균 잠금 획득 시간이 1초 초과한 상태가 2분 지속 | 같은 시즌 동시 수신과 전체 재구축 비용 |
+| `CalProjectionLockSlow` | 최근 5분 평균 잠금 획득 시간이 1초 초과한 상태가 2분 지속 | 같은 시즌의 동시 수신량과 전체 재구축 소요 시간 |
 
 알림의 `for`는 조건이 계속 유지돼야 하는 시간이며 실제 도착에는 수집·평가와 Alertmanager의
 그룹 대기 시간이 추가된다. [Prometheus 알림 규칙](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
-5xx 지표는 CAL에서 처리한 응답만 포함하므로 Nginx에서 발생한 502·429는 안전한 접근 로그에서 확인한다.
+5xx 지표는 CAL에서 처리한 응답만 포함하므로 Nginx에서 발생한 502·429는 Nginx 접근 로그에서 확인한다.
 운영에서는 호스트·인증서 만료·Prometheus 자체 장애를 외부에서 점검하는 경로도 연결한다.
 
 ## 재현 가능한 로컬 검증
@@ -166,7 +166,7 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 ./scripts/smoke-operations.sh baton-cal:smoke
 ```
 
-격리 project·빈 DB·가짜 자격 증명·임시 인증서로 실행하고 종료 시 해당 자원만 정리한다. 실제 DNS를
+별도 Compose 프로젝트·빈 DB·테스트용 인증 정보·임시 인증서로 실행하고 종료 시 해당 자원만 정리한다. 실제 DNS를
 바꾸지 않고 TLS 호스트를 로컬로 연결한다. 다음을 검증한다.
 
 - Compose·Prometheus 규칙·Alertmanager·Nginx 설정 구문.

@@ -114,15 +114,15 @@ BATON의 테스트 발급 화면에서 이 시즌의 구독 주소를 발급받�
 | --- | --- | --- | --- |
 | 생성 | `schedule-snapshot.zoned-active-r0.json` | `UID` 고정, `SEQUENCE:0`, `CONFIRMED` | 초기 제목·일시·시간대·시즌 이름 |
 | 시간 변경 | 같은 수신 경로에 `schedule-snapshot.zoned-active-r2.json` | 같은 UID, `SEQUENCE:2`, 변경된 시각 | 중복 일정 없이 시각 변경, 반영 지연 |
-| 취소 | `schedule-snapshot.zoned-cancelled.json` | 같은 UID, `SEQUENCE:3`, `CANCELLED` | 삭제·취소 표시·잔존 중 실제 동작 |
+| 취소 | `schedule-snapshot.zoned-cancelled.json` | 같은 UID, `SEQUENCE:3`, `CANCELLED` | 일정 삭제·취소 표시·기존 표시 유지 중 실제 동작 |
 | 재활성화 | `schedule-snapshot.zoned-reactivated.json` | 같은 UID, `SEQUENCE:4`, `CONFIRMED` | 같은 일정으로 복원되는지 |
 | 이름 변경 | 이름 PUT에 `season-calendar-metadata.r2.json` | `X-WR-CALNAME` 변경, 일정 UID·SEQUENCE 유지 | 앱의 사용자 지정 이름과 피드 이름을 구분해 기록 |
 | UTC·현지 시점 | `schedule-snapshot.utc-point-active.json`, `schedule-snapshot.zoned-point-active.json` | DTSTART만 있으며 DTEND 없음 | 앱이 임의 길이를 표시하는지, 시작 시각 |
-| 종일 | `schedule-snapshot.all-day-active.json` | `VALUE=DATE`, 배타적 종료일 | 하루가 더 표시되거나 날짜가 이동하는지 |
-| DST·자정 | 아래의 추가 시간대 픽스처를 수신 | `America/New_York` VTIMEZONE, 현지 시각 보존 | 봄·가을 전환 전후 표시와 자정 넘김 |
-| 이스케이프 | 아래 DST 봄 픽스처의 한글·줄바꿈·쉼표·세미콜론 | UTF-8·TEXT 이스케이프 | 줄바꿈과 특수문자, 깨진 한글 여부 |
-| 회전 | 테스트 구독 rotate 후 이전 주소 요청 | 이전 URL은 본문 없는 404 | 이전 캐시 잔존과 새 URL 재등록 결과 |
-| 폐기 | 테스트 구독 DELETE | 현재 URL도 본문 없는 404 | 앱에서 수동 제거 후 테스트 종료 |
+| 종일 | `schedule-snapshot.all-day-active.json` | `VALUE=DATE`, 종료일은 일정에 포함하지 않음 | 하루가 더 표시되거나 날짜가 이동하는지 |
+| DST·자정 | 아래의 추가 시간대 테스트 데이터를 수신 | `America/New_York` VTIMEZONE, 현지 시각 보존 | 봄·가을 전환 전후 표시와 자정 넘김 |
+| 이스케이프 | 아래 DST 봄 테스트 데이터의 한글·줄바꿈·쉼표·세미콜론 | UTF-8·TEXT 이스케이프 | 줄바꿈과 특수문자, 깨진 한글 여부 |
+| 주소 재발급 | 테스트 구독 rotate 후 이전 주소 요청 | 이전 URL은 본문 없는 404 | 기존 일정이 앱에 남는지, 새 주소 등록 결과 |
+| 구독 해제 | 테스트 구독 DELETE | 현재 URL도 본문 없는 404 | 앱에서 수동 제거 후 테스트 종료 |
 
 DST 확인에는 아래 예시를 기존 시간대 스냅샷에서 변환해 사용한다. 각 파일은 별도 항목·이벤트를
 사용하고 원본 시간 계산을 CAL에 맡기지 않는다. `jq`가 표준 JSON 직렬화를 담당한다.
@@ -157,7 +157,7 @@ jq '.eventId="81000000-0000-0000-0000-000000000002"
 2026-09-05 현재 운영 서버·HTTPS·실제 앱 구독 환경이 없어 아래 항목은 **미실행**이다.
 자동 HTTP·iCalendar 테스트와 로컬 HTTPS 프록시 검증은 별도 결과이며 앱 통과로 대체하지 않는다.
 
-| 앱 | 앱·OS 버전 / 계정 시간대 | 서버 변경 시각 → 앱 관측 시각 / 지연 | 단계별 결과·취소 표시·이름 갱신 |
+| 앱 | 앱·OS 버전 / 계정 시간대 | 서버 변경 시각 → 앱 반영 확인 시각 / 지연 | 단계별 결과·취소 표시·이름 갱신 |
 | --- | --- | --- | --- |
 | Google Calendar 웹 | 미실행 | 미실행 | 미실행 |
 | Apple Calendar Mac | 미실행 | 미실행 | 미실행 |
