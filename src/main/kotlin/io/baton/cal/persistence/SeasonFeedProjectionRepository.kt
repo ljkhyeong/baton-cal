@@ -43,7 +43,7 @@ class SeasonFeedProjectionRepository(
     fun findMetadataBySeasonId(seasonId: UUID): SeasonFeedProjectionMetadata? =
         jdbcClient.sql(
             """
-            SELECT etag, last_modified
+            SELECT etag, last_modified, octet_length(representation) AS content_length
             FROM season_feed_projection
             WHERE season_id = :seasonId
             """.trimIndent(),

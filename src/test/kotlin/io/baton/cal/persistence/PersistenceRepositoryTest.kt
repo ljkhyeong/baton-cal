@@ -202,7 +202,7 @@ class PersistenceRepositoryTest @Autowired constructor(
             lastModified = Instant.parse("2026-08-11T01:00:00Z"),
         )
         val rebuilt = initial.copy(
-            representation = "second".toByteArray(),
+            representation = "수정한 일정".toByteArray(),
             etag = "\"$HASH_B\"",
         )
 
@@ -218,6 +218,7 @@ class PersistenceRepositoryTest @Autowired constructor(
             SeasonFeedProjectionMetadata(
                 etag = rebuilt.etag,
                 lastModified = rebuilt.lastModified,
+                contentLength = rebuilt.representation.size,
             ),
         )
         assertThat(

@@ -545,12 +545,17 @@ CAL 진단 값을 그대로 기대 매니페스트로 보내면 원본 완전성
 - `Content-Type: text/calendar; charset=utf-8`
 - `Cache-Control: no-cache, private`
 - `Content-Disposition: inline; filename=\"baton-calendar.ics\"`
+- `Content-Length`: 저장된 `.ics`의 UTF-8 바이트 수
 - 정규 `ETag`와 `Last-Modified`
 - 조건부 일치: 본문 없는 `304 Not Modified`
 - 형식이 잘못되었거나, 알 수 없거나, 회전·폐기되었거나 현재 구독 세대와 다른 토큰은 구분하지 않고
   본문 없는 `404 Not Found`를 반환한다.
 
-공개 경로는 읽기 전용이다. 토큰 조회, 피드 렌더링 또는 조건부 GET이 BATON 상태를
+같은 경로의 `HEAD`는 `GET`과 같은 구독 유효성·조건부 조회 규칙을 적용한다. `200`에는 위 헤더와
+파일 크기를 반환하며, 모든 응답에 본문을 넣지 않는다. 조건부 일치는 `304`, 무효한 구독은 `404`다.
+HEAD는 DB에서 검증 값과 파일 크기만 읽고 캘린더 본문을 애플리케이션으로 가져오지 않는다.
+
+공개 경로는 읽기 전용이다. 토큰 조회, 피드 렌더링 또는 조건부 조회가 BATON 상태를
 변경하거나 BATON API를 호출하지 않는다.
 
 관측 시스템의 고카디널리티 `http.url`에는 실제 요청 토큰을 넣지 않는다. 정상 조회뿐 아니라 형식이

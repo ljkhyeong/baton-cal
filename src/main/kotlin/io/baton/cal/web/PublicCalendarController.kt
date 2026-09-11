@@ -9,6 +9,8 @@ import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestMethod
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.context.request.WebRequest
 import java.time.Clock
@@ -20,6 +22,21 @@ class PublicCalendarController(
     private val subscriptionService: SubscriptionService,
     private val clock: Clock,
 ) {
+    @RequestMapping("/calendars/v1/{token}.ics", method = [RequestMethod.HEAD])
+    fun headCalendar(
+        @PathVariable token: String,
+        request: WebRequest,
+        response: HttpServletResponse,
+    ) {
+        val metadata = subscriptionService.findFeedMetadata(token)
+            ?: run {
+                response.status = HttpServletResponse.SC_NOT_FOUND
+                return
+            }
+        if (request.respondNotModified(response, metadata.etag, metadata.lastModified)) return
+        response.setCalendarHeaders(metadata.contentLength)
+    }
+
     @GetMapping("/calendars/v1/{token}.ics")
     fun getCalendar(
         @PathVariable token: String,
@@ -45,8 +62,7 @@ class PublicCalendarController(
         }
         if (request.respondNotModified(response, projection.etag, projection.lastModified)) return
 
-        response.contentType = CALENDAR_MEDIA_TYPE.toString()
-        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, CALENDAR_CONTENT_DISPOSITION.toString())
+        response.setCalendarHeaders(projection.representation.size)
         response.outputStream.write(projection.representation)
     }
 
@@ -55,6 +71,12 @@ class PublicCalendarController(
 
     private fun WebRequest.hasCacheValidator(): Boolean =
         getHeader(HttpHeaders.IF_NONE_MATCH) != null || getHeader(HttpHeaders.IF_MODIFIED_SINCE) != null
+
+    private fun HttpServletResponse.setCalendarHeaders(contentLength: Int) {
+        contentType = CALENDAR_MEDIA_TYPE.toString()
+        setHeader(HttpHeaders.CONTENT_DISPOSITION, CALENDAR_CONTENT_DISPOSITION.toString())
+        setContentLength(contentLength)
+    }
 
     private fun WebRequest.respondNotModified(
         response: HttpServletResponse,

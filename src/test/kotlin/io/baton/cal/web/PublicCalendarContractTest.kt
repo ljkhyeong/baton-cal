@@ -33,6 +33,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -117,6 +118,71 @@ class PublicCalendarContractTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.ETAG, expectedEtag))
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
             .andExpect(content().bytes(golden))
+    }
+
+    @Test
+    fun `HEAD는 본문 조회 없이 GET과 같은 헤더와 UTF-8 바이트 크기를 반환한다`() {
+        val token: String = JsonPath.read(createSubscription(), "$.token")
+        val golden = goldenIcalendarFixture("season-unicode-fold-boundaries.ics.b64")
+        val etag = "\"${MessageDigest.getInstance("SHA-256").digest(golden).toHexString()}\""
+        jdbcClient.sql(
+            "UPDATE season_feed_projection SET representation = :bytes, etag = :etag WHERE season_id = :seasonId",
+        )
+            .param("bytes", golden)
+            .param("etag", etag)
+            .param("seasonId", UUID.fromString(SEASON_ID))
+            .update()
+        val getResponse = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+            .andExpect(content().bytes(golden))
+            .andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, golden.size.toLong()))
+            .andReturn().response
+        clearInvocations(subscriptionRepository)
+
+        for (request in listOf(
+            head("/calendars/v1/{token}.ics", token),
+            head("/calendars/v1/{token}.ics", token)
+                .header(HttpHeaders.IF_NONE_MATCH, "\"old-etag\"")
+                .header(HttpHeaders.IF_MODIFIED_SINCE, FIXED_NOW_HTTP_DATE),
+        )) {
+            val result = mockMvc.perform(request)
+                .andExpect(status().isOk)
+                .andExpect(content().bytes(byteArrayOf()))
+            for (name in listOf(
+                HttpHeaders.CONTENT_TYPE, HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.CONTENT_LENGTH,
+                HttpHeaders.ETAG, HttpHeaders.LAST_MODIFIED, HttpHeaders.CACHE_CONTROL,
+            )) {
+                result.andExpect(header().string(name, getResponse.getHeader(name)!!))
+            }
+        }
+        verify(subscriptionRepository, times(2)).findProjectionMetadataByActiveTokenHash(
+            ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION),
+        )
+        verify(subscriptionRepository, never()).findProjectionByActiveTokenHash(
+            ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION),
+        )
+    }
+
+    @Test
+    fun `HEAD 조건부 조회는 빈 피드의 Unix epoch와 304를 유지한다`() {
+        val token: String = JsonPath.read(createSubscription(), "$.token")
+        val etag = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andReturn().response.getHeader(HttpHeaders.ETAG)!!
+        clearInvocations(subscriptionRepository)
+
+        for ((name, value) in listOf(HttpHeaders.IF_NONE_MATCH to etag, HttpHeaders.IF_MODIFIED_SINCE to EPOCH_HTTP_DATE)) {
+            mockMvc.perform(head("/calendars/v1/{token}.ics", token).header(name, value))
+                .andExpect(status().isNotModified)
+                .andExpect(header().string(HttpHeaders.ETAG, etag))
+                .andExpect(header().string(HttpHeaders.LAST_MODIFIED, EPOCH_HTTP_DATE))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-cache")))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("private")))
+                .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
+                .andExpect(content().bytes(byteArrayOf()))
+        }
+        verify(subscriptionRepository, never()).findProjectionByActiveTokenHash(
+            ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION),
+        )
     }
 
     @Test
@@ -261,7 +327,7 @@ class PublicCalendarContractTest @Autowired constructor(
                     .mapNotNull { it.getHighCardinalityKeyValue("http.url")?.value }
                 val publicCalendarUrls = observedUrls.filter { it.startsWith("/calendars/v1/") }
                 assertThat(publicCalendarUrls)
-                    .hasSize(2)
+                    .hasSize(4)
                     .containsOnly("/calendars/v1/{token}.ics")
                 assertThat(observedUrls).anySatisfy { url ->
                     assertThat(url).endsWith("/actuator/health")
@@ -304,10 +370,12 @@ class PublicCalendarContractTest @Autowired constructor(
     }
 
     private fun assertPublicPathNotFound(path: String) {
-        mockMvc.perform(get(path))
-            .andExpect(status().isNotFound)
-            .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
-            .andExpect(content().bytes(byteArrayOf()))
+        for (request in listOf(get(path), head(path))) {
+            mockMvc.perform(request)
+                .andExpect(status().isNotFound)
+                .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
+                .andExpect(content().bytes(byteArrayOf()))
+        }
     }
 
     private fun authorizedPost(path: String, vararg uriVariables: Any) =

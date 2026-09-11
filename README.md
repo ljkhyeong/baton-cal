@@ -16,7 +16,7 @@ CAL이 담당한다.
 - 구독 토큰 발급·폐기·재발급, 원문 대신 해시 저장
 - 확정된 BATON 일정을 iCalendar로 변환
 - 일정의 `UID` 유지, 개정 번호를 나타내는 `SEQUENCE`와 취소 표식 관리
-- `.ics` 피드, `ETag`, `Last-Modified`와 조건부 GET
+- `.ics` 피드, 본문 없는 상태 확인(HEAD), `ETag`, `Last-Modified`와 조건부 조회
 - 일정 이벤트 수신 기록과 멱등 처리, 재전달·캘린더 재생성 상태
 - 구독 요청·오류 모니터링
 

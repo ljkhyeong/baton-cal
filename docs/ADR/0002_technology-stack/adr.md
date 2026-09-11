@@ -104,6 +104,9 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조회는 MVP에 포함하지 않는다.
 조건부 GET은 저장된 캘린더 바이트와 PostgreSQL 투영 상태만으로 처리한다.
+공개 HEAD는 Spring MVC의 명시적 HEAD 매핑으로 처리하고 구독 검증 SQL에서 ETag·Last-Modified·
+`octet_length(representation)`만 조회한다. 본문을 가져와 길이를 계산하지 않는다. GET과 HEAD는
+캐시 판정과 응답 헤더 설정을 공유하며, 별도 파일 크기 열이나 캐시는 두지 않는다.
 
 ### iCalendar
 
