@@ -4,6 +4,8 @@
 
 - CAL의 일정 수신·캘린더 변환·구독·복구 진단을 구현했다. 기능은 [README](README.md),
   API는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
+- 공개 HEAD는 캘린더 본문을 조회하지 않고 구독 상태·캐시 검증 값·파일 크기를 반환한다.
+  [후속 기능 검토](docs/reviews/2026-09-12-feature-review.md)에 채택 근거와 보류 항목을 정리했다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL 경로는 `/Users/lim/devProject/personal/baton-cal`이다. BATON 작업 경로는
@@ -19,11 +21,15 @@
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
-- 2026-09-12 CAL 문구 수정: 기준 `fd26b79`에 설정 오류 문구 두 곳·기존 테스트 기대값·문서를 수정한 상태에서
-  `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest' verifyContractsZip` 성공.
-  Java 25 툴체인으로 설정 테스트 8개와 계약 ZIP을 새로 검증했다. 실패·제외 없음.
-  문서 링크 37개가 유효하고 명령·예시 코드·성능 측정값은 유지된다. 검증 로직과 API 계약 변경이 없어
-  전체 테스트·이미지·운영 스모크는 반복하지 않았다. 로그: `/private/tmp/baton-cal-wording-20260912.log`.
+- 2026-09-12 HEAD 개선: 기준 `f745b6c`에 HEAD 처리·메타데이터 크기·회귀 테스트를 수정한 상태에서
+  `./gradlew --no-daemon --max-workers=2 check`로 120개 테스트와 계약 ZIP을 검증했다.
+  Java 25 툴체인·PostgreSQL 18.6을 사용했다. 첫 실행의 테스트 컴파일 오류를 고친 뒤 119개가 통과했고,
+  로그 검증 한 개는 HEAD 추가로 늘어난 요청 횟수의 기대값을 2→4로 수정했다.
+  `test --tests 'io.baton.cal.web.PublicCalendarContractTest.공개 캘린더 관측 URL은 실제 토큰을 기록하지 않는다'`로
+  해당 한 개도 통과했다. 제품 코드와 나머지 테스트는 같아 119개 성공 결과를 재사용했다. 제외 없음.
+  로그: `/private/tmp/baton-cal-head-check-20260912.log`, `/private/tmp/baton-cal-head-observation-20260912.log`.
+  전체 실행의 클래스별 결과: `/private/tmp/baton-cal-head-full-results-20260912.json`.
+  이미지·운영 구성 변경이 없어 스모크는 반복하지 않았다. 실제 캘린더 앱 검증과 성능 개선율 측정은 미실행이다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
