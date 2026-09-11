@@ -1,7 +1,7 @@
 # BATON CAL MVP 계약
 
-이 디렉터리는 PRD-0002의 언어 중립적 JSON 계약과 예시를 보관한다. 안정 버전 `1.0.0`의 BATON
-생산자 계약 검증은 완료했지만, 현재 작업 후보의 검증 완료나 실제 운영 준비 완료를 뜻하지 않는다.
+이 디렉터리는 PRD-0002의 JSON 스키마와 요청·응답 예시를 보관한다. 안정 버전 `1.0.0`은 BATON의
+계약 테스트를 통과했다. 현재 작업 후보의 검증과 실제 운영 준비는 별도로 확인해야 한다.
 
 ## 계약 목록
 
@@ -78,7 +78,7 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
   `schedule-snapshot.all-day-active.json`은 임의 지속 시간을 만들지 않는 UTC·시간대 지정 시점과
   `VALUE=DATE`를 사용하는 종일 날짜 구간을 설명한다.
 - 소비자는 `additionalProperties: false`를 전제로 한다. 필드나 열거형을 추가하려면 새 스키마
-  버전과 생산자·소비자 계약 픽스처가 필요하다.
+  버전과 송신·수신 측 계약 테스트 데이터가 필요하다.
 - v1 절대 시각은 명시적 오프셋이 있는 RFC 3339이고 로컬 날짜·시간은 오프셋 없이 보낸다.
   초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
   정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
@@ -95,7 +95,7 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 아니라, DTO를 만들기 전에 Jackson이 적용하는 파싱 제한이다.
 
 어느 제한이든 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
-반환한다. 같은 요청을 그대로 재시도하지 않고 생산자 직렬화 또는 요청 크기를 먼저 고친다.
+반환한다. 같은 요청을 재시도하기 전에 BATON의 JSON 직렬화나 요청 크기를 수정한다.
 
 ```json
 {"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}
@@ -168,10 +168,10 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 실제 만료 시점은 저장소·조직의 보존 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한
 임시 CI 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
 
-현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 이 자산에는 루트 `LICENSE`가 없어 계약 의미를 유지한 `1.0.1` 호환 보완판으로 재포장하고 BATON이
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
-`1.1.0-rc.1`의 게시·BATON 생산자 검증은 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
+`1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
 중복·시즌 충돌 응답과 고정된 복원 다이제스트 예시를 추가한다. `rc.2`는 미게시·BATON 미고정 상태이며
 기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는

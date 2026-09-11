@@ -3,19 +3,19 @@
 BATON CAL은 확정된 시즌 일정·회차·마감을 읽기 전용 캘린더 구독(.ics)으로 제공하는 독립 서비스다.
 
 > 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 안정 계약 `1.0.0`의
-> BATON 생산자 검증을 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
+> BATON의 계약 테스트를 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
 문서에서 **투영**은 확정 일정을 변환해 저장한 캘린더 데이터다. **골든 파일**은 출력 비교에 쓰는
 [기준 `.ics` 바이트](contracts/golden)를 Base64로 보관한 파일이다.
 
-## 서비스 경계
+## 서비스별 역할
 
 CAL이 담당한다.
 
 - 구독 토큰 발급·폐기·재발급, 원문 대신 해시 저장
 - 확정된 BATON 일정을 iCalendar로 변환
-- 안정적인 iCalendar `UID`, `SEQUENCE`와 취소 표식
+- 일정의 `UID` 유지, 개정 번호를 나타내는 `SEQUENCE`와 취소 표식 관리
 - `.ics` 피드, `ETag`, `Last-Modified`와 조건부 GET
 - 일정 이벤트 수신 기록과 멱등 처리, 재전달·캘린더 재생성 상태
 - 구독 요청·오류 모니터링
@@ -31,8 +31,8 @@ CAL이 담당한다.
 ## 첫 MVP
 
 1. BATON이 트랜잭션 커밋 이후 전달한 확정 일정 스냅샷만 수신한다.
-2. 시즌 범위의 폐기 가능한 읽기 전용 구독을 만든다.
-3. 안정적인 `UID`, 원본 개정 번호 기반 `SEQUENCE`와 취소 이벤트를 가진 `.ics`를 제공한다.
+2. 시즌별로 해제할 수 있는 읽기 전용 구독을 만든다.
+3. 같은 일정의 `UID`를 유지하고 원본 개정 번호를 `SEQUENCE`에 반영하며, 취소 표식을 담은 `.ics`를 제공한다.
 4. `ETag`와 `Last-Modified`로 캘린더 클라이언트의 반복 조회를 효율적으로 처리한다.
 5. 동일 내용 재전달, 순서가 뒤바뀐 갱신, 토큰 회전과 전체 재구축을 검증한다.
 
@@ -43,7 +43,7 @@ CAL이 담당한다.
 - 캘린더 설명에는 최소 정보와 권한이 필요 없는 위치 식별자만 포함한다.
 - 캘린더 클라이언트의 조회는 BATON의 권한 판단을 우회하지 않는다.
 
-## 운영 안전 기본값
+## 운영 기본 설정
 
 - JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트),
   필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 256개까지 파싱한다. 이 요청 제한을 하나라도
@@ -60,9 +60,9 @@ CAL이 담당한다.
   반환하므로 내부 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
-- 공개 `/calendars/v1/**` 요청의 고카디널리티 `http.url` 관측값은 실제 토큰 대신
-  `/calendars/v1/{token}.ics`로 기록한다.
-- 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·표현 크기는
+- 공개 `/calendars/v1/**` 요청을 추적할 때 `http.url`에는 실제 토큰 대신
+  `/calendars/v1/{token}.ics`를 기록한다.
+- 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·캘린더 크기(바이트)는
   `baton.cal.projection.rebuild`, `baton.cal.projection.items`, `baton.cal.projection.bytes`, 시즌
   잠금 획득 시간은 `baton.cal.projection.lock.acquire`로 기록한다. 내부 인증 결과는
   `baton.cal.internal.authentication`의 `current`, `previous`, `unauthorized` 세 값만 사용한다.
@@ -314,11 +314,11 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 병합하지 않는 `release/contracts-` 풀 리퀘스트는 일반 merge 검증과 별도로 브랜치의 정확한 HEAD를
 체크아웃해 계약 ZIP을 검증하고 별도 산출물로 올린다.
 
-현재 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산
 `baton-cal-contracts-1.0.0.zip`의 SHA-256은
 `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
-릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 생산자 계약 테스트를
+릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 계약 테스트를
 완료했다. 이 자산에는 루트 `LICENSE`가 없으므로 계약 의미를 유지한 `1.0.1` 호환 보완판으로
 재포장해 BATON 고정을 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
@@ -334,7 +334,7 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 
 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 고정된 복원 매니페스트
 예시를 추가했다.
-아직 게시하거나 BATON 생산자에 고정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
+아직 게시하거나 BATON의 사용 버전으로 지정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
 
 ## OCI 이미지 검증
 

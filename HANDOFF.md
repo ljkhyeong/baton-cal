@@ -2,47 +2,29 @@
 
 ## 현재 상태
 
-- CAL은 일정 수신·캘린더 투영·구독·복구 진단을 구현했다. BATON의 개인 구독, 내 구독 목록,
-  여러 구독 선택 해제와 문구 개선도 로컬 검증을 마쳤다. 기능 설명은 [README](README.md),
-  API 기준은 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
-- 2026-09-05 확인 시 CAL 기능 변경은 로컬 `main`의 `592dc8b`, BATON 화면 변경은 `fc3d90f1`에
-  포함됐다. 이후 지시 정리는 `codex/streamline-cal-instructions`에서 진행했다. 다음 작업은 실제
-  브랜치·미커밋 변경부터 확인한다.
-- 표준 API 검토의 4건을 반영했다. PostgreSQL 예외 변환을 공통 설정으로 옮기고, 복구의 수동 행 매핑·
-  중복 정렬·완료 직후 재조회와 같은 값 재검증을 제거했다. 추가 검토한 일정 상태 조회도 응답에 필요한
-  5개 열만 읽도록 반영했다. 복구 시즌 검증은 완료 재시도에 필요한 매니페스트만 조회하고,
-  완료 상태 조회는 저장된 시즌 수를 사용하고, 완료 후 매니페스트 재시도는 시즌 잠금을 잡지 않는다.
-  [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
-- CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
-  스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
-- 앱별 무료 구독 등록 안내와 문구·문서 개선은 BATON 원격 `main`의 `5a7db89f`에 병합했다.
-  작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 운영 활성화는 별도다.
-- CAL `01d8015`까지 원격 `main`에 반영했다. 운영 스모크는 서버 중단 후 연결 거부·시간 초과에 따른
-  `502`·`504`를 모두 검증하도록 보완했다. 최신 필수 CI는 각 저장소의 GitHub Actions에서 확인한다.
-- 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
-  과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
-- 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
-  `rc.2` 공식 게시·BATON 자산 고정·안정 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
+- CAL의 일정 수신·캘린더 변환·구독·복구 진단을 구현했다. 기능은 [README](README.md),
+  API는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
+- BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
+  실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
+- CAL 경로는 `/Users/lim/devProject/personal/baton-cal`, BATON 작업 경로는
+  `/private/tmp/baton-cal-registration-20260907`이다. 다른 작업 트리는 `git worktree list`로 확인한다.
+- 안정 계약은 `1.0.0`, 게시된 후보는 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다.
+  `rc.2` 게시·BATON 사용 버전 지정·안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
 - `cal.b4ton.com`용 로컬 HTTPS·프록시·Prometheus·알림 구성은 검증했다. 실제 서버·DNS·공인 인증서·
-  운영 알림 채널은 연결하지 않았다. BATON 기능 플래그와 실제 운영 활성화도 별도 작업이다.
+  운영 알림 채널은 연결하지 않았다.
 
-## 최근 검증 근거
+## 최근 검증
 
-다음 결과는 해당 시점의 기록이다. 재사용 전 [개발 검증 절차](docs/development.md)에 따라
-소스·미추적 파일·설정·환경 차이를 확인한다.
+- CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
+  전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
+  `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
+- 2026-09-11 CAL 문서 수정: `./gradlew --no-daemon verifyContractsZip` 성공, 두 작업 모두 새 실행.
+  실행 코드·설정은 `3c2936d`와 같아 애플리케이션 테스트를 반복하지 않았다.
+  로그: `/private/tmp/baton-cal-wording-contracts-20260911.log`.
+- BATON 검증은 작업 경로의 `output/verification/latest.md`에서 확인한다.
+  이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
 
-| 기준 | 범위·환경 | 결과와 제한 |
-| --- | --- | --- |
-| CAL `01d8015` + 운영 스모크 보완 | 2026-09-08, [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34171484723), `bash -n scripts/smoke-operations.sh`, `git diff --check` | CI의 전체 테스트·계약 ZIP·이미지 빌드·OCI 스모크 성공. 운영 스모크의 서버 중단 후 응답 검사에서 실패해 `502`·`504`를 구분하도록 보완. 셸 구문·차이 검사 성공. 이후 전체 결과는 main CI 참조. 실패 로그: `/private/tmp/baton-cal-main-ci-failed-20260908.log` |
-| BATON `5a7db89f` | 2026-09-08, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, 캘린더 구독·목록·일괄 해제 E2E | 타입·빌드 성공. 최신 main의 화면 개편에 병합한 뒤 PC·390px 모바일·WebKit 75개 성공, 실패·제외 0개. 테스트 포트는 다른 작업과 겹치지 않는 3137 사용. 백엔드·API 생성물은 원격 기준 `a9d1feb9`와 동일. 명령·로그는 작업 경로의 `output/verification/latest.md` 참조 |
-| CAL `5d41971` | 2026-09-08, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공, 실패·제외 0개. URL 오류 안내만 변경하고 기존 검증 유지. 로그: `/private/tmp/baton-cal-wording-config-20260908.log`. HTTP 계약·DB·의존성 변경이 없어 전체 테스트·계약 ZIP 제외 |
-| CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
-| CAL `f8f7337` + 스킬 검증 스크립트·문서 미커밋 변경 | 공용 Python 3.14.7·PyYAML 6.0.3, `bash -n scripts/validate-skill.sh`, `./scripts/validate-skill.sh /Users/lim/.codex/skills/baton-cal-flows` | 성공. 기존 공용 환경을 사용해 추가 설치 없이 검증. 문서 변경 뒤 앱 테스트는 반복하지 않음 |
-| CAL `465d2c3` | 2026-09-06, Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'` | 복구 HTTP 테스트 13개 새 실행 성공. 다른 트랜잭션의 시즌 잠금 중 완료 재시도 `200`·충돌 `409`, 진행 중 검증의 시간 초과 `503` 확인. 전체 테스트·계약 ZIP·운영 검증 제외 |
-| BATON `68179922` | 문구 변경 관련 Playwright 38건, PC·모바일·WebKit, 타입 검사 포함 프로덕션 빌드 | 성공. 서버·외부 앱 검증은 제외. [기록](docs/reviews/2026-09-05-wording-followup-review.md) |
-
-이전 서버·OCI·복원 검증과 WebKit 시간 초과 기록은 `git show 6c8eec6:HANDOFF.md`에서 확인할 수 있다.
-과거 테스트 개수와 브랜치 목록을 새 인수인계에 반복해서 추가하지 않는다.
+결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
 
 ## 남은 작업
 
