@@ -1,7 +1,7 @@
 package io.baton.cal.web
 
 import org.slf4j.LoggerFactory
-import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.PessimisticLockingFailureException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpHeaders
@@ -28,7 +28,7 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
         .body(ApiErrorResponse(exception.code, exception.message))
 
     @ExceptionHandler(
-        CannotAcquireLockException::class,
+        PessimisticLockingFailureException::class,
         QueryTimeoutException::class,
         TransactionTimedOutException::class,
         CannotGetJdbcConnectionException::class,

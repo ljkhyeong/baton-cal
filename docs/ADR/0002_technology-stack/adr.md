@@ -51,8 +51,8 @@ BATON CAL MVP는 다음 특성을 가진다.
 - 스키마 마이그레이션의 유일한 기준은 Flyway다.
 - 영속성 접근에는 Spring `JdbcClient`와 명시적인 SQL을 쓴다.
 - PostgreSQL용 `SQLErrorCodeSQLExceptionTranslator` 빈을 등록하고 Spring Boot가 공통
-  `JdbcTemplate`에 적용하게 한다. 저장소별 SQLSTATE 분기 없이 시즌·복구 잠금과 SQL 실행 시간
-  초과를 표준 예외로 변환하며, HTTP 예외 처리기가 `503 SERVICE_BUSY`로 응답한다.
+  `JdbcTemplate`에 적용하게 한다. 저장소별 SQLSTATE 분기 없이 잠금 실패·교착 상태·직렬화 실패와
+  SQL 시간 초과를 표준 예외로 변환하며, HTTP 예외 처리기가 `503 SERVICE_BUSY`로 응답한다.
 - JPA/Hibernate 스키마 생성과 엔티티 수명주기를 사용하지 않는다.
 - 수신함 `event_id` 고유성과 하나의 일정 항목에 대한 최신 원본 개정 번호, 구독/토큰 상태를
   데이터베이스 제약조건으로 보호한다. 서로 다른 `eventId`로 온 완전 중복은 모두 수신함에
@@ -227,10 +227,11 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   고정한다.
 - Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
   설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
-  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 초과와 Spring의
+  스레드 중단 코드를 만들지 않는다. Spring의 `PessimisticLockingFailureException`으로 잠금 실패·교착 상태·
+  직렬화 실패를 함께 처리한다. 쿼리·트랜잭션 제한 시간 초과와
   `CannotGetJdbcConnectionException`·`CannotCreateTransactionException`은 공통 오류 처리기에서
   `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`로 응답한다. 메시지 문자열로 예외를 분류하거나
-  서버 내부에서 재시도하지 않는다. 그 밖의 예상하지 못한 실패는 기존 `500` 처리를 유지한다.
+  서버 내부에서 재시도하지 않는다. 데이터 제약 위반·SQL 오류 등 예상 밖 실패는 기존 `500` 처리를 유지한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
   `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
@@ -302,7 +303,7 @@ Healthchecks.io의 무료 점검에 연결해 확인할 수 있다. 송신 타�
 - JSON UUID는 스키마와 같은 36자 표준 문자열만 허용하고, 내부 Bearer 설정은 RFC 6750 `b64token`
   문자 범위를 벗어나면 애플리케이션 시작 시 거부한다.
 - 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
-  확인하고, 연결 실패·제한 시간 초과가 `503 SERVICE_BUSY`·`Retry-After: 1`·`Cache-Control: no-store`로
+  확인하고, 연결 실패·교착 상태·직렬화 실패·제한 시간 초과가 `503 SERVICE_BUSY`·`Retry-After: 1`·`Cache-Control: no-store`로
   응답하는지 검증한다. 실제 Hikari 연결을 모두 점유한 상태에서 발급과 조회를 요청하고, 연결 반환 뒤 정상 처리를 확인한다.
   Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
   증가량만 확인해 같은 도메인 흐름을 중복 구현하지 않는다.

@@ -58,7 +58,7 @@ CAL이 담당한다.
   파일 이름과 재시작 기준은 [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
-  맞게 조정한다. DB 연결·트랜잭션 시작 실패나 잠금·SQL·트랜잭션 시간 초과에는
+  맞게 조정한다. DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패, 잠금·SQL·트랜잭션 시간 초과에는
   `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
