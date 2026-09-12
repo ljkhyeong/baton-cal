@@ -29,11 +29,22 @@
 - 서버·모니터링 중단을 확인할 Healthchecks.io 선택 연동을 추가했다. Prometheus 정상 신호를
   Alertmanager가 외부로 전송하며, 기본 알림 채널에서는 이 신호를 제외한다. 무료 점검 1개를 쓰는
   설정이고 실제 계정·수신 채널은 아직 연결하지 않았다. [연결 방법](docs/operations.md#서버와-모니터링-중단-감지)
+- Spring Boot `configtree`로 DB 비밀번호·현재 및 이전 내부 토큰을 Secret 파일에서 읽는 경로를 검증했다.
+  제품 코드·의존성 추가 없이 기존 운영 설정에 연결한다. 파일 이름과 재시작 기준은
+  [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다. 실제 k3s 마운트는 배포 시 적용한다.
 - 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
   로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
 
+- 2026-09-12 Secret 파일: 기준 `fc85d0d` 이후 테스트 변경을 `18168b5`로 커밋했다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest'
+  --tests 'io.baton.cal.config.CalPropertiesTest'`로 파일 바인딩·누락된 디렉터리·잘못된 토큰의 시작 차단과
+  로그 비노출을 포함한 13개 테스트를 실행해 통과했다. Java 25·Spring Boot 4.1.1, Docker 없이 검증했다.
+  로그: `/private/tmp/baton-cal-secret-files-test.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
+  제품 코드·의존성·운영 설정이 같아 나머지 일반 테스트와 OCI·운영 스모크는 아래 결과를 재사용했다.
+  동작 검증 이후에는 문서만 변경했다. 실제 Secret 마운트·DB 자격 증명 연결은 미검증이며 새 CI는
+  미푸시로 실행하지 않았다.
 - 2026-09-12 외부 점검: 기준 `629350b` 이후 연동 설정·검증 스크립트 변경을 `13737a7`로 커밋했다.
   `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 정상 신호 반복·해제 후 중단·재개,
   일반 알림 분리와 기존 HTTPS·TLS·장애 복구·토큰 비노출을 확인했다. `bash scripts/smoke-alert-channels.sh`로

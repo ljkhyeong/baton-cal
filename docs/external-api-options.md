@@ -1,8 +1,8 @@
 # 추가 요금 없는 외부 API 연동
 
 - 확인일: 2026-09-12
-- 기준: CAL `629350b`, 추가 요금 없는 외부 API·운영 연동 재검토
-- 선택: `.ics` 구독 유지, 기본 제공 알림·인증서 점검과 외부 정상 신호 연동
+- 기준: CAL `fc85d0d`, 추가 요금 없는 외부 API·운영 연동 재검토
+- 선택: `.ics` 구독 유지, 기본 제공 알림·인증서 점검·외부 정상 신호와 Secret 파일 연동
 
 ## 검토 결과
 
@@ -11,6 +11,7 @@
 | 운영 알림 | Alertmanager의 Slack·Discord 웹훅 연동 | 메시지 변환 서버, API 호출·재시도 코드 | 수신 설정과 모의 API 검증 추가 |
 | 서버·모니터링 중단 | Healthchecks.io Pinging API와 Alertmanager | 정상 신호 전송 프로그램, 신호 누락 판정·외부 알림 | 무료 점검 1개를 사용하는 선택 설정과 로컬 검증 추가 |
 | 인증서 점검 | Blackbox Exporter TLS 검사와 Prometheus | 인증서 파싱·만료일 점검 스크립트 | 이름·체인 확인, 14일 이내 만료 알림 추가 |
+| 비밀값 전달 | Spring Boot `configtree`와 k3s Secret 파일 | Secret 조회 API·파일 판독·문자열 변환 코드 | 기존 기능으로 연결 가능. 실제 설정 바인딩·실패 시 비노출 검증과 연결 기준 추가 |
 | 인증서 발급·갱신 | ACME 지원 인증서 관리자 | CAL 전용 발급·갱신 API 클라이언트 | 준비된 인증서 유지. 갱신은 운영에서 선택한 관리 도구에 연결 |
 | 공휴일 | 한국천문연구원 특일 정보 | 설날·추석·대체공휴일 계산 | 일정 원본을 결정하는 BATON에서 활용. CAL에는 추가하지 않음 |
 | 캘린더 앱의 빠른 갱신 | Google Calendar·Microsoft Graph | 외부 앱에 일정 생성·수정·삭제 | 계정 연결과 상태 관리가 더 필요해 현재 `.ics` 구독 유지 |
@@ -34,6 +35,10 @@ HTTPS 연결 실패와 만료 임박을 기존 알림 경로로 전달한다.
 전원·네트워크 또는 모니터링 경로가 끊기면 Healthchecks.io가 신호 누락을 알린다. CAL·DB의 정상 여부나
 공인 DNS·외부에서 들어오는 HTTPS 접속까지 보장하는 점검은 아니다.
 [선택 설정과 연결 방법](operations.md#서버와-모니터링-중단-감지)
+
+비밀번호와 내부 토큰은 CAL 전용 Secret 파일로 전달할 수 있다. Spring Boot가 파일 이름과 내용을
+기존 설정에 연결하므로 제품 코드·의존성·별도 서비스 추가가 없다. 실제 k3s 마운트는 배포 시 적용한다.
+[파일 이름과 연결 방법](operations.md#secret-파일-연결)
 
 ## 적용 기준
 
@@ -75,6 +80,8 @@ Google의 공식 URL 등록 화면과 앱별 공식 페이지를 새 탭으로 �
 
 ## 공식 근거
 
+- [Spring Boot: Secret 파일 설정](https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.files.configtree)
+- [Kubernetes: Secret 파일 마운트](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod)
 - [Healthchecks.io: 무료 플랜](https://healthchecks.io/pricing/)
 - [Healthchecks.io: 정상 신호 API와 요청 제한](https://healthchecks.io/docs/http_api/)
 - [Healthchecks.io: 주기·유예 시간과 알림](https://healthchecks.io/docs/configuring_checks/)

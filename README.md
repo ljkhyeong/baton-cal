@@ -54,6 +54,8 @@ CAL이 담당한다.
   아니면 시작에 실패한다.
 - 로컬 실행은 `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`의 개발 기본값을 제공한다.
   `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
+- DB 비밀번호와 내부 토큰은 Spring Boot의 `configtree`로 k3s Secret 파일에서 읽을 수 있다.
+  파일 이름과 재시작 기준은 [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
   맞게 조정한다. DB 연결·트랜잭션 시작 실패나 잠금·SQL·트랜잭션 시간 초과에는

@@ -66,6 +66,42 @@ Compose 파일과 저장소에 운영 비밀번호·토큰을 쓰지 않는다. 
 알림 URL 파일은 Alertmanager 사용자가 읽을 수 있게 하고 저장소 밖에서 관리한다. 채널에 맞는
 아래 수신 설정을 선택한다. 일반 웹훅 설정에 Slack·Discord URL만 넣으면 메시지 형식이 맞지 않는다.
 
+## Secret 파일 연결
+
+CAL은 Spring Boot의 `configtree`로 k3s Secret 파일을 직접 읽을 수 있다. 별도 API 클라이언트나
+유료 비밀 관리 서비스를 추가하지 않는다. 현재 CAL 이미지와 운영 프로필에서 지원하는 방식이다.
+[Spring Boot 설정 파일 연동](https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.files.configtree)
+
+CAL 컨테이너에 아래 환경 변수를 지정하고, CAL 전용 Secret을 `/run/secrets/baton-cal/`에 읽기 전용으로
+마운트한다. 파일 내용에는 해당 값만 넣는다.
+
+```properties
+SPRING_PROFILES_ACTIVE=prod
+SPRING_CONFIG_IMPORT=configtree:/run/secrets/baton-cal/
+BATON_CAL_PUBLIC_BASE_URL=https://cal.b4ton.com
+```
+
+| 파일 이름 | 내용 | 필수 여부 |
+| --- | --- | --- |
+| `DATABASE_PASSWORD` | CAL 전용 DB 비밀번호 | 필수 |
+| `BATON_CAL_INTERNAL_TOKEN` | 현재 내부 Bearer 값 | 필수 |
+| `baton.cal.previous-internal-token` | 교체 중인 이전 Bearer 값 | 교체 기간에만 제공 |
+
+파일 이름은 대소문자와 구분자를 포함해 위 표대로 지정한다. 앞의 두 파일은 기존 설정의 참조 이름이며,
+이전 토큰 파일은 Spring 설정 이름이다. 이전 토큰이 없으면 파일 자체를 생략하고 빈 파일은 만들지 않는다.
+`DATABASE_URL`, `DATABASE_USERNAME`, `BATON_CAL_SUBSCRIPTION_GENERATION`과 복구 모드는 기존 외부
+설정으로 제공한다. 구독 세대는 일반 배포마다 새로 생성하지 않는다.
+
+파일로 제공하는 비밀값은 환경 변수·명령 인수에 중복 지정하지 않는다. import 경로 끝의 `/`를 유지하고
+`optional:`을 붙이지 않아 마운트 누락 시 시작을 차단한다. 파일은 CAL 실행 사용자가 읽을 수 있어야 한다.
+값을 바꾸면 모든 CAL 인스턴스를 재시작한다. 내부 토큰 교체 순서는
+[기존 회전 절차](../README.md#내부-bearer-회전)를 따른다.
+
+이 설정은 k3s 등에서 CAL 컨테이너를 실행할 때 사용할 연결 기준이다. 기존 `compose.operations.yml`은
+환경 변수 입력 방식이며, 여기에 import 값만 추가해 파일 입력으로 전환할 수는 없다. 이번 검증은 실제
+Spring Boot의 파일 바인딩·잘못된 토큰 거부·로그 비노출을 확인했으며 k3s 배포는 수행하지 않았다.
+[Kubernetes Secret 파일 마운트](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod)
+
 ## 운영 알림 채널 연결
 
 | 수신 채널 | `CAL_ALERTMANAGER_CONFIG_FILE` | URL 파일 내용 |

@@ -201,6 +201,10 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
 - 로컬 실행에는 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
   `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 모두 외부에서 명시하도록 요구해
   개발 연결값으로 운영 애플리케이션이 시작되는 경로를 닫는다.
+- k3s Secret 파일은 Spring Boot의 `SPRING_CONFIG_IMPORT=configtree:/run/secrets/baton-cal/`로 읽는다.
+  비밀번호·현재 토큰은 기존 참조 이름, 이전 토큰은 `baton.cal.previous-internal-token` 파일로 제공한다.
+  필수 마운트에 `optional:`을 쓰지 않는다. 별도 Secret API 클라이언트·파일 판독기·자동 갱신 코드는
+  두지 않고 값 변경 후 모든 인스턴스를 재시작한다. [연결 기준](../../operations.md#secret-파일-연결)
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
