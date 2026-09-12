@@ -237,6 +237,6 @@ class OperationalHttpTest @Autowired constructor(
         const val MAX_JSON_NAME_LENGTH = 64
         const val MAX_JSON_NESTING_DEPTH = 16
         const val MAX_JSON_NUMBER_LENGTH = 10
-        const val MAX_JSON_TOKEN_COUNT = 256
+        const val MAX_JSON_TOKEN_COUNT = 8192
     }
 }

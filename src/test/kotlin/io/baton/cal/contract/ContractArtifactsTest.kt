@@ -129,6 +129,8 @@ class ContractArtifactsTest {
         private val EXAMPLE_DIRECTORY = Path.of("contracts/examples")
 
         private val EXAMPLES_BY_SCHEMA = linkedMapOf(
+            "schedule-snapshot-batch.v1.schema.json" to listOf("schedule-snapshot-batch.json"),
+            "schedule-snapshot-batch-result.v1.schema.json" to listOf("schedule-snapshot-batch-result.json"),
             "api-error.v1.schema.json" to listOf(
                 "api-error.recovery-in-progress.json",
                 "api-error.recovery-manifest-mismatch.json",

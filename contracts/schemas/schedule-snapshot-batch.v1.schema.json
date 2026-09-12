@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/schedule-snapshot-batch.v1.schema.json",
+  "title": "ScheduleSnapshotBatchV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshots"
+  ],
+  "properties": {
+    "snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "schedule-snapshot.v1.schema.json"
+      }
+    }
+  }
+}

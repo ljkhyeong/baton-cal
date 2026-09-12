@@ -392,7 +392,7 @@ BATON 최종 사용자 Bearer 토큰, 워크스페이스 키 또는 세션을 �
 `1`과 `1.0`을 구분하지 않으므로 이 숫자 표기 조건은 HTTP 파싱에 별도로 적용한다.
 
 JSON 요청은 공백과 구조를 포함한 전체 문서 128 KiB(131,072바이트), 필드명 64자, 중첩 16단계,
-숫자 10자리와 토큰 256개 이하여야 한다. 이 제한은 DTO·JSON Schema의 개별 필드 제약과 별도로
+숫자 10자리와 토큰 8,192개 이하여야 한다. 이 제한은 DTO·JSON Schema의 개별 필드 제약과 별도로
 Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 기존 계약과 같은 `{"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}`
 고정 오류 본문을 반환한다.
@@ -434,6 +434,23 @@ Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 - 응답: `200`, `schedule-snapshot-result.v1`
 - 충돌: `409 EVENT_ID_CONFLICT`, `SOURCE_REVISION_CONFLICT` 또는
   `SOURCE_ITEM_SCOPE_CONFLICT`
+
+### `POST /internal/api/v1/schedule-snapshots/batch`
+
+- 요청은 `schedule-snapshot-batch.v1`의 `{snapshots: [...]}`이며 1~100건을 받는다.
+  각 항목은 기존 `schedule-snapshot.v1` 전체 스냅샷이다. 여러 시즌을 포함할 수 있다.
+- 전체 JSON 128 KiB·8,192토큰 제한도 적용한다. BATON은 건수와 직렬화한 UTF-8 크기로 요청을 나눈다.
+  파싱 상한 초과는 `413`, 빈 목록·101건 이상·항목 검증 실패는 `400`이다.
+- `200`은 `schedule-snapshot-batch-result.v1`의 `{results: [{eventId, result}, ...]}`를 반환한다.
+  결과 개수·순서는 요청과 같으며 각 시점의 `APPLIED`·`DUPLICATE`·`STALE`을 기록한다.
+  같은 항목의 개정이 여러 개면 기존 순서 규칙으로 처리하고 최종 상태만 피드에 담는다.
+- 일정·수신 기록·변경된 시즌의 캘린더를 하나의 트랜잭션으로 저장한다. 모든 시즌 잠금을 UUID 순서로
+  획득하고, 요청 순서로 판정한 뒤 변경된 시즌을 한 번씩 재생성한다. 중복·역순만 있으면 재생성하지 않는다.
+- 한 건의 충돌이나 DB·캘린더 생성 실패는 전체를 취소한다. 오류 구조와 코드는 단건과 같다.
+  부분 성공이나 항목별 실패 응답은 없다. 응답 유실·`5xx`에는 같은 이벤트 ID·내용으로 전체 재전달한다.
+  `409`는 원본 충돌을 수정하고 `413`은 크기를 줄여야 한다.
+- 복구 모드에서도 수신할 수 있으며 기존 단건 경로와 병행한다. CAL 전체 인스턴스가 이 경로를 지원하고
+  BATON이 새 공식 계약을 고정한 뒤 전송을 활성화한다.
 
 ### `GET /internal/api/v1/calendar-items/{sourceItemId}`
 
@@ -611,7 +628,7 @@ IP별 요청률 또는 동시 처리 제한을 넘으면 `429`, `Retry-After: 1`
    현재 세대 토큰 재발급.
 11. BATON 커밋 이후 전달, CAL 트랜잭션 실패, 재시도와 복구.
 12. DTO·JSON Schema의 필드 제약 위반과 JSON 요청 크기·구조 제한을 구분하고, 문서 128 KiB·필드명
-    64자·중첩 16단계·숫자 10자리·토큰 256개 중 어느 상한이든 넘으면 고정된
+    64자·중첩 16단계·숫자 10자리·토큰 8,192개 중 어느 상한이든 넘으면 고정된
     `413 REQUEST_TOO_LARGE` 오류를 반환한다.
 13. 공개 기준 URL의 HTTPS·루프백 규칙과 `prod` 데이터베이스 설정이 로컬 기본값을 상속하지 않는
     구성을 검증하고, Tomcat 접근 로그의

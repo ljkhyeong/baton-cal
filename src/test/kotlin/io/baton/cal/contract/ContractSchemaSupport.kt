@@ -7,6 +7,9 @@ import com.networknt.schema.SchemaRegistryConfig
 import com.networknt.schema.SpecificationVersion
 import org.assertj.core.api.Assertions.assertThat
 import kotlin.io.path.inputStream
+import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.name
+import kotlin.io.path.readText
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,6 +38,9 @@ internal object ContractSchemaSupport {
     private val schemaRegistry = SchemaRegistry.withDefaultDialect(
         SpecificationVersion.DRAFT_2020_12,
     ) { builder ->
+        builder.schemas(schemaDirectory.listDirectoryEntries("*.json").associate {
+            "https://cal.baton/contracts/schemas/${it.name}" to it.readText()
+        })
         builder.schemaRegistryConfig(
             SchemaRegistryConfig.builder()
                 .formatAssertionsEnabled(true)

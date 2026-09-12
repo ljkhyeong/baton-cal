@@ -8,6 +8,7 @@
 | 경로 | 요청 스키마 | 성공 응답 스키마 | 예시 |
 | --- | --- | --- | --- |
 | `POST /internal/api/v1/schedule-snapshots` | `schemas/schedule-snapshot.v1.schema.json` | `schemas/schedule-snapshot-result.v1.schema.json` | `examples/schedule-snapshot.*.json`, `examples/schedule-snapshot-result.*.json` |
+| `POST /internal/api/v1/schedule-snapshots/batch` | `schemas/schedule-snapshot-batch.v1.schema.json` | `schemas/schedule-snapshot-batch-result.v1.schema.json` | `examples/schedule-snapshot-batch.json`, `examples/schedule-snapshot-batch-result.json` |
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
 | `GET /internal/api/v1/recovery-runs/{recoveryId}` | 본문 없음 | `schemas/recovery-run-status.v1.schema.json` | `examples/recovery-run-status.*.json` |
@@ -45,6 +46,17 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
 활성 구독의 자격 증명이 없으면 사용자 요청에 따라 rotate로 재발급한다. 상태 GET의 `404` 뒤에도
 같은 ID·시즌으로만 PUT을 재전달한다. 기존 POST는 응답 유실 시 ID를 찾을 수 없는 제한을 유지한다.
 모든 CAL 인스턴스가 새 PUT을 지원하고 BATON이 새 계약을 고정한 뒤 이 경로를 활성화한다.
+
+묶음 수신은 `{"snapshots":[스냅샷, ...]}`으로 1~100건을 전달한다. 기존 단건 스키마를 참조하며,
+응답의 `results`는 요청 순서대로 `{eventId, result}`를 반환한다. `APPLIED`·`DUPLICATE`·`STALE`은
+각 항목을 순서대로 적용할 때의 판정이다. 한 묶음 안의 최신 개정만 최종 피드에 남을 수 있다.
+충돌·검증 오류·DB 또는 캘린더 생성 실패는 묶음 전체를 취소한다. 성공 응답은 모든 일정과 변경된
+시즌의 최종 캘린더가 함께 커밋됐다는 뜻이다. 같은 묶음의 재전달은 저장 상태를 바꾸지 않는다.
+
+묶음도 전체 JSON 문서 128 KiB 상한을 따른다. 100건 이하라도 긴 설명 때문에 초과할 수 있으므로
+BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `413`은 묶음을 줄이고, `409`는 충돌한
+원본을 고친 뒤 다시 보낸다. 응답 유실·`5xx`에는 동일한 이벤트 ID·내용으로 전체를 재전달할 수 있다.
+모든 CAL 인스턴스가 새 경로를 지원하고 공식 계약을 고정한 뒤 BATON의 묶음 전송을 활성화한다.
 
 시즌 표시 이름은 `{revision, displayName}`으로 전달한다. 개정 번호는 일정과 별도로 관리하며,
 응답은 CAL이 채택한 `{seasonId, revision, displayName}`이다. 같은 이름·개정 번호의 중복과 낮은
@@ -99,7 +111,7 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
 
 JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 검증한다. 이와 별도로 CAL의 JSON
 파서는 공백과 구조를 포함한 전체 요청 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
-16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이 상한은 JSON Schema에 표현하는 필드 제약이
+16단계, 숫자를 10자리, 토큰을 8,192개로 제한한다. 이 상한은 JSON Schema에 표현하는 필드 제약이
 아니라, DTO를 만들기 전에 Jackson이 적용하는 파싱 제한이다.
 
 어느 제한이든 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
@@ -112,6 +124,7 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 ## 자동 검증과 BATON 연동
 
 `ContractSchemaSupport`가 Draft 2020-12 스키마 로딩과 검증 결과 보고를 한 곳에서 맡는다.
+스키마 간 `$ref`는 ZIP에 포함된 파일을 `$id`로 등록해 해석한다. `cal.baton`에 HTTP로 접속하지 않는다.
 `ContractArtifactsTest`는 이를 사용해 Docker 없이 모든 JSON 예시를 검증하고, UUID, RFC 3339
 시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 내부 HTTP 요청의 UUID도
 하이픈을 포함한 36자 표준 문자열만 허용하며 Jackson의 22자·24자 Base64 UUID 표현은 거부한다.

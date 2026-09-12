@@ -77,7 +77,7 @@ version = "0.0.1-SNAPSHOT"
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        freeCompilerArgs.add("-Xjsr305=strict")
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations")
     }
 }
 
@@ -165,6 +165,7 @@ tasks.register<Test>("ingestionLoadTest") {
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("ingestion-load") }
     systemProperty("baton.cal.load.item-count", providers.gradleProperty("loadItemCount").getOrElse("1000"))
+    systemProperty("baton.cal.load.batch-size", providers.gradleProperty("loadBatchSize").getOrElse("1"))
     shouldRunAfter(tasks.test)
 }
 

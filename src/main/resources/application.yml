@@ -12,7 +12,7 @@ spring:
           max-name-length: 64
           max-nesting-depth: 16
           max-number-length: 10
-          max-token-count: 256
+          max-token-count: 8192
     mapper:
       allow-coercion-of-scalars: false
   datasource:

@@ -35,8 +35,11 @@ BATON CAL MVP는 다음 특성을 가진다.
 - `JsonMapperBuilderCustomizer`에서 `LogicalType.Textual`의 숫자·불리언 변환을 `CoercionAction.Fail`로
   지정한다. `allow-coercion-of-scalars`의 문자열 제외를 보완하며, 기존 Mapper와 Bean Validation을 사용한다.
   사용자 정의 문자열 파서나 DTO별 타입 검증은 추가하지 않는다.
+- 묶음 수신은 기존 판정 함수를 재사용한다. 요청의 시즌을 정렬해 잠근 뒤 입력 순서대로 반영하고,
+  변경된 시즌만 마지막에 재생성한다. Spring 트랜잭션으로 전체를 커밋하거나 취소한다.
+  목록 항목 검증에는 `List<@Valid ScheduleSnapshotRequest>`와 Kotlin JVM 타입 어노테이션을 쓴다.
 - Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
-  16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
+  16단계, 숫자를 10자리, 토큰을 8,192개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
   별도로 적용하는 파싱 제한이며, Spring MVC 오류 처리기가 어느 제한을 넘든 고정된
   `413 REQUEST_TOO_LARGE` API 오류로 변환한다. 별도 요청 본문 필터나 자체 JSON 파서는 두지 않는다.
 - 내부 API 인증은 배포 비밀값으로 주입한 CAL 전용 Bearer 토큰을 Spring MVC 필터에서 비교한다.
