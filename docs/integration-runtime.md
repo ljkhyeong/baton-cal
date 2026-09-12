@@ -91,6 +91,8 @@ bash scripts/smoke-alert-channels.sh
 HTTPS 테스트는 임시 인증서와 격리된 PostgreSQL을 사용해 인증, 구독 발급·조회·해제, 공개 호스트,
 관리 포트 분리와 토큰 비노출을 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
 Docker 네트워크에서 채널별 단독·Healthchecks 조합의 장애·복구 메시지와 정상 신호 분리를 확인한다.
+모의 API가 메시지별로 `429`, `503`을 반환한 뒤 성공하게 하여 재전송, 실제 수신 건수와 오류 로그의
+웹훅 주소 비노출도 검사한다. 전송·재시도에는 기존 Alertmanager를 사용한다.
 실행에는 Docker와 Java 25 툴체인이 필요하다.
 실행 JAR는 `build/libs/baton-cal-0.0.1-SNAPSHOT.jar`에 생성된다.
 
