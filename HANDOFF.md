@@ -26,20 +26,23 @@
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
   [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
+- 서버·모니터링 중단을 확인할 Healthchecks.io 선택 연동을 추가했다. Prometheus 정상 신호를
+  Alertmanager가 외부로 전송하며, 기본 알림 채널에서는 이 신호를 제외한다. 무료 점검 1개를 쓰는
+  설정이고 실제 계정·수신 채널은 아직 연결하지 않았다. [연결 방법](docs/operations.md#서버와-모니터링-중단-감지)
 - 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
   로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
 
-- 2026-09-12 외부 연동: 기준 `efed802` 이후 운영 설정·검증 스크립트·CI 변경을 `9d5406f`로 커밋했다.
-  `bootBuildImage --imageName=baton-cal:external-integrations` 성공 후
-  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 기존 HTTPS·장애 복구·토큰 비노출과
-  새 TLS 점검·인증서 알림 규칙을 확인했다. `bash scripts/smoke-alert-channels.sh`로 실제 Alertmanager와
-  모의 Slack·Discord API의 장애 발생·복구 알림, 웹훅 주소 비노출을 확인했다. 모두 통과했다.
-  로그: `/private/tmp/baton-cal-external-operations.log`, `/private/tmp/baton-cal-alert-channels.log`.
+- 2026-09-12 외부 점검: 기준 `629350b` 이후 연동 설정·검증 스크립트 변경을 `13737a7`로 커밋했다.
+  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 정상 신호 반복·해제 후 중단·재개,
+  일반 알림 분리와 기존 HTTPS·TLS·장애 복구·토큰 비노출을 확인했다. `bash scripts/smoke-alert-channels.sh`로
+  기본 세 채널의 정상 신호 제외와 모의 Slack·Discord API의 장애 발생·복구 알림을 확인했다. 모두 통과했다.
+  로그: `/private/tmp/baton-cal-healthchecks-verified.log`, `/private/tmp/baton-cal-healthchecks-channels.log`.
+  CAL 소스·의존성이 같아 기존 OCI 이미지와 아래 `82295dc`의 일반 테스트 결과를 재사용했다.
   종료 파일·구조 검사와 전체 diff 검토도 통과했다. 구조 검사·검증 루프 테스트의 Gradle 작업 7개는
-  입력이 같아 기존 결과를 재사용했다. CAL 소스·의존성도 그대로여서 아래 `82295dc`의 일반 테스트 결과를
-  재사용한다. 실제 수신 채널과 홈서버 연결은 미검증이며 새 CI는 미푸시로 실행하지 않았다.
+  기존 결과를 재사용했다. 실제 Healthchecks 계정·수신 채널·홈서버 연결은 미검증이며 새 CI는 미푸시로
+  실행하지 않았다. 전송 검사 간격은 10초, 반복 기준은 1분이며 같은 간격으로 맞추지 않는다.
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
@@ -67,7 +70,8 @@
    `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
 2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
    인증서 갱신·외부 점검·비밀 관리에 사용할 도구를 연결하고 내부 Bearer 회전과 프록시·추적의
-   토큰 비노출을 검증한다. 홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
+   토큰 비노출을 검증한다. Healthchecks를 사용하면 첫 신호 수신과 누락·복구 알림을 실제 계정에서 확인한다.
+   홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
 3. 실제 캘린더 앱에서 구독·이름 표시·갱신·취소를 확인한 뒤 BATON의 관련 기능과 이름 보정·전달을
    활성화한다. [앱별 확인표](docs/calendar-subscription-guide.md)
 4. 운영 RTO/RPO·백업 저장소·암호화와 실제 복원 훈련을 정한다. 구독 세대 교체, 최신 재전달·완료 확인,

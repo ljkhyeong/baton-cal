@@ -400,6 +400,8 @@ GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테�
 공인 IP·포트포워딩·인증서는 준비됐고 k3s는 구축 전이다. `compose.operations.yml`은 Nginx HTTPS·
 요청 제한, Prometheus·Alertmanager·인증서 점검의 로컬 통합 검증에도 사용한다. Slack·Discord는
 Alertmanager의 기본 연동으로 연결한다. 실제 홈서버 배포와 알림 채널 연결은 수행하지 않았다.
+서버·모니터링 중단 감지는 Healthchecks.io의 무료 점검을 선택해 연결할 수 있다. Prometheus와
+Alertmanager의 정상 신호가 끊기면 외부 서비스가 알리며, 계정 등록과 실제 연결은 별도다.
 [운영 연동 안내](docs/operations.md), [외부 API 검토](docs/external-api-options.md).
 
 ```shell

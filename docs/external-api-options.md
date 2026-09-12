@@ -1,19 +1,22 @@
 # 추가 요금 없는 외부 API 연동
 
 - 확인일: 2026-09-12
-- 기준: CAL `efed802`, 추가 요금 없는 외부 API·운영 연동 검토
-- 선택: `.ics` 구독 유지, 기본 제공 알림 연동과 인증서 점검 적용
+- 기준: CAL `629350b`, 추가 요금 없는 외부 API·운영 연동 재검토
+- 선택: `.ics` 구독 유지, 기본 제공 알림·인증서 점검과 외부 정상 신호 연동
 
 ## 검토 결과
 
 | 대상 | 활용할 API·표준 연동 | 줄일 수 있는 직접 구현 | 결정 |
 | --- | --- | --- | --- |
 | 운영 알림 | Alertmanager의 Slack·Discord 웹훅 연동 | 메시지 변환 서버, API 호출·재시도 코드 | 수신 설정과 모의 API 검증 추가 |
+| 서버·모니터링 중단 | Healthchecks.io Pinging API와 Alertmanager | 정상 신호 전송 프로그램, 신호 누락 판정·외부 알림 | 무료 점검 1개를 사용하는 선택 설정과 로컬 검증 추가 |
 | 인증서 점검 | Blackbox Exporter TLS 검사와 Prometheus | 인증서 파싱·만료일 점검 스크립트 | 이름·체인 확인, 14일 이내 만료 알림 추가 |
 | 인증서 발급·갱신 | ACME 지원 인증서 관리자 | CAL 전용 발급·갱신 API 클라이언트 | 준비된 인증서 유지. 갱신은 운영에서 선택한 관리 도구에 연결 |
 | 공휴일 | 한국천문연구원 특일 정보 | 설날·추석·대체공휴일 계산 | 일정 원본을 결정하는 BATON에서 활용. CAL에는 추가하지 않음 |
 | 캘린더 앱의 빠른 갱신 | Google Calendar·Microsoft Graph | 외부 앱에 일정 생성·수정·삭제 | 계정 연결과 상태 관리가 더 필요해 현재 `.ics` 구독 유지 |
-| DNS 변경 | DNS 업체 API·기존 DDNS 도구 | IP 변경 감지·레코드 갱신 스크립트 | DNS·공인 IP가 준비되어 있어 새 자동화는 추가하지 않음 |
+| DNS 변경 | DNS 업체 API·기존 DDNS 도구 | IP 변경 감지·레코드 갱신 스크립트 | IP가 바뀌는 환경이면 기존 DDNS 도구 사용. DNS 업체·변동 여부가 정해지기 전에는 추가하지 않음 |
+| 백업 보관 | `pg_dump`와 restic | 백업 암호화·중복 제거·저장소 전송 | 저장소·보존 기간이 정해진 뒤 연결. 기존 논리 백업·복원 절차 유지 |
+| 요청 추적 | Spring Boot의 Micrometer·OpenTelemetry 연동 | 추적 ID 전파·전송 API 클라이언트 | 수신 도구와 보존 범위가 정해진 뒤 연결. 기존 공개 URL 토큰 삭제 규칙 유지 |
 
 BATON은 `b4ton.com`, 마이크로서비스 공개 호스트는 `<서비스명>.b4ton.com`을 사용한다. CAL은
 `cal.b4ton.com`이다. 홈서버의 Ubuntu·DNS·공인 IP·80/443 포트포워딩·인증서는 사용자 확인 기준으로
@@ -27,6 +30,11 @@ BATON은 `b4ton.com`, 마이크로서비스 공개 호스트는 `<서비스명>.
 인증서 검사는 토큰 없는 TLS 연결만 사용한다. 준비된 인증서를 교체하거나 갱신하지 않으며,
 HTTPS 연결 실패와 만료 임박을 기존 알림 경로로 전달한다.
 
+외부 정상 신호는 Prometheus → Alertmanager → Healthchecks.io 순서로 전송한다. 같은 홈서버의
+전원·네트워크 또는 모니터링 경로가 끊기면 Healthchecks.io가 신호 누락을 알린다. CAL·DB의 정상 여부나
+공인 DNS·외부에서 들어오는 HTTPS 접속까지 보장하는 점검은 아니다.
+[선택 설정과 연결 방법](operations.md#서버와-모니터링-중단-감지)
+
 ## 적용 기준
 
 - 기본 캘린더 제공은 기존 `.ics` 구독을 유지한다. 외부 API 호출료가 없으며 서버·도메인은 기존 운영 범위다.
@@ -39,6 +47,7 @@ HTTPS 연결 실패와 만료 임박을 기존 알림 경로로 전달한다.
 
 | 후보 | 확인한 비용 조건 | 적용 위치와 남는 작업 |
 | --- | --- | --- |
+| Healthchecks.io | Hobbyist는 월 0달러, 점검 20개·점검당 기록 100개. 이번 연동은 점검 1개 사용 | 무료 계정에서 점검과 수신 채널을 등록해야 한다. 유료 플랜·문자·전화 알림은 사용하지 않는다. |
 | 한국천문연구원 특일 정보 | 포털에 무료로 명시. 활용 신청·인증키·호출 제한 필요 | BATON에서 공휴일 데이터를 저장·갱신한다. 공휴일 표시나 회차 제외 규칙은 BATON이 결정하며 CAL은 확정 일정만 받는다. |
 | Google Calendar API | 일반 사용은 추가 요금 없음. 공식 문서는 2026년 중 초과 사용 과금 도입 계획과 일일 무료 기준을 안내하므로 무제한 무료로 취급하지 않는다. | 사용자 동의 후 일정 생성·수정·삭제를 단방향으로 전달한다. 계정 연결, 일정 ID 연결, 재시도와 호출량 제한이 필요하다. |
 | Microsoft Graph Calendar API | 표준 API는 이용 자격과 사용 한도 내에서 추가 API 요금 없이 제공된다. 계정·라이선스 조건은 별도다. | 기존 사용 가능한 Outlook 계정의 권한 범위에서 연동한다. 새 유료 Microsoft 365 구독을 구매하는 방식은 제외한다. |
@@ -66,6 +75,11 @@ Google의 공식 URL 등록 화면과 앱별 공식 페이지를 새 탭으로 �
 
 ## 공식 근거
 
+- [Healthchecks.io: 무료 플랜](https://healthchecks.io/pricing/)
+- [Healthchecks.io: 정상 신호 API와 요청 제한](https://healthchecks.io/docs/http_api/)
+- [Healthchecks.io: 주기·유예 시간과 알림](https://healthchecks.io/docs/configuring_checks/)
+- [restic: 기존 백업 파일 보관과 중복 제거](https://restic.readthedocs.io/en/stable/040_backup.html)
+- [Spring Boot: 표준 추적 연동](https://docs.spring.io/spring-boot/reference/actuator/tracing.html)
 - [Alertmanager: 서비스별 기본 제공 알림 연동](https://prometheus.io/docs/alerting/latest/configuration/)
 - [Slack Incoming Webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
 - [Discord Webhook API](https://docs.discord.com/developers/resources/webhook)

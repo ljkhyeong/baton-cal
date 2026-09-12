@@ -85,6 +85,40 @@ k3s에서도 같은 YAML을 Alertmanager 설정으로 사용하고, 수신 URL�
 `/run/secrets/alert-webhook-url`에 마운트하면 된다. 이는 연동에 필요한 값이며 k3s 설치 절차는 아니다.
 [Alertmanager 기본 연동](https://prometheus.io/docs/alerting/latest/configuration/).
 
+## 서버와 모니터링 중단 감지
+
+홈서버가 꺼지면 같은 서버의 Alertmanager도 알림을 보내지 못한다. 이를 확인하려면 외부 서비스가
+주기적인 정상 신호를 받고, 신호가 끊겼을 때 알리게 한다. 선택 구성은 Healthchecks.io의 무료
+Hobbyist 점검 1개를 사용한다. 기준일은 2026-09-12이며 무료 한도는 점검 20개·점검당 기록 100개다.
+[요금 기준](https://healthchecks.io/pricing/)
+
+1. Healthchecks.io에서 `CAL 모니터링` 점검을 만들고 Simple 주기를 2분, Grace Time을 3분으로 지정한다.
+   이메일 등 무료 수신 채널을 연결한다. 유료 플랜·문자·전화 알림은 선택하지 않는다.
+2. 해당 점검의 HTTPS 성공 URL을 외부 파일에 보관한다. `/start`·`/fail`·`/log` 접미사를 붙이지 않고,
+   요청 본문 필터는 끈다. 수신 메서드를 제한한다면 POST를 허용한다.
+3. Alertmanager에 [Healthchecks 수신 설정](../operations/alertmanager/healthchecks.yml)을 적용하고 URL 파일을
+   `/run/secrets/healthchecks-ping-url`에 읽기 전용으로 연결한다. k3s에서는 같은 경로에 Secret 파일을 제공한다.
+4. Healthchecks.io의 최근 수신을 확인한 뒤 점검 경로를 잠시 중단해 신호 누락 알림과 재개 후 복구를 확인한다.
+
+기존 Compose에 연결할 때는 `compose.healthchecks.yml`을 추가하고 `CAL_HEALTHCHECKS_PING_URL_FILE`에
+URL 파일의 절대 경로를 지정한다. 기본 선택은 일반 웹훅과 Healthchecks를 함께 쓰는 설정이다.
+`CAL_ALERTMANAGER_CONFIG_FILE`을 지정하면 해당 파일을 사용한다.
+
+Slack·Discord와 함께 쓰려면 해당 채널 설정의 `CalWatchdog` 경로를 Healthchecks 설정의 같은 경로로
+교체하고 `healthchecks` 수신기를 추가한다. 채널의 `operations` 수신기는 유지하며, 합친 파일 경로를
+`CAL_ALERTMANAGER_CONFIG_FILE`에 지정한다. 일반 웹훅 수신기에 Slack·Discord URL을 넣지 않는다.
+
+`CalWatchdog`는 장애 유무와 관계없이 유지하는 정상 신호다. 기본 일반 웹훅·Slack·Discord 설정은
+이를 버리며, Healthchecks를 선택하면 1분을 반복 전송 기준으로 삼고 10초마다 전송 여부를 확인한다.
+전송 시점은 처리 시간에 따라 늦어질 수 있다. 전송 본문은 고정된 서비스 이름과 `alive`만
+포함한다. 내부 주소·메트릭·일정·구독 토큰을 보내지 않으며 신호가 해제됐을 때는 전송하지 않는다.
+
+신호가 한 번 수신된 뒤에는 마지막 수신부터 5분이 지나면 외부 점검이 누락으로 판정한다. 첫 신호를
+받기 전에는 점검이 시작되지 않는다. Prometheus만 멈춘 경우에는 Alertmanager가 마지막 알림을 유효하게
+보는 시간이 추가될 수 있다. 신호 중단은 서버·송신 경로 문제를 뜻하며 CAL·DB·공인 DNS·인입 HTTPS의
+정상 여부는 기존 상태 점검과 별도 외부 HTTP 점검으로 확인한다. 계정 등록·실제 알림 전송은 아직 수행하지 않았다.
+[신호 API](https://healthchecks.io/docs/http_api/), [주기와 유예 시간](https://healthchecks.io/docs/configuring_checks/)
+
 ## 최초 HTTPS 연결 순서
 
 아래는 기존 **Docker Compose 배포 참고 절차**다. 이미 준비된 인증서를 다시 발급하는 작업은 아니다.
@@ -168,6 +202,7 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 
 | 알림 | 조건 | 최초 확인할 내용 |
 | --- | --- | --- |
+| `CalWatchdog` | 항상 활성화. Healthchecks 선택 시 1분 기준으로 정상 신호 반복 전송 | 신호 누락은 외부 서비스가 판정. 기본 채널에는 전송하지 않음 |
 | `CalMetricsUnavailable` | 메트릭 수집 실패가 30초 지속 | CAL 프로세스·8081 내부 연결 |
 | `CalReadinessFailed` | 준비 상태 실패 또는 점검기 수집 실패가 30초 지속 | CAL·PostgreSQL·Blackbox |
 | `CalHttpServerErrors` | 최근 5분의 CAL 5xx가 5회 이상인 상태가 1분 지속 | DB·일시적 503·잠금 지연 |
@@ -201,6 +236,7 @@ bash scripts/smoke-alert-channels.sh
 - ACME 파일, HTTP→HTTPS 이동, 실제 요청 초과 429와 재시도 헤더.
 - Blackbox의 TLS 인증서 확인·만료 시각 수집, 연결 실패 탐지와 인증서 알림 규칙.
 - CAL 중단 후 프록시의 `502` 또는 `504`, 준비 상태 장애→로컬 webhook의 `firing`, 재시작→`resolved` 전달.
+- Healthchecks 모의 API에 정상 신호 반복 전송, 원본 갱신 중단·신호 해제 후 전송 중단, 재개 후 다시 전송.
 - 정상·제한·upstream 실패 경로의 컨테이너 로그, 원본 메트릭과 Prometheus 저장 라벨에
   구독 토큰·내부 Bearer·쿼리 표식이 없는지 확인.
 
@@ -210,3 +246,5 @@ bash scripts/smoke-alert-channels.sh
 
 알림 채널 스모크는 외부 통신을 차단한 Docker 네트워크에서 실제 Alertmanager와 모의 Slack·Discord
 API를 사용한다. 채널별 메시지 형식·발생·해제·웹훅 주소 비노출을 확인하며 실제 채널로 보내지 않는다.
+운영 스모크는 Healthchecks 연결 설정과 모의 API도 사용한다. 외부 서비스의 누락 판정·실제 알림 도착은
+계정 연결 후 확인해야 하며, 로컬 검증 결과에 포함하지 않는다.
