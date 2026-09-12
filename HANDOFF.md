@@ -26,6 +26,9 @@
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
   [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
+- Blackbox의 공개 경로 점검을 추가했다. 발급될 수 없는 고정 주소의 빈 `404`로 프록시→CAL 연결을
+  확인하고, HTML 오류 페이지·연결 장애가 30초 지속되면 알린다. 실제 구독 토큰은 사용하지 않는다.
+  [점검 범위](docs/operations.md#모니터링과-알림)
 - 서버·모니터링 중단을 확인할 Healthchecks.io 선택 연동을 추가했다. Prometheus 정상 신호를
   Alertmanager가 외부로 전송하며, 기본 알림 채널에서는 이 신호를 제외한다. 무료 점검 1개를 쓰는
   설정이고 실제 계정·수신 채널은 아직 연결하지 않았다. [연결 방법](docs/operations.md#서버와-모니터링-중단-감지)
@@ -45,15 +48,15 @@
   제품 코드·의존성·운영 설정이 같아 나머지 일반 테스트와 OCI·운영 스모크는 아래 결과를 재사용했다.
   동작 검증 이후에는 문서만 변경했다. 실제 Secret 마운트·DB 자격 증명 연결은 미검증이며 새 CI는
   미푸시로 실행하지 않았다.
-- 2026-09-12 외부 점검: 기준 `629350b` 이후 연동 설정·검증 스크립트 변경을 `13737a7`로 커밋했다.
-  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 정상 신호 반복·해제 후 중단·재개,
-  일반 알림 분리와 기존 HTTPS·TLS·장애 복구·토큰 비노출을 확인했다. `bash scripts/smoke-alert-channels.sh`로
-  기본 세 채널의 정상 신호 제외와 모의 Slack·Discord API의 장애 발생·복구 알림을 확인했다. 모두 통과했다.
-  로그: `/private/tmp/baton-cal-healthchecks-verified.log`, `/private/tmp/baton-cal-healthchecks-channels.log`.
-  CAL 소스·의존성이 같아 기존 OCI 이미지와 아래 `82295dc`의 일반 테스트 결과를 재사용했다.
-  종료 파일·구조 검사와 전체 diff 검토도 통과했다. 구조 검사·검증 루프 테스트의 Gradle 작업 7개는
-  기존 결과를 재사용했다. 실제 Healthchecks 계정·수신 채널·홈서버 연결은 미검증이며 새 CI는 미푸시로
-  실행하지 않았다. 전송 검사 간격은 10초, 반복 기준은 1분이며 같은 간격으로 맞추지 않는다.
+- 2026-09-12 공개 경로: 기준 `c6e5615` 이후 운영 설정·검증 스크립트를 `c85312d`로 커밋했다.
+  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 빈 `404`·프록시 HTML `404` 구분,
+  공개 경로·준비 상태의 장애 발생·복구 알림, 규칙 8개와 기존 HTTPS·TLS·정상 신호 중단·재개·토큰
+  비노출을 확인했다. 모두 통과하고 격리 자원을 정리했다. 로그: `/private/tmp/baton-cal-public-route-smoke.log`.
+  제품 코드·의존성이 같아 기존 OCI 이미지와 일반 테스트 결과를 재사용했다. 채널 설정·스크립트도 같아
+  `13737a7`의 `bash scripts/smoke-alert-channels.sh` 성공 결과를 재사용했다.
+  채널 로그: `/private/tmp/baton-cal-healthchecks-channels.log`. 종료 파일·구조 검사와 전체 diff 검토도 통과했다.
+  동작 검증 이후에는 문서만 변경했다. 실제 공인 DNS·인입 HTTPS·수신 채널·k3s 연결은 미검증이며 새 CI는
+  미푸시로 실행하지 않았다. 정상 신호의 전송 검사 간격 10초와 반복 기준 1분은 유지한다.
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
