@@ -76,9 +76,12 @@ class SnapshotIngestionService(
         )
 
         if (!inserted) {
-            return classifyEventReplay(
-                inboxRepository.getPayloadHashByEventId(snapshot.eventId),
-                payloadHash,
+            if (inboxRepository.getPayloadHashByEventId(snapshot.eventId) == payloadHash) {
+                return SnapshotIngestionResult.DUPLICATE
+            }
+            throw SnapshotConflictException(
+                code = "EVENT_ID_CONFLICT",
+                message = "eventId was already used for another snapshot",
             )
         }
 
@@ -111,14 +114,6 @@ class SnapshotIngestionService(
             )
         }
     }
-}
-
-private fun classifyEventReplay(existingHash: String, payloadHash: String): SnapshotIngestionResult {
-    if (existingHash == payloadHash) return SnapshotIngestionResult.DUPLICATE
-    throw SnapshotConflictException(
-        code = "EVENT_ID_CONFLICT",
-        message = "eventId was already used for another snapshot",
-    )
 }
 
 private fun ScheduleSnapshot.toRow(

@@ -38,7 +38,7 @@ class CalendarSubscriptionRepository(
     fun findById(id: UUID): CalendarSubscriptionRow? =
         jdbcClient.sql(
             """
-            SELECT $COLUMNS
+            SELECT id, season_id, token_hash, credential_generation, status
             FROM calendar_subscription
             WHERE id = :id
             """.trimIndent(),
@@ -135,14 +135,4 @@ class CalendarSubscriptionRepository(
             .param("id", id)
             .param("expectedTokenHash", expectedTokenHash)
             .update() == 1
-
-    private companion object {
-        const val COLUMNS = """
-            id,
-            season_id,
-            token_hash,
-            credential_generation,
-            status
-        """
-    }
 }

@@ -45,7 +45,24 @@ class CalendarItemRepository(
     fun listBySeasonId(seasonId: UUID): List<CalendarItemRow> =
         jdbcClient.sql(
             """
-            SELECT $COLUMNS
+            SELECT
+                source_item_id,
+                season_id,
+                revision,
+                status,
+                summary,
+                description,
+                location,
+                time_type,
+                starts_at_instant,
+                ends_at_instant,
+                starts_at_local,
+                ends_at_local,
+                zone_id,
+                starts_on_date,
+                ends_on_date,
+                source_updated_at,
+                accepted_at
             FROM calendar_item
             WHERE season_id = :seasonId
             """.trimIndent(),
@@ -56,69 +73,91 @@ class CalendarItemRepository(
             .requireNoNulls()
 
     private fun upsert(candidate: CalendarItemRow): Boolean =
-        bindCandidate(
-            jdbcClient.sql(
-                """
-                INSERT INTO calendar_item (
-                    source_item_id,
-                    season_id,
-                    revision,
-                    status,
-                    summary,
-                    description,
-                    location,
-                    time_type,
-                    starts_at_instant,
-                    ends_at_instant,
-                    starts_at_local,
-                    ends_at_local,
-                    zone_id,
-                    starts_on_date,
-                    ends_on_date,
-                    source_updated_at,
-                    accepted_at
-                ) VALUES (
-                    :sourceItemId,
-                    :seasonId,
-                    :revision,
-                    :status,
-                    :summary,
-                    :description,
-                    :location,
-                    :timeType,
-                    :startsAtInstant,
-                    :endsAtInstant,
-                    :startsAtLocal,
-                    :endsAtLocal,
-                    :zoneId,
-                    :startsOnDate,
-                    :endsOnDate,
-                    :sourceUpdatedAt,
-                    :acceptedAt
-                )
-                ON CONFLICT (source_item_id) DO UPDATE SET
-                    revision = EXCLUDED.revision,
-                    status = EXCLUDED.status,
-                    summary = EXCLUDED.summary,
-                    description = EXCLUDED.description,
-                    location = EXCLUDED.location,
-                    time_type = EXCLUDED.time_type,
-                    starts_at_instant = EXCLUDED.starts_at_instant,
-                    ends_at_instant = EXCLUDED.ends_at_instant,
-                    starts_at_local = EXCLUDED.starts_at_local,
-                    ends_at_local = EXCLUDED.ends_at_local,
-                    zone_id = EXCLUDED.zone_id,
-                    starts_on_date = EXCLUDED.starts_on_date,
-                    ends_on_date = EXCLUDED.ends_on_date,
-                    source_updated_at = EXCLUDED.source_updated_at,
-                    accepted_at = EXCLUDED.accepted_at
-                WHERE calendar_item.season_id = EXCLUDED.season_id
-                  AND calendar_item.revision < EXCLUDED.revision
-                  AND calendar_item.source_updated_at < EXCLUDED.source_updated_at
-                """.trimIndent(),
-            ),
-            candidate,
+        jdbcClient.sql(
+            """
+            INSERT INTO calendar_item (
+                source_item_id,
+                season_id,
+                revision,
+                status,
+                summary,
+                description,
+                location,
+                time_type,
+                starts_at_instant,
+                ends_at_instant,
+                starts_at_local,
+                ends_at_local,
+                zone_id,
+                starts_on_date,
+                ends_on_date,
+                source_updated_at,
+                accepted_at
+            ) VALUES (
+                :sourceItemId,
+                :seasonId,
+                :revision,
+                :status,
+                :summary,
+                :description,
+                :location,
+                :timeType,
+                :startsAtInstant,
+                :endsAtInstant,
+                :startsAtLocal,
+                :endsAtLocal,
+                :zoneId,
+                :startsOnDate,
+                :endsOnDate,
+                :sourceUpdatedAt,
+                :acceptedAt
+            )
+            ON CONFLICT (source_item_id) DO UPDATE SET
+                revision = EXCLUDED.revision,
+                status = EXCLUDED.status,
+                summary = EXCLUDED.summary,
+                description = EXCLUDED.description,
+                location = EXCLUDED.location,
+                time_type = EXCLUDED.time_type,
+                starts_at_instant = EXCLUDED.starts_at_instant,
+                ends_at_instant = EXCLUDED.ends_at_instant,
+                starts_at_local = EXCLUDED.starts_at_local,
+                ends_at_local = EXCLUDED.ends_at_local,
+                zone_id = EXCLUDED.zone_id,
+                starts_on_date = EXCLUDED.starts_on_date,
+                ends_on_date = EXCLUDED.ends_on_date,
+                source_updated_at = EXCLUDED.source_updated_at,
+                accepted_at = EXCLUDED.accepted_at
+            WHERE calendar_item.season_id = EXCLUDED.season_id
+              AND calendar_item.revision < EXCLUDED.revision
+              AND calendar_item.source_updated_at < EXCLUDED.source_updated_at
+            """.trimIndent(),
         )
+            .param("sourceItemId", candidate.sourceItemId)
+            .param("seasonId", candidate.seasonId)
+            .param("revision", candidate.revision)
+            .param("status", candidate.status.name)
+            .param("summary", candidate.summary)
+            .param("description", candidate.description, Types.VARCHAR)
+            .param("location", candidate.location, Types.VARCHAR)
+            .param("timeType", candidate.timeType.name)
+            .param(
+                "startsAtInstant",
+                candidate.startsAtInstant?.atOffset(ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE,
+            )
+            .param(
+                "endsAtInstant",
+                candidate.endsAtInstant?.atOffset(ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE,
+            )
+            .param("startsAtLocal", candidate.startsAtLocal, Types.TIMESTAMP)
+            .param("endsAtLocal", candidate.endsAtLocal, Types.TIMESTAMP)
+            .param("zoneId", candidate.zoneId, Types.VARCHAR)
+            .param("startsOnDate", candidate.startsOnDate, Types.DATE)
+            .param("endsOnDate", candidate.endsOnDate, Types.DATE)
+            .param("sourceUpdatedAt", candidate.sourceUpdatedAt.atOffset(ZoneOffset.UTC))
+            .param("acceptedAt", candidate.acceptedAt.atOffset(ZoneOffset.UTC))
             .update() == 1
 
     private fun findRevisionState(sourceItemId: UUID): RevisionState =
@@ -133,61 +172,8 @@ class CalendarItemRepository(
             .query(RevisionState::class.java)
             .single()
 
-    private fun bindCandidate(
-        statement: JdbcClient.StatementSpec,
-        row: CalendarItemRow,
-    ): JdbcClient.StatementSpec =
-        statement
-            .param("sourceItemId", row.sourceItemId)
-            .param("seasonId", row.seasonId)
-            .param("revision", row.revision)
-            .param("status", row.status.name)
-            .param("summary", row.summary)
-            .param("description", row.description, Types.VARCHAR)
-            .param("location", row.location, Types.VARCHAR)
-            .param("timeType", row.timeType.name)
-            .param(
-                "startsAtInstant",
-                row.startsAtInstant?.atOffset(ZoneOffset.UTC),
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .param(
-                "endsAtInstant",
-                row.endsAtInstant?.atOffset(ZoneOffset.UTC),
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .param("startsAtLocal", row.startsAtLocal, Types.TIMESTAMP)
-            .param("endsAtLocal", row.endsAtLocal, Types.TIMESTAMP)
-            .param("zoneId", row.zoneId, Types.VARCHAR)
-            .param("startsOnDate", row.startsOnDate, Types.DATE)
-            .param("endsOnDate", row.endsOnDate, Types.DATE)
-            .param("sourceUpdatedAt", row.sourceUpdatedAt.atOffset(ZoneOffset.UTC))
-            .param("acceptedAt", row.acceptedAt.atOffset(ZoneOffset.UTC))
-
-    private companion object {
-        const val COLUMNS = """
-            source_item_id,
-            season_id,
-            revision,
-            status,
-            summary,
-            description,
-            location,
-            time_type,
-            starts_at_instant,
-            ends_at_instant,
-            starts_at_local,
-            ends_at_local,
-            zone_id,
-            starts_on_date,
-            ends_on_date,
-            source_updated_at,
-            accepted_at
-        """
-
-        data class RevisionState(
-            val seasonId: UUID,
-            val revision: Int,
-        )
-    }
+    private data class RevisionState(
+        val seasonId: UUID,
+        val revision: Int,
+    )
 }

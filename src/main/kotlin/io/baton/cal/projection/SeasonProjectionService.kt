@@ -113,13 +113,10 @@ class SeasonProjectionService(
         existing: SeasonFeedProjectionMetadata?,
         etag: String,
         renderedLastModified: Instant,
-    ): Instant {
-        val currentSecond = clock.instant().truncatedTo(ChronoUnit.SECONDS)
-        return when {
-            existing == null -> renderedLastModified
-            existing.etag == etag -> existing.lastModified
-            else -> currentSecond
-        }
+    ): Instant = when {
+        existing == null -> renderedLastModified
+        existing.etag == etag -> existing.lastModified
+        else -> clock.instant().truncatedTo(ChronoUnit.SECONDS)
     }
 }
 
