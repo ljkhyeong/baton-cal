@@ -8,6 +8,8 @@
   [후속 기능 검토](docs/reviews/2026-09-12-feature-review.md)에 채택 근거와 보류 항목을 정리했다.
 - 개정 번호·복구 건수의 소수·지수 표기를 정수로 잘라 받던 동작을 차단했다. `0.5`, `1.0`, `1e0`은
   저장 전에 `400 INVALID_REQUEST`로 반환한다. 타임스탬프의 소수 초와 허용된 `null`은 유지한다.
+- 문자열 필드의 숫자·불리언 입력도 변환 없이 `400 INVALID_REQUEST`로 반환한다. 정상 문자열과
+  허용된 필드 생략·`null`은 유지하며 Jackson의 타입별 설정을 사용한다.
 - DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패와 시간 초과는 `503 SERVICE_BUSY`와 재시도 간격을 반환한다.
   교착 상태·직렬화 실패는 Spring의 공통 잠금 실패 예외로 처리한다. 실제 연결 풀 고갈 테스트에서는
   연결 반환 후 기존 구독 조회와 같은 ID의 발급 재시도가 정상 처리되는지 확인했다.
@@ -43,17 +45,17 @@
 
 ## 최근 검증
 
-- 2026-09-12 정수 입력: 기준 `c2ab304` 이후 설정·테스트·계약 변경을 `a242bc9`로 커밋했다.
+- 2026-09-12 문자열 입력: 기준 `8e2c7fb` 이후 설정·테스트·계약 변경을 `b417560`으로 커밋했다.
   `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.SnapshotInputContractTest'
-  --tests 'io.baton.cal.web.SeasonCalendarMetadataHttpTest' --tests 'io.baton.cal.web.RecoveryManifestHttpTest'`로
-  소수·지수 표기 9건의 기존 `200` 응답을 재현했다. 수정 후 관련 38개 테스트가 통과했고 미저장·정수로
-  수정한 요청의 정상 처리·오류 스키마와 기존 소수 초·nullable 필드를 확인했다.
-  `./gradlew --no-daemon --max-workers=2 check`는 일반 141개·구조 3개 테스트와 계약 ZIP을 통과했다.
+  --tests 'io.baton.cal.web.SeasonCalendarMetadataHttpTest'`로 문자열 필드의 숫자·불리언 입력 12건이
+  기존에 `200`으로 처리되는 것을 재현했다. 수정 후 관련 34개 테스트가 통과했고 오류 응답·미저장·
+  정상 문자열 재요청·Unicode·줄바꿈·선택 필드와 기존 정수 입력 규칙을 확인했다.
+  `./gradlew --no-daemon --max-workers=2 check`는 일반 153개·구조 3개 테스트와 계약 ZIP을 통과했다.
   Java 25·Spring Boot 4.1.1·Jackson 3.1.5·PostgreSQL 18.6, 실패·제외 없음. 4개 작업을 새로 실행하고
   검사 스크립트 11개를 포함한 6개 작업은 Gradle의 기존 성공 결과를 재사용했다.
-  로그: `/private/tmp/baton-cal-integer-before.log`, `/private/tmp/baton-cal-integer-after.log`,
-  `/private/tmp/baton-cal-integer-check.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
-  이후에는 검증 기록만 수정했다. HTTP JSON 파싱 설정만 바꿨으며 DB 처리·배포 구성은 같다.
+  로그: `/private/tmp/baton-cal-text-types-before.log`, `/private/tmp/baton-cal-text-types-after.log`,
+  `/private/tmp/baton-cal-text-types-check.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
+  이후에는 검증 기록만 수정했다. HTTP JSON 바인딩 설정만 바꿨으며 DB 처리·배포 구성은 같다.
   변경 이미지 빌드·운영 스모크는 미실행이며 새 CI는 미푸시로 실행하지 않았다.
 - 2026-09-12 공개 경로: 기준 `c6e5615` 이후 운영 설정·검증 스크립트를 `c85312d`로 커밋했다.
   `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 빈 `404`·프록시 HTML `404` 구분,
