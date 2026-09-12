@@ -63,14 +63,16 @@
 
 ## 최근 검증
 
-- 최신 검증은 `e1467d1`에 저장소·일정 수신·투영 코드 정리를 더한 미커밋 상태에서 실행했다.
-  일회용 SQL 상수·바인딩 함수·재전달 판정 함수를 합치고, 표현이 바뀔 때만 현재 시각을 조회한다.
-  SQL 조건·타입·오류 응답·잠금·입력 검증은 유지하며 운영 코드 4개 파일에서 32줄을 줄였다.
-  `./gradlew --no-daemon --max-workers=2 check bootJar`로 일반 테스트 165개·구조 검사 3개·계약 검사와
-  JAR 빌드가 통과했다. 실패·제외는 없고 검사 스크립트의 기존 성공 결과는 재사용했다.
-  Java 25.0.3·PostgreSQL 18.6, Gradle 작업 7개 실행·5개 결과 재사용이다.
-  로그: `/private/tmp/baton-cal-code-cleanup-check.log`. 웹훅·이미지·운영 입력은 변경하지 않아
-  관련 스모크·이미지 빌드·실제 운영 검증은 실행하지 않았다.
+- 최신 검증은 `f67745e`에 복구 모델 정리를 더한 미커밋 상태에서 실행했다. `RecoverySeasonState`로
+  저장·조회·비교를 통일하고 중간 행 모델과 필드 복사를 제거해 운영 코드 2개 파일에서 26줄을 줄였다.
+  저장 열·검증 시각·잠금·해시·HTTP 응답은 유지한다. 완료 재요청 테스트는 DB 전체 열을 비교한다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'
+  --tests 'io.baton.cal.web.RecoveryModeHttpTest' --tests 'io.baton.cal.recovery.RecoveryManifestDigestTest'
+  verifyContractsZip bootJar`로 테스트 18개·계약 검사·JAR 빌드가 통과했다. 실패·제외는 없다.
+  Java 25.0.3·PostgreSQL 18.6, Gradle 작업 4개 실행·6개 결과 재사용이다.
+  로그: `/private/tmp/baton-cal-recovery-model-cleanup.log`. 복구 외 코드·의존성·설정은 `cbc4ab8`의
+  전체 검증(일반 165개·구조 3개, `/private/tmp/baton-cal-code-cleanup-check.log`)과 같아 재실행하지 않았다.
+  웹훅 스모크·이미지 빌드·실제 운영 검증은 실행하지 않았다.
 - 웹훅 실패 검증 기준은 `b0369f0`다. 웹훅 스모크·모의 수신기와 문서만 변경했다.
   `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개가 통과했다.
   각 메시지에 `429`·`503`을 순서대로 반환한 뒤 장애·복구 메시지 각 1건의 수신, 정상 신호 분리와
@@ -131,7 +133,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 코드 정리는 전체 테스트를 실행했으며, 외부 웹훅과 운영 연결 검증은 기존 기록과 구분한다.
+이번 코드 정리는 복구 관련 테스트를 실행했으며, 나머지 검증은 위 기준으로 재사용했다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
