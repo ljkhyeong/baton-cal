@@ -12,6 +12,38 @@ tests:
               description: 외부 점검 서비스에 주기적으로 보내는 신호입니다. 장애 알림이 아닙니다.
   - interval: 1m
     input_series:
+      - series: 'probe_success{job="baton-cal-public",instance="cal.b4ton.com"}'
+        values: '0+0x2 1+0x2'
+    alert_rule_test:
+      - {eval_time: 0m, alertname: CalPublicRouteFailed, exp_alerts: []}
+      - eval_time: 2m
+        alertname: CalPublicRouteFailed
+        exp_alerts:
+          - exp_labels:
+              job: baton-cal-public
+              instance: cal.b4ton.com
+              severity: critical
+            exp_annotations:
+              summary: CAL 공개 경로 확인 실패
+              description: 공개 캘린더 경로가 예상한 빈 404를 반환하지 않습니다. 프록시와 CAL 연결을 확인합니다.
+      - {eval_time: 4m, alertname: CalPublicRouteFailed, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'up{job="baton-cal-public",instance="cal.b4ton.com"}'
+        values: '0+0x2'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CalPublicRouteFailed
+        exp_alerts:
+          - exp_labels:
+              job: baton-cal-public
+              instance: cal.b4ton.com
+              severity: critical
+            exp_annotations:
+              summary: CAL 공개 경로 확인 실패
+              description: 공개 캘린더 경로가 예상한 빈 404를 반환하지 않습니다. 프록시와 CAL 연결을 확인합니다.
+  - interval: 1m
+    input_series:
       - series: 'probe_success{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
         values: '0+0x10'
     alert_rule_test:

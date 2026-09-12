@@ -42,6 +42,13 @@ groups:
         annotations:
           summary: CAL HTTPS 인증서 확인 실패
           description: cal.b4ton.com의 인증서 이름·인증서 체인과 HTTPS 연결을 확인합니다.
+      - alert: CalPublicRouteFailed
+        expr: probe_success{job="baton-cal-public"} == 0 or up{job="baton-cal-public"} == 0
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: CAL 공개 경로 확인 실패
+          description: 공개 캘린더 경로가 예상한 빈 404를 반환하지 않습니다. 프록시와 CAL 연결을 확인합니다.
       - alert: CalCertificateExpiresSoon
         expr: probe_ssl_earliest_cert_expiry{job="baton-cal-tls"} - time() < 14 * 24 * 60 * 60
         for: 10m

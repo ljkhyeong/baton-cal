@@ -13,3 +13,16 @@ modules:
       tls: true
       tls_config:
         server_name: cal.b4ton.com
+  cal_public_route:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [404]
+      follow_redirects: false
+      fail_if_not_ssl: true
+      headers:
+        Host: cal.b4ton.com
+      tls_config:
+        server_name: cal.b4ton.com
+      fail_if_body_not_matches_regexp: ['^$']

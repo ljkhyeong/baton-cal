@@ -92,6 +92,18 @@ grep -q '^probe_ssl_earliest_cert_expiry ' "$scratch/tls-probe"
 grep -q '^probe_success 0$' "$scratch/tls-rejected"
 echo "Blackbox의 인증서 검증·만료 시각 수집과 TLS 연결 실패 탐지를 확인했습니다."
 
+"${request[@]}" --fail --get --data-urlencode module=cal_public_route \
+  --data-urlencode target=https://gateway/calendars/v1/monitoring-probe.ics \
+  "$blackbox_url/probe" > "$scratch/public-probe"
+grep -q '^probe_success 1$' "$scratch/public-probe"
+grep -q '^probe_http_status_code 404$' "$scratch/public-probe"
+# Nginx의 차단 페이지도 404이므로, 본문이 있는 응답은 정상으로 보지 않아야 한다.
+"${request[@]}" --fail --get --data-urlencode module=cal_public_route --data-urlencode target=https://gateway/ \
+  "$blackbox_url/probe" > "$scratch/public-rejected"
+grep -q '^probe_success 0$' "$scratch/public-rejected"
+grep -q '^probe_http_status_code 404$' "$scratch/public-rejected"
+echo "실제 구독 토큰 없이 공개 경로를 확인하고, 프록시의 404 오류 페이지를 구분했습니다."
+
 "${request[@]}" --fail -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
   -H 'Content-Type: application/json' --data-binary @"$project_directory/contracts/examples/schedule-snapshot.utc-active.json" \
   "$internal_url/internal/api/v1/schedule-snapshots" > /dev/null
@@ -140,14 +152,14 @@ done
 jq -e '.data.result[0].value[1] == "1"' "$scratch/query.json" >/dev/null
 
 wait_alert() {
-  local expected=$1
+  local name=$1 expected=$2
   for ((attempt=0; attempt<100; attempt++)); do
     "${request[@]}" --fail "$receiver_url/alerts" > "$scratch/alerts.json"
-    if jq -e --arg state "$expected" --argjson offset "$alert_offset" 'any(.[$offset:][]; .alertname == "CalReadinessFailed" and .status == $state)' \
+    if jq -e --arg name "$name" --arg state "$expected" --argjson offset "$alert_offset" 'any(.[$offset:][]; .alertname == $name and .status == $state)' \
       "$scratch/alerts.json" >/dev/null; then return 0; fi
     sleep 1
   done
-  echo "준비 상태 알림의 $expected 전달을 확인하지 못했습니다." >&2
+  echo "$name 알림의 $expected 전달을 확인하지 못했습니다." >&2
   return 1
 }
 alert_offset=$("${request[@]}" --fail "$receiver_url/alerts" | jq length)
@@ -161,12 +173,14 @@ if [[ "$status" != 502 && "$status" != 504 ]]; then
   exit 1
 fi
 echo "CAL 중단 후 프록시의 $status 응답을 확인했습니다."
-wait_alert firing
-echo "CAL 중단으로 발생한 준비 상태 실패 알림이 로컬 수신기에 도착했습니다."
+wait_alert CalReadinessFailed firing
+wait_alert CalPublicRouteFailed firing
+echo "CAL 중단으로 발생한 준비 상태·공개 경로 실패 알림이 로컬 수신기에 도착했습니다."
 alert_offset=$("${request[@]}" --fail "$receiver_url/alerts" | jq length)
 "${compose[@]}" start app
 wait_ready
-wait_alert resolved
+wait_alert CalReadinessFailed resolved
+wait_alert CalPublicRouteFailed resolved
 echo "CAL 재시작 뒤 알림 해제 전달을 확인했습니다."
 
 heartbeat_count() {
