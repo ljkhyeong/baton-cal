@@ -222,13 +222,13 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 이름 변경은 일정 UID·SEQUENCE와 구독 URL을 바꾸지 않는다. 같은 개정 번호의 다른 이름은 충돌이며,
 중복·낮은 개정 번호는 현재 값을 반환한다. 복구 모드에서도 사용할 수 있다. BATON은 최초 시즌·
 이름 수정·다음 시즌 생성에서 V29 전용 이름 아웃박스를 기록하고 기존 전달 작업자로 전송한다.
-`BATON_CAL_SEASON_METADATA_ENABLED`는 기본 `false`이며 안정 계약 핀은 `1.0.0`을 유지한다.
+`BATON_CAL_SEASON_METADATA_ENABLED`는 기본 `false`이며 BATON의 검증 계약은 `1.1.0-rc.2`다.
 BATON의 `BATON_CAL_SEASON_METADATA_MAINTENANCE`는 기본 `OFF`다. `BACKFILL`은 기존 시즌과
 캡처 중단 기간의 이름을 보정하고, `REPLAY`는 보정 뒤 최신 이름 행을 같은 개정 번호로 재전달 대기에
 넣는다. 이름 연동·캡처를 켜고 전달을 끈 상태에서 준비한 뒤, 모드를 `OFF`로 되돌려 전달한다.
 계약 오류로 실패한 행은 자동 재처리하지 않는다. 이 준비 완료 자체는 CAL 수신 완료가 아니며,
 BATON이 같은 복구 ID로 최신 일정·시즌 이름 아웃박스의 전달 완료와 CAL 매니페스트 검증까지
-마쳐야 전체 복구 완료가 된다. 후보 계약 채택과 실제 캘린더 앱 검증은 남아 있다.
+마쳐야 전체 복구 완료가 된다. 실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 자세한 제약은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)을 따른다.
 
 BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 복구 키로 보호한
@@ -308,7 +308,7 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실�
 ./gradlew --no-daemon verifyContractsZip
 ```
 
-계약 버전은 `contracts/VERSION`에서 관리하며 현재 작업 후보는 `1.1.0-rc.2`이다. 따라서 결과는
+계약 버전은 `contracts/VERSION`에서 관리하며 현재 게시된 후보는 `1.1.0-rc.2`이다. 따라서 결과는
 `build/distributions/baton-cal-contracts-1.1.0-rc.2.zip`이고, ZIP 안에도 같은
 `contracts/VERSION`이 들어간다. 후보 릴리스 태그는 `contracts-v1.1.0-rc.2`이며 파일명, ZIP 내부
 버전과 태그가 모두 같은 버전을 가리켜야 한다. ZIP은 루트 `LICENSE`, `contracts/**` 전체와 필드 간
@@ -323,13 +323,13 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 병합하지 않는 `release/contracts-` 풀 리퀘스트는 일반 merge 검증과 별도로 브랜치의 정확한 HEAD를
 체크아웃해 계약 ZIP을 검증하고 별도 산출물로 올린다.
 
-BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산
 `baton-cal-contracts-1.0.0.zip`의 SHA-256은
 `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
 릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 계약 테스트를
 완료했다. 이 자산에는 루트 `LICENSE`가 없으므로 계약 의미를 유지한 `1.0.1` 호환 보완판으로
-재포장해 BATON이 사용하는 버전과 해시를 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
+재포장할 수 있다. 현재 BATON은 아래 `1.1.0-rc.2`로 연동을 검증한다. 사전 릴리스 이력과 다음 버전 규칙은
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
 [계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 
@@ -341,9 +341,10 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
 포함한다. BATON이 게시 자산과 요청 스키마를 고정해 실제 컨테이너 교차 서비스 검증을 완료했다.
 정식 `1.1.0` 승격 전까지 현재 운영 안정 기준은 계속 `1.0.0`이다.
 
-현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 고정된 복원 매니페스트
-예시를 추가했다.
-아직 게시하거나 BATON의 사용 버전으로 지정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
+공식 후보 [`1.1.0-rc.2`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.2)는 일정 묶음 수신,
+ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 입력·응답 처리를 보완했다. 릴리스·ZIP 증명을 검증하고
+BATON `7a064bcd`에 버전·해시를 고정했다. 클라이언트 29개·실제 컨테이너 교차 서비스 5개 테스트가 통과했다.
+실제 캘린더 앱 검증·운영 활성화와 BATON의 묶음 전송은 남아 있다. 게시된 ZIP을 바꾸는 후속 변경은 새 버전으로 만든다.
 
 ## OCI 이미지 검증
 

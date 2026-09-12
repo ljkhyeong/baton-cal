@@ -5,7 +5,7 @@
 [계약 팩](../contracts/README.md), 게시 명령은 [계약 릴리스 절차](contract-release-procedure.md),
 다음 개발 작업은 [HANDOFF](../HANDOFF.md)가 맡는다.
 
-## 현재 생산자 기준
+## 안정 계약 기준
 
 | 항목 | 값 |
 | --- | --- |
@@ -43,28 +43,24 @@ gh release verify-asset contracts-v1.0.0 baton-cal-contracts-1.0.0.zip
 
 | 항목 | 값 |
 | --- | --- |
-| 버전 | `1.1.0-rc.1` |
-| 불변 태그 | `contracts-v1.1.0-rc.1` |
-| 태그 커밋 | `f1573edef1adf900570cd55f9bd7d7044566b6bd` |
-| 자산 | `baton-cal-contracts-1.1.0-rc.1.zip` |
-| 자산 SHA-256 | `7ac97568c8b10e4ac2dadb9d463312c1a5985c424a3a3a9e69c2bd8ee6dd376f` |
-| 변경 의미 | JSON 구조 제한, `prod` 데이터베이스 기본값 차단, HTTP 표준에 맞춘 Last-Modified 상한과 ETag 우선 판정, 재활성화·500 비노출, 데이터베이스 제한 시간의 `503 SERVICE_BUSY`, iCal4j 4.3.0 단일 시간대 규칙 권위 회귀 검증, 시즌 이름과 전체 복구 매니페스트·완료 계약 |
-| 릴리스 | [BATON CAL 계약 1.1.0-rc.1](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.1) |
-| 상태 | 릴리스·자산 증명, BATON 자산·요청 스키마 고정과 실제 컨테이너 생산자 교차 서비스 검증 완료 |
+| 버전 | `1.1.0-rc.2` |
+| 불변 태그 | `contracts-v1.1.0-rc.2` |
+| 태그 커밋 | `3ba5889b6396749df74ac0e181da24337221fa56` |
+| 자산 | `baton-cal-contracts-1.1.0-rc.2.zip` (58,641 bytes) |
+| 자산 SHA-256 | `6b2feb97eae937a930e39d1cd4dbe7e156777a5e314bbce1a27600f20426c208` |
+| 변경 의미 | 일정 묶음 수신, ID 지정 구독 생성, 복구 실행·시즌 진단 조회, 입력 타입 제한, HEAD 본문 조회 생략, DB 장애 재시도 안내와 상태 오류 캐시 금지 |
+| 릴리스 | [BATON CAL 계약 1.1.0-rc.2](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.1.0-rc.2), [릴리스 노트](releases/contracts-v1.1.0-rc.2.md) |
+| BATON 적용 | `7a064bcd`에서 버전·자산 해시와 구독·복구 스키마 출처 갱신. [BATON PR #21](https://github.com/ljkhyeong/baton/pull/21) |
+| 검증 | 릴리스·ZIP 증명 통과. BATON 스키마 9개와 공식 ZIP의 바이트 일치, 클라이언트 테스트 29개·실제 컨테이너 교차 서비스 테스트 5개 통과 |
 
-이 후보는 생산자 검증 기준이며 운영 안정 기준은 정식 버전 승격 전까지 `1.0.0`이다.
+2026-09-12 `gh release verify`와 `gh release verify-asset`으로 게시 증명과 자산을 검증했다.
+이 후보는 생산자 검증 기준이며 정식 버전 승격 전까지 안정 계약은 `1.0.0`이다.
+실제 캘린더 앱 검증·운영 활성화와 BATON의 묶음 전송 연결은 남아 있다.
 
 ## 게시 이력
 
-현재 로컬 작업 후보는 `1.1.0-rc.2`다. ID 지정 구독 생성 PUT과 중복·시즌 충돌 응답,
-복구 실행·시즌 진단 GET과 실제 복원 스모크에서 사용하는 고정 다이제스트 예시를 추가했다.
-공개 HEAD의 본문 조회 생략, DB 연결 실패의 재시도 안내와 상태 오류의 캐시 금지도 반영했다.
-[릴리스 노트](releases/contracts-v1.1.0-rc.2.md)는 작성했으며, 게시와 BATON 공식 자산 고정은 남아 있다.
-게시된 `1.1.0-rc.1`과 운영 안정 기준 `1.0.0`은 유지한다.
-BATON의 개인 구독·복구 진단 소비에 이어 로컬 커밋 `5a6b848`에서 열람자 발급·팀 권한 회수·본인
-해지 정책을 연결했다. CAL 실행 소스는 `7a757ef`이며 실제 HTTP 폐기 후 이전 주소의 404를 검증했다.
-`contracts/baton-cal/candidate`의 소스 커밋·스키마 해시 고정은 개발 검증용이며
-게시된 자산·증명에 의한 정식 고정을 대신하지 않는다.
+BATON의 `contracts/baton-cal/candidate`는 기존 경로를 유지하지만 현재 스키마 출처는 공식 `rc.2`
+자산이다. 이전 개발 소스 검증 기록은 Git 이력에 보존한다.
 
 | 버전 | 태그 커밋 | 자산 SHA-256 | 결과 |
 | --- | --- | --- | --- |
@@ -72,6 +68,7 @@ BATON의 개인 구독·복구 진단 소비에 이어 로컬 커밋 `5a6b848`�
 | `1.0.0-rc.2` | `730ae49a8b8eccf10e8f84f93b8a6a9d0fd24549` | `75120a7d21b6ea78c1e8bdab60829899525c1607262119053ea5904b57bd1eaf` | 세 시간 형태와 실제 BATON 생산자 연동 검증 완료 |
 | `1.0.0` | `fd081a742b7c09a7ace53bb445ce1380c533c19e` | `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7` | 계약 의미 변경 없이 안정 버전으로 승격하고 BATON 고정 완료 |
 | `1.1.0-rc.1` | `f1573edef1adf900570cd55f9bd7d7044566b6bd` | `7ac97568c8b10e4ac2dadb9d463312c1a5985c424a3a3a9e69c2bd8ee6dd376f` | 시즌 이름·복구 완료 계약을 게시하고 BATON 생산자 교차 서비스 검증 완료 |
+| `1.1.0-rc.2` | `3ba5889b6396749df74ac0e181da24337221fa56` | `6b2feb97eae937a930e39d1cd4dbe7e156777a5e314bbce1a27600f20426c208` | 묶음 수신·구독·복구 진단 계약 게시, BATON 공식 자산 고정과 교차 서비스 검증 완료 |
 
 게시된 사전 릴리스와 안정 릴리스는 교체하거나 같은 태그로 다시 만들지 않는다.
 
