@@ -4,6 +4,8 @@
 
 ## 주요 변경
 
+- 개정 번호와 건수의 소수·지수 표기를 정수로 잘라 받던 동작을 수정했다. `0.5`, `1.0`, `1e0`은
+  `400 INVALID_REQUEST`로 거부한다. 소수점·지수 없는 정수로 보내야 하며 타임스탬프의 소수 초는 유지한다.
 - `PUT /internal/api/v1/subscriptions/{subscriptionId}`로 BATON이 미리 저장한 ID를 사용해 구독을 생성한다.
   최초 성공만 `201`과 토큰을 반환한다. 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`,
   다른 시즌은 `409 SUBSCRIPTION_SCOPE_CONFLICT`이며 기존 토큰·상태·세대를 보존한다.

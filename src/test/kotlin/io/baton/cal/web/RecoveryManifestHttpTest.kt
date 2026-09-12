@@ -86,6 +86,48 @@ class RecoveryManifestHttpTest @Autowired constructor(
         readRunStatus("COMPLETED", 0)
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = ["itemCount", "metadataRevision"])
+    fun `복구 매니페스트의 소수 건수와 개정 번호는 검증 기록을 남기지 않는다`(field: String) {
+        updateMetadata()
+        val state = repository.currentSeasonState(SEASON_ID)
+        val payload = """
+            {
+              "itemCount": 0,
+              "itemDigest": "${state.itemDigest}",
+              "metadataRevision": 2,
+              "metadataDigest": "${state.metadataDigest}"
+            }
+        """.trimIndent()
+        val invalid = when (field) {
+            "itemCount" -> payload.replace("\"itemCount\": 0", "\"itemCount\": 0.5")
+            else -> payload.replace("\"metadataRevision\": 2", "\"metadataRevision\": 2.5")
+        }
+        val response = mockMvc.perform(
+            seasonManifestRequest(0, state.itemDigest, 2, state.metadataDigest).content(invalid),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 정수 입력 오류 응답")
+        assertThat(repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))).isEmpty()
+        verifySeason(0, state.itemDigest, 2, state.metadataDigest)
+    }
+
+    @Test
+    fun `소수인 시즌 수는 복구 완료 기록을 남기지 않는다`() {
+        val payload = completionPayload(emptyList())
+        val response = mockMvc.perform(
+            completionRequest(payload.replace("\"seasonCount\": 0", "\"seasonCount\": 0.5")),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 완료 정수 입력 오류 응답")
+        assertThat(repository.findCompletion(UUID.fromString(RECOVERY_ID))).isNull()
+        complete(payload)
+    }
+
     @Test
     fun `시즌 진단은 복구 실행이 없어도 일정과 이름 불일치를 나누어 확인한다`() {
         ingest("schedule-snapshot.zoned-cancelled.json")

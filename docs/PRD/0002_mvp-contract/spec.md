@@ -383,6 +383,11 @@ BATON 최종 사용자 Bearer 토큰, 워크스페이스 키 또는 세션을 �
 오류는 달리 명시하지 않으면 `application/json`과 `api-error.v1`의 `{code, message}`를 쓴다.
 응답과 애플리케이션 로그에는 토큰이나 피드 URL을 넣지 않는다.
 
+개정 번호(`revision`, `metadataRevision`)와 건수(`itemCount`, `seasonCount`)는 소수점·지수·따옴표 없는
+정수로 보낸다. `0.5`, `-0.5`, `1.0`, `1e0`, `"1"`은 `400 INVALID_REQUEST`로 거부하고 저장하지 않는다.
+`metadataRevision`의 허용된 `null`과 타임스탬프의 소수 초는 유지한다. JSON Schema는 수학적으로 같은
+`1`과 `1.0`을 구분하지 않으므로 이 숫자 표기 조건은 HTTP 파싱에 별도로 적용한다.
+
 JSON 요청은 공백과 구조를 포함한 전체 문서 128 KiB(131,072바이트), 필드명 64자, 중첩 16단계,
 숫자 10자리와 토큰 256개 이하여야 한다. 이 제한은 DTO·JSON Schema의 개별 필드 제약과 별도로
 Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면

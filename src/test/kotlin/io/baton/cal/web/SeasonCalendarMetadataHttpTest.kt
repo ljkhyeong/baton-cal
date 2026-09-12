@@ -130,6 +130,8 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
             .andExpect(status().isBadRequest)
         listOf(
             valid.replace("\"revision\": 0", "\"revision\": -1"),
+            valid.replace("\"revision\": 0", "\"revision\": 0.5"),
+            valid.replace("\"revision\": 0", "\"revision\": -0.5"),
             valid.replace("BATON 개발 시즌", ""),
             valid.replace("BATON 개발 시즌", "가".repeat(513)),
             valid.replace("BATON 개발 시즌", "이름\\r주입"),

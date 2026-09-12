@@ -1,7 +1,10 @@
 package io.baton.cal.web
 
+import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.support.PostgreSqlTestContainer
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
@@ -42,6 +45,14 @@ class SnapshotInputContractTest @Autowired constructor(
     @Test
     fun `integer fields reject string coercion`() {
         assertInvalid(utcSnapshot().replace("\"revision\": 0", "\"revision\": \"0\""))
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["0.5", "-0.5", "1e-1", "1.0", "1e0"])
+    fun `개정 번호의 소수와 지수 표기는 저장하지 않고 정수로 수정한 요청은 처리한다`(revision: String) {
+        val payload = utcSnapshot()
+        assertInvalid(payload.replace("\"revision\": 0", "\"revision\": $revision"))
+        assertApplied(payload)
     }
 
     @Test
@@ -194,7 +205,7 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     private fun assertInvalid(payload: String) {
-        mockMvc.perform(
+        val response = mockMvc.perform(
             post(SNAPSHOT_PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -203,6 +214,8 @@ class SnapshotInputContractTest @Autowired constructor(
             .andExpect(status().isBadRequest)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "스냅샷 입력 오류 응답")
     }
 
     private fun assertApplied(payload: String) {
