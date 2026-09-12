@@ -22,12 +22,8 @@ for required in docker jq python3; do command -v "$required" >/dev/null; done
 
 # 실제 메시지를 보내지 않도록 외부 통신이 차단된 검증 네트워크를 사용한다.
 docker network create --internal "$project_name" > /dev/null
-docker run --detach --name "$receiver" --network "$project_name" --network-alias alert-receiver \
-  --volume "$project_directory/scripts/fixtures/alert-receiver.py:/app/receiver.py:ro" \
-  --volume "$scratch:/data:ro" \
-  python:3.14.7-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5 \
-  python /app/receiver.py > /dev/null
 receiver_url=http://127.0.0.1:8080
+printf '%s\n' http://alert-receiver:8080/healthchecks/smoke-secret-marker > "$scratch/healthchecks-url"
 
 wait_message() {
   local title=$1
@@ -42,21 +38,36 @@ wait_message() {
   return 1
 }
 
-for channel in alertmanager slack discord; do
+for configuration in alertmanager slack discord slack-healthchecks discord-healthchecks; do
+  channel=${configuration%-healthchecks}
+  watchdog_receiver=discard
+  if [[ "$configuration" == *-healthchecks ]]; then watchdog_receiver=healthchecks; fi
   printf '%s\n' "http://alert-receiver:8080/$channel/smoke-secret-marker" > "$scratch/webhook-url"
+  config_volumes=(
+    --volume "$project_directory/operations/alertmanager/$configuration.yml:/config.yml:ro"
+    --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro"
+    --volume "$scratch/healthchecks-url:/run/secrets/healthchecks-ping-url:ro"
+  )
   docker run --rm --network none --entrypoint amtool \
-    --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
-    --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \
+    "${config_volumes[@]}" \
     "$alertmanager_image" check-config /config.yml > /dev/null
   docker run --rm --network none --entrypoint amtool \
-    --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
-    --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \
+    "${config_volumes[@]}" \
     "$alertmanager_image" config routes test --config.file=/config.yml \
-    --verify.receivers=discard alertname=CalWatchdog > /dev/null
+    --verify.receivers="$watchdog_receiver" alertname=CalWatchdog > /dev/null
+  docker run --rm --network none --entrypoint amtool \
+    "${config_volumes[@]}" \
+    "$alertmanager_image" config routes test --config.file=/config.yml \
+    --verify.receivers=operations alertname=CalTlsFailed > /dev/null
   if [[ "$channel" == alertmanager ]]; then continue; fi
+  # 조합마다 새 수신기를 사용해 이전 수신 기록이 검증에 섞이지 않게 한다.
+  docker run --detach --name "$receiver" --network "$project_name" --network-alias alert-receiver \
+    --volume "$project_directory/scripts/fixtures/alert-receiver.py:/app/receiver.py:ro" \
+    --volume "$scratch:/data:ro" \
+    python:3.14.7-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5 \
+    python /app/receiver.py > /dev/null
   docker run --detach --name "$sender" --network "$project_name" --network-alias alert-sender \
-    --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
-    --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \
+    "${config_volumes[@]}" \
     "$alertmanager_image" --config.file=/config.yml --cluster.listen-address= > /dev/null
   sender_url=http://alert-sender:9093
   for ((attempt=0; attempt<30; attempt++)); do
@@ -70,21 +81,27 @@ import json
 import sys
 now = datetime.now(timezone.utc)
 print(json.dumps([{
-    "labels": {"alertname": "CalTlsFailed"},
+    "labels": {"alertname": name},
     "annotations": {"summary": "HTTPS 연결 확인", "description": "스모크 테스트"},
     "startsAt": (now - timedelta(minutes=1)).isoformat(),
     "endsAt": (now + timedelta(minutes=5) if sys.argv[1] == "firing" else now).isoformat(),
-}]))
+} for name in ("CalTlsFailed", "CalWatchdog")]))
 PY
     request --header 'Content-Type: application/json' --post-file /data/alert.json \
       "$sender_url/api/v2/alerts" > /dev/null
     if [[ "$state" == firing ]]; then wait_message '장애 발생: CalTlsFailed'; else wait_message '복구: CalTlsFailed'; fi
   done
+  request "$receiver_url/alerts" > "$scratch/events.json"
+  jq -e --arg channel "$channel" --arg watchdog "$watchdog_receiver" \
+    '([.[] | select(.channel == $channel)] | length == 2) and
+     (all(.[] | select(.channel == $channel); .title | contains("CalWatchdog") | not)) and
+     (([.[] | select(.channel == "healthchecks")] | length > 0) == ($watchdog == "healthchecks"))' \
+    "$scratch/events.json" > /dev/null
   docker logs "$sender" > "$scratch/sender.log" 2>&1
   if grep -Fq smoke-secret-marker "$scratch/sender.log"; then
     echo "알림 로그에 웹훅 주소가 기록됐습니다." >&2
     exit 1
   fi
-  docker rm --force "$sender" > /dev/null
-  echo "$channel 기본 연동의 알림 발생·해제와 웹훅 주소 비노출을 확인했습니다."
+  docker rm --force "$sender" "$receiver" > /dev/null
+  echo "$configuration 알림 발생·해제, 정상 신호 분리와 웹훅 주소 비노출을 확인했습니다."
 done
