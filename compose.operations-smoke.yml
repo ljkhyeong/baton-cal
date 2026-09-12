@@ -1,4 +1,12 @@
 services:
+  blackbox:
+    environment:
+      SSL_CERT_FILE: /etc/blackbox/smoke-ca.pem
+    volumes:
+      - ${CAL_TLS_DIRECTORY}/live/cal.b4ton.com/fullchain.pem:/etc/blackbox/smoke-ca.pem:ro
+    ports:
+      - target: 9115
+        host_ip: 127.0.0.1
   app:
     pull_policy: never
     ports:

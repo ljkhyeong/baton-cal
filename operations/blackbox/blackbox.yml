@@ -5,3 +5,11 @@ modules:
     http:
       preferred_ip_protocol: ip4
       follow_redirects: false
+  cal_tls:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+      tls: true
+      tls_config:
+        server_name: cal.b4ton.com

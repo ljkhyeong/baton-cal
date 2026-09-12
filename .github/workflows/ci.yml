@@ -79,7 +79,9 @@ jobs:
 
       - &smoke-operations
         name: HTTPS 프록시와 운영 알림 스모크 검증
-        run: ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
+        run: |
+          ./scripts/smoke-operations.sh "$BATON_CAL_IMAGE"
+          bash scripts/smoke-alert-channels.sh
 
       - &upload-contracts
         name: 계약 팩 업로드

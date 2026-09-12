@@ -29,3 +29,17 @@ groups:
         annotations:
           summary: CAL 시즌 잠금 획득 지연
           description: 최근 5분 평균 잠금 획득 시간이 1초를 넘었습니다. 시즌별 동시 수신량을 확인합니다.
+      - alert: CalTlsFailed
+        expr: probe_success{job="baton-cal-tls"} == 0 or up{job="baton-cal-tls"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: CAL HTTPS 인증서 확인 실패
+          description: cal.b4ton.com의 인증서 이름·인증서 체인과 HTTPS 연결을 확인합니다.
+      - alert: CalCertificateExpiresSoon
+        expr: probe_ssl_earliest_cert_expiry{job="baton-cal-tls"} - time() < 14 * 24 * 60 * 60
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: CAL 인증서 만료 임박
+          description: cal.b4ton.com 인증서가 14일 이내에 만료됩니다. 갱신과 적용 상태를 확인합니다.

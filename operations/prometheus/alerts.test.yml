@@ -1,0 +1,42 @@
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: CalTlsFailed
+        exp_alerts:
+          - exp_labels:
+              job: baton-cal-tls
+              instance: cal.b4ton.com:443
+              severity: critical
+            exp_annotations:
+              summary: CAL HTTPS 인증서 확인 실패
+              description: cal.b4ton.com의 인증서 이름·인증서 체인과 HTTPS 연결을 확인합니다.
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
+        values: '604800+0x15'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: CalCertificateExpiresSoon
+        exp_alerts:
+          - exp_labels:
+              job: baton-cal-tls
+              instance: cal.b4ton.com:443
+              severity: warning
+            exp_annotations:
+              summary: CAL 인증서 만료 임박
+              description: cal.b4ton.com 인증서가 14일 이내에 만료됩니다. 갱신과 적용 상태를 확인합니다.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
+        values: '1+0x15'
+      - series: 'probe_ssl_earliest_cert_expiry{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
+        values: '2592000+0x15'
+    alert_rule_test:
+      - {eval_time: 11m, alertname: CalTlsFailed, exp_alerts: []}
+      - {eval_time: 11m, alertname: CalCertificateExpiresSoon, exp_alerts: []}

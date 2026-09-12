@@ -20,6 +20,7 @@ export CAL_INTERNAL_PORT=0 CAL_HTTP_PORT=0 CAL_HTTPS_PORT=0 CAL_PROMETHEUS_PORT=
 export CAL_REQUEST_RATE=10r/s CAL_REQUEST_BURST=20 CAL_CONNECTION_LIMIT=20
 export CAL_TLS_DIRECTORY="$scratch/tls" CAL_ACME_DIRECTORY="$scratch/acme"
 export CAL_ALERT_WEBHOOK_URL_FILE="$scratch/webhook-url"
+export CAL_ALERTMANAGER_CONFIG_FILE="$project_directory/operations/alertmanager/alertmanager.yml"
 compose=(docker compose --ansi never --project-name "$project_name"
   --file "$project_directory/compose.operations.yml" --file "$project_directory/compose.operations-smoke.yml")
 request=(curl --silent --show-error --connect-timeout 2 --max-time 10)
@@ -49,6 +50,7 @@ printf '%s' acme-smoke > "$CAL_ACME_DIRECTORY/.well-known/acme-challenge/smoke"
 
 "${compose[@]}" config --quiet
 "${compose[@]}" run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
+"${compose[@]}" run --rm --no-deps --entrypoint promtool prometheus test rules /etc/prometheus/alerts.test.yml
 "${compose[@]}" run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager/alertmanager.yml
 "${compose[@]}" up --detach --wait --wait-timeout 120
 "${compose[@]}" exec -T gateway nginx -t
@@ -58,6 +60,7 @@ internal_url="http://$(address app 8080)"
 management_url="http://$(address app 8081)"
 prometheus_url="http://$(address prometheus 9090)"
 receiver_url="http://$(address alert-receiver 8080)"
+blackbox_url="http://$(address blackbox 9115)"
 https_address=$(address gateway 443)
 https_port=${https_address##*:}
 public_url="https://cal.b4ton.com:$https_port"
@@ -75,6 +78,15 @@ wait_ready() {
   return 1
 }
 wait_ready
+
+"${request[@]}" --fail --get --data-urlencode module=cal_tls --data-urlencode target=gateway:443 \
+  "$blackbox_url/probe" > "$scratch/tls-probe"
+grep -q '^probe_success 1$' "$scratch/tls-probe"
+grep -q '^probe_ssl_earliest_cert_expiry ' "$scratch/tls-probe"
+"${request[@]}" --fail --get --data-urlencode module=cal_tls --data-urlencode target=alert-receiver:8080 \
+  "$blackbox_url/probe" > "$scratch/tls-rejected"
+grep -q '^probe_success 0$' "$scratch/tls-rejected"
+echo "Blackbox의 인증서 검증·만료 시각 수집과 TLS 연결 실패 탐지를 확인했습니다."
 
 "${request[@]}" --fail -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
   -H 'Content-Type: application/json' --data-binary @"$project_directory/contracts/examples/schedule-snapshot.utc-active.json" \
