@@ -148,7 +148,7 @@ class SeasonProjectionServiceTest {
     private fun metadata(
         etag: String = "\"same\"",
         lastModified: Instant,
-    ) = SeasonFeedProjectionMetadata(etag = etag, lastModified = lastModified)
+    ) = SeasonFeedProjectionMetadata(etag = etag, lastModified = lastModified, contentLength = 8)
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")

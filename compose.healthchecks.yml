@@ -1,0 +1,5 @@
+services:
+  alertmanager:
+    volumes:
+      - ${CAL_ALERTMANAGER_CONFIG_FILE:-./operations/alertmanager/healthchecks.yml}:/etc/alertmanager/alertmanager.yml:ro
+      - ${CAL_HEALTHCHECKS_PING_URL_FILE:?Healthchecks 점검 URL을 담은 외부 파일이 필요합니다}:/run/secrets/healthchecks-ping-url:ro

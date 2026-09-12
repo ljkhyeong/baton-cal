@@ -1,19 +1,22 @@
 package io.baton.cal.web
 
 import org.slf4j.LoggerFactory
-import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.PessimisticLockingFailureException
 import org.springframework.dao.QueryTimeoutException
+import org.springframework.http.CacheControl
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import org.springframework.transaction.TransactionTimedOutException
+import org.springframework.transaction.CannotCreateTransactionException
 import tools.jackson.core.exc.StreamConstraintsException
 
 @RestControllerAdvice
@@ -21,15 +24,19 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ApiException::class)
     fun handleApiException(exception: ApiException): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(exception.status)
+        .cacheControl(CacheControl.noStore())
         .body(ApiErrorResponse(exception.code, exception.message))
 
     @ExceptionHandler(
-        CannotAcquireLockException::class,
+        PessimisticLockingFailureException::class,
         QueryTimeoutException::class,
         TransactionTimedOutException::class,
+        CannotGetJdbcConnectionException::class,
+        CannotCreateTransactionException::class,
     )
-    fun handleTemporaryDatabaseContention(): ResponseEntity<ApiErrorResponse> = ResponseEntity
+    fun handleTemporaryDatabaseFailure(): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(HttpStatus.SERVICE_UNAVAILABLE)
+        .cacheControl(CacheControl.noStore())
         .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
         .body(ApiErrorResponse("SERVICE_BUSY", "service is temporarily busy"))
 

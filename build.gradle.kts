@@ -77,7 +77,7 @@ version = "0.0.1-SNAPSHOT"
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        freeCompilerArgs.add("-Xjsr305=strict")
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations")
     }
 }
 
@@ -105,6 +105,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("com.tngtech.archunit:archunit:1.5.0")
     testImplementation("com.networknt:json-schema-validator:3.0.6") {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
@@ -120,7 +121,29 @@ tasks.withType<Test>().configureEach {
 
 tasks.named<Test>("test") {
     useJUnitPlatform {
-        excludeTags("load", "ingestion-load")
+        excludeTags("load", "ingestion-load", "architecture")
+    }
+}
+
+tasks.register<Test>("architectureTest") {
+    group = "verification"
+    description = "Controller·도메인·Service의 의존성 규칙을 검증합니다."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("architecture") }
+}
+
+tasks.register<Exec>("feedbackLoopTest") {
+    group = "verification"
+    description = "파일 검사와 종료 검사 스크립트를 검증합니다."
+    commandLine("python3", "-B", "-m", "unittest", "discover", "-s", "scripts/tests")
+    inputs.files("scripts/agent_feedback.py", fileTree("scripts/tests") { include("*.py") })
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.property("pythonVersion", providers.exec { commandLine("python3", "--version") }.standardOutput.asText)
+    val result = layout.buildDirectory.file("agent-feedback-tests/passed")
+    outputs.file(result)
+    doLast {
+        result.get().asFile.apply { parentFile.mkdirs() }.writeText("passed\n")
     }
 }
 
@@ -142,6 +165,7 @@ tasks.register<Test>("ingestionLoadTest") {
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("ingestion-load") }
     systemProperty("baton.cal.load.item-count", providers.gradleProperty("loadItemCount").getOrElse("1000"))
+    systemProperty("baton.cal.load.batch-size", providers.gradleProperty("loadBatchSize").getOrElse("1"))
     shouldRunAfter(tasks.test)
 }
 
@@ -187,5 +211,5 @@ val verifyContractsZip = tasks.register<VerifyContractsZip>("verifyContractsZip"
 }
 
 tasks.named("check") {
-    dependsOn(verifyContractsZip)
+    dependsOn(verifyContractsZip, "architectureTest", "feedbackLoopTest")
 }

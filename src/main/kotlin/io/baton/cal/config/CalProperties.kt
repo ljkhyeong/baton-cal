@@ -37,9 +37,9 @@ class CalProperties(
         require(publicBaseUrl.query == null && publicBaseUrl.fragment == null) {
             "publicBaseUrl에는 쿼리나 프래그먼트를 넣을 수 없다"
         }
-        require(publicBaseUrl.userInfo == null) { "publicBaseUrl에는 사용자 정보를 넣을 수 없다" }
+        require(publicBaseUrl.userInfo == null) { "publicBaseUrl에는 사용자 이름이나 비밀번호를 넣을 수 없다" }
         require(this.subscriptionGeneration != NIL_UUID) {
-            "subscriptionGeneration은 NIL UUID일 수 없다"
+            "subscriptionGeneration은 모든 자릿수가 0인 UUID일 수 없다"
         }
     }
 

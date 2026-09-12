@@ -50,6 +50,18 @@ class InternalCalendarController(
         return SnapshotIngestionResponse(result)
     }
 
+    @PostMapping("/schedule-snapshots/batch")
+    fun ingestSnapshotBatch(
+        @Valid @RequestBody request: SnapshotBatchRequest,
+    ): SnapshotBatchResponse {
+        val snapshots = request.snapshots.map { it.toDomain() }
+        val results = snapshotIngestionService.ingestBatch(snapshots)
+        results.forEach { ingestionCounters.getValue(it).increment() }
+        return SnapshotBatchResponse(
+            snapshots.zip(results) { snapshot, result -> SnapshotBatchItemResult(snapshot.eventId, result) },
+        )
+    }
+
     @GetMapping("/calendar-items/{sourceItemId}")
     fun getCalendarItemStatus(
         @PathVariable sourceItemId: StandardUuidPath,

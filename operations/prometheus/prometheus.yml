@@ -25,3 +25,30 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox:9115
+  - job_name: baton-cal-public
+    metrics_path: /probe
+    params:
+      module: [cal_public_route]
+    static_configs:
+      - targets: [https://gateway/calendars/v1/monitoring-probe.ics]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: instance
+        replacement: cal.b4ton.com
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: baton-cal-tls
+    scrape_interval: 1m
+    metrics_path: /probe
+    params:
+      module: [cal_tls]
+    static_configs:
+      - targets: [gateway:443]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: instance
+        replacement: cal.b4ton.com:443
+      - target_label: __address__
+        replacement: blackbox:9115

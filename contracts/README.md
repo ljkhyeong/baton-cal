@@ -1,13 +1,14 @@
 # BATON CAL MVP 계약
 
-이 디렉터리는 PRD-0002의 언어 중립적 JSON 계약과 예시를 보관한다. 안정 버전 `1.0.0`의 BATON
-생산자 계약 검증은 완료했지만, 현재 작업 후보의 검증 완료나 실제 운영 준비 완료를 뜻하지 않는다.
+이 디렉터리는 PRD-0002의 JSON 스키마와 요청·응답 예시를 보관한다. 안정 버전 `1.0.0`은 BATON의
+계약 테스트를 통과했다. 현재 작업 후보의 검증과 실제 운영 준비는 별도로 확인해야 한다.
 
 ## 계약 목록
 
 | 경로 | 요청 스키마 | 성공 응답 스키마 | 예시 |
 | --- | --- | --- | --- |
 | `POST /internal/api/v1/schedule-snapshots` | `schemas/schedule-snapshot.v1.schema.json` | `schemas/schedule-snapshot-result.v1.schema.json` | `examples/schedule-snapshot.*.json`, `examples/schedule-snapshot-result.*.json` |
+| `POST /internal/api/v1/schedule-snapshots/batch` | `schemas/schedule-snapshot-batch.v1.schema.json` | `schemas/schedule-snapshot-batch-result.v1.schema.json` | `examples/schedule-snapshot-batch.json`, `examples/schedule-snapshot-batch-result.json` |
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
 | `GET /internal/api/v1/recovery-runs/{recoveryId}` | 본문 없음 | `schemas/recovery-run-status.v1.schema.json` | `examples/recovery-run-status.*.json` |
@@ -23,9 +24,10 @@
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
 반환한다. `GET /calendars/v1/{token}.ics`는 JSON이 아니라 PRD-0002의 정규
-`text/calendar` 계약을 따른다.
+`text/calendar` 계약을 따른다. 같은 경로의 HEAD는 본문 없이 상태·ETag·Last-Modified·파일 크기를 반환한다.
+GET·HEAD의 `200` 응답은 UTF-8 바이트 수를 `Content-Length`로 제공한다. 조건부 일치는 `304`, 무효한 구독은 `404`다.
 
-일정·구독 상태 조회는 Bearer 인증을 요구하고 성공 응답에 `Cache-Control: no-store`를 사용한다.
+일정·구독 상태 조회는 Bearer 인증을 요구하고 정상 조회와 자원 없음(`404`) 응답에 `Cache-Control: no-store`를 사용한다.
 일정 조회는 CAL이 채택한
 개정 번호·상태·원본 수정 시각을, 구독 조회는 저장된 상태와 현재 인스턴스의 구독 세대 일치 여부를
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
@@ -44,6 +46,17 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
 활성 구독의 자격 증명이 없으면 사용자 요청에 따라 rotate로 재발급한다. 상태 GET의 `404` 뒤에도
 같은 ID·시즌으로만 PUT을 재전달한다. 기존 POST는 응답 유실 시 ID를 찾을 수 없는 제한을 유지한다.
 모든 CAL 인스턴스가 새 PUT을 지원하고 BATON이 새 계약을 고정한 뒤 이 경로를 활성화한다.
+
+묶음 수신은 `{"snapshots":[스냅샷, ...]}`으로 1~100건을 전달한다. 기존 단건 스키마를 참조하며,
+응답의 `results`는 요청 순서대로 `{eventId, result}`를 반환한다. `APPLIED`·`DUPLICATE`·`STALE`은
+각 항목을 순서대로 적용할 때의 판정이다. 한 묶음 안의 최신 개정만 최종 피드에 남을 수 있다.
+충돌·검증 오류·DB 또는 캘린더 생성 실패는 묶음 전체를 취소한다. 성공 응답은 모든 일정과 변경된
+시즌의 최종 캘린더가 함께 커밋됐다는 뜻이다. 같은 묶음의 재전달은 저장 상태를 바꾸지 않는다.
+
+묶음도 전체 JSON 문서 128 KiB 상한을 따른다. 100건 이하라도 긴 설명 때문에 초과할 수 있으므로
+BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `413`은 묶음을 줄이고, `409`는 충돌한
+원본을 고친 뒤 다시 보낸다. 응답 유실·`5xx`에는 동일한 이벤트 ID·내용으로 전체를 재전달할 수 있다.
+모든 CAL 인스턴스가 새 경로를 지원하고 공식 계약을 고정한 뒤 BATON의 묶음 전송을 활성화한다.
 
 시즌 표시 이름은 `{revision, displayName}`으로 전달한다. 개정 번호는 일정과 별도로 관리하며,
 응답은 CAL이 채택한 `{seasonId, revision, displayName}`이다. 같은 이름·개정 번호의 중복과 낮은
@@ -78,7 +91,7 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
   `schedule-snapshot.all-day-active.json`은 임의 지속 시간을 만들지 않는 UTC·시간대 지정 시점과
   `VALUE=DATE`를 사용하는 종일 날짜 구간을 설명한다.
 - 소비자는 `additionalProperties: false`를 전제로 한다. 필드나 열거형을 추가하려면 새 스키마
-  버전과 생산자·소비자 계약 픽스처가 필요하다.
+  버전과 송신·수신 측 계약 테스트 데이터가 필요하다.
 - v1 절대 시각은 명시적 오프셋이 있는 RFC 3339이고 로컬 날짜·시간은 오프셋 없이 보낸다.
   초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
   정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
@@ -89,13 +102,20 @@ ID 지정 생성은 BATON이 사전에 저장한 구독 ID를 경로에 사용�
 
 ## JSON 요청 크기·구조 제한
 
+문자열 필드에 숫자·불리언을 보내면 `400 INVALID_REQUEST`이며 저장하지 않는다.
+`"123"`·`"true"` 같은 문자열과 스키마에서 허용한 필드 생략·`null`은 그대로 지원한다.
+
+개정 번호와 건수는 소수점·지수·따옴표 없는 정수로 보낸다. `0.5`, `1.0`, `1e0`, `"1"`은
+`400 INVALID_REQUEST`이며 저장하지 않는다. `metadataRevision`의 허용된 `null`과 타임스탬프의
+소수 초는 유지한다. JSON Schema의 `integer`는 `1`과 `1.0`을 구분하지 않으므로 숫자 표기는 HTTP 테스트로 검증한다.
+
 JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 검증한다. 이와 별도로 CAL의 JSON
 파서는 공백과 구조를 포함한 전체 요청 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
-16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이 상한은 JSON Schema에 표현하는 필드 제약이
+16단계, 숫자를 10자리, 토큰을 8,192개로 제한한다. 이 상한은 JSON Schema에 표현하는 필드 제약이
 아니라, DTO를 만들기 전에 Jackson이 적용하는 파싱 제한이다.
 
 어느 제한이든 넘으면 필드 값의 유효성과 관계없이 `413`과 다음 고정 `api-error.v1` 응답을
-반환한다. 같은 요청을 그대로 재시도하지 않고 생산자 직렬화 또는 요청 크기를 먼저 고친다.
+반환한다. 같은 요청을 재시도하기 전에 BATON의 JSON 직렬화나 요청 크기를 수정한다.
 
 ```json
 {"code":"REQUEST_TOO_LARGE","message":"request body exceeds the maximum size"}
@@ -104,6 +124,7 @@ JSON Schema와 DTO의 길이·형식 제약은 파싱된 개별 필드 값을 �
 ## 자동 검증과 BATON 연동
 
 `ContractSchemaSupport`가 Draft 2020-12 스키마 로딩과 검증 결과 보고를 한 곳에서 맡는다.
+스키마 간 `$ref`는 ZIP에 포함된 파일을 `$id`로 등록해 해석한다. `cal.baton`에 HTTP로 접속하지 않는다.
 `ContractArtifactsTest`는 이를 사용해 Docker 없이 모든 JSON 예시를 검증하고, UUID, RFC 3339
 시각과 URI의 `format`도 단순 주석이 아니라 검증 조건으로 평가한다. 내부 HTTP 요청의 UUID도
 하이픈을 포함한 36자 표준 문자열만 허용하며 Jackson의 22자·24자 Base64 UUID 표현은 거부한다.
@@ -121,8 +142,8 @@ MockMvc의 일정 수신 결과, 일정·구독 상태 조회, 구독 생성·�
 성공 응답을 `season-calendar-metadata-result.v1`에 대조한다. 같은 이름의 개정 번호 증가와 피드 재구축이
 캘린더 바이트·ETag·Last-Modified를 유지하는지도 검증한다.
 
-데이터베이스 잠금 획득, SQL 실행 또는 Spring 트랜잭션이 설정된 제한 시간을 넘으면 CAL은
-`503 SERVICE_BUSY`와 `Retry-After: 1`을 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
+DB 연결·트랜잭션 시작에 실패하거나 잠금·SQL·트랜잭션 제한 시간을 넘으면 CAL은
+`503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 스냅샷 전달자는 같은 요청을 즉시 반복하지 않고
 `Retry-After` 이후 재시도한다. 스냅샷 수신의 이벤트 식별자와 원본 개정 번호 계약은 이 재시도가
 중복으로 도착해도 같은 결과를 보장한다.
 
@@ -168,10 +189,10 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 실제 만료 시점은 저장소·조직의 보존 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한
 임시 CI 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다.
 
-현재 BATON 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 이 자산에는 루트 `LICENSE`가 없어 계약 의미를 유지한 `1.0.1` 호환 보완판으로 재포장하고 BATON이
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
-`1.1.0-rc.1`의 게시·BATON 생산자 검증은 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
+`1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
 중복·시즌 충돌 응답과 고정된 복원 다이제스트 예시를 추가한다. `rc.2`는 미게시·BATON 미고정 상태이며
 기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는

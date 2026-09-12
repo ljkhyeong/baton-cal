@@ -1,6 +1,7 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
+import com.zaxxer.hikari.HikariDataSource
 import io.baton.cal.support.PostgreSqlTestContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -17,6 +18,7 @@ import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -24,6 +26,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import java.nio.file.Path
+import java.sql.Connection
 import java.time.Duration
 import org.hamcrest.Matchers.containsString
 
@@ -37,6 +40,7 @@ import org.hamcrest.Matchers.containsString
         "baton.cal.public-base-url=https://calendar.example.test",
         "baton.cal.subscription-generation=30000000-0000-0000-0000-000000000003",
         "management.server.port=8080",
+        "spring.datasource.hikari.connection-timeout=1000",
     ],
 )
 class OperationalHttpTest @Autowired constructor(
@@ -44,7 +48,48 @@ class OperationalHttpTest @Autowired constructor(
     private val tomcatServerProperties: TomcatServerProperties,
     private val jdbcClient: JdbcClient,
     private val transactionProperties: TransactionProperties,
+    private val dataSource: HikariDataSource,
 ) {
+    @Test
+    fun `연결 풀이 고갈되면 503을 반환하고 연결 반환 후 구독을 정상 처리한다`() {
+        val created = mockMvc.perform(
+            authorizedPost("/internal/api/v1/subscriptions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"seasonId":"$SEASON_ID"}"""),
+        )
+            .andExpect(status().isCreated)
+            .andReturn().response.contentAsString
+        val token: String = JsonPath.read(created, "$.token")
+        val subscriptionId = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        fun createRequest() = put("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""{"seasonId":"$SEASON_ID"}""")
+
+        val heldConnections = mutableListOf<Connection>()
+        try {
+            repeat(dataSource.maximumPoolSize) { heldConnections += dataSource.connection }
+            for (request in listOf(createRequest(), get("/calendars/v1/{token}.ics", token))) {
+                mockMvc.perform(request)
+                    .andExpect(status().isServiceUnavailable)
+                    .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                    .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
+                    .andExpect(jsonPath("$.message").value("service is temporarily busy"))
+            }
+        } finally {
+            heldConnections.forEach { it.close() }
+        }
+
+        mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+        mockMvc.perform(createRequest())
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.subscriptionId").value(subscriptionId))
+        assertThat(jdbcClient.sql("SELECT count(*) FROM calendar_subscription").query(Int::class.java).single())
+            .isEqualTo(2)
+    }
+
     @Test
     fun `데이터베이스 잠금과 실행 및 트랜잭션은 제한 시간 안에서 끝나야 한다`() {
         assertThat(jdbcClient.sql("SHOW lock_timeout").query(String::class.java).single()).isEqualTo("5s")
@@ -192,6 +237,6 @@ class OperationalHttpTest @Autowired constructor(
         const val MAX_JSON_NAME_LENGTH = 64
         const val MAX_JSON_NESTING_DEPTH = 16
         const val MAX_JSON_NUMBER_LENGTH = 10
-        const val MAX_JSON_TOKEN_COUNT = 256
+        const val MAX_JSON_TOKEN_COUNT = 8192
     }
 }

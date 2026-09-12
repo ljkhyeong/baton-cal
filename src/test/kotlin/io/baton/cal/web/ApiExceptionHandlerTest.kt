@@ -3,36 +3,43 @@ package io.baton.cal.web
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import io.baton.cal.config.JdbcConfiguration
 import io.baton.cal.contract.ContractSchemaSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
+import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.transaction.TransactionTimedOutException
+import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
+import java.sql.SQLException
 
 class ApiExceptionHandlerTest {
     private val mockMvc = MockMvcBuilders.standaloneSetup(FailureController())
         .setControllerAdvice(ApiExceptionHandler())
         .build()
 
-    @ParameterizedTest(name = "{0} 제한 시간 초과")
-    @ValueSource(strings = ["lock", "query", "transaction"])
-    fun `데이터베이스 제한 시간 초과는 재시도 가능한 503을 반환한다`(failureType: String) {
+    @ParameterizedTest(name = "{0} 데이터베이스 실패")
+    @ValueSource(strings = ["lock", "query", "transaction", "connection", "transaction-start"])
+    fun `데이터베이스 연결 실패와 제한 시간 초과는 재시도 가능한 503을 반환한다`(failureType: String) {
         val result = mockMvc
             .perform(get("/internal/api/v1/temporary-database-contention/{failureType}", failureType))
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
             .andExpect(jsonPath("$.message").value("service is temporarily busy"))
             .andReturn()
@@ -40,8 +47,39 @@ class ApiExceptionHandlerTest {
         ContractSchemaSupport.assertValid(
             "api-error.v1.schema.json",
             result.response.contentAsString,
-            "데이터베이스 제한 시간 초과 응답",
+            "데이터베이스 실패 응답",
         )
+    }
+
+    @ParameterizedTest(name = "PostgreSQL {0} → HTTP {1}")
+    @CsvSource(
+        "40P01, 503, SERVICE_BUSY",
+        "40001, 503, SERVICE_BUSY",
+        "23505, 500, INTERNAL_ERROR",
+        "42601, 500, INTERNAL_ERROR",
+    )
+    fun `PostgreSQL 동시 처리 실패만 재시도 가능한 오류로 응답한다`(
+        sqlState: String,
+        expectedStatus: Int,
+        expectedCode: String,
+    ) {
+        val result = mockMvc
+            .perform(get("/internal/api/v1/database-failure/{sqlState}", sqlState))
+            .andExpect(status().`is`(expectedStatus))
+            .andExpect(jsonPath("$.code").value(expectedCode))
+
+        if (expectedStatus == 503) {
+            result.andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.message").value("service is temporarily busy"))
+        } else {
+            result.andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
+                .andExpect(jsonPath("$.message").value("an unexpected error occurred"))
+        }
+
+        val body = result.andReturn().response.contentAsString
+        ContractSchemaSupport.assertValid("api-error.v1.schema.json", body, "PostgreSQL 오류 응답")
+        assertThat(body).doesNotContain(SENSITIVE_VALUE, sqlState)
     }
 
     @Test
@@ -76,6 +114,13 @@ class ApiExceptionHandlerTest {
 
     @RestController
     private class FailureController {
+        private val exceptionTranslator = JdbcConfiguration().jdbcExceptionTranslator()
+
+        @GetMapping("/internal/api/v1/database-failure/{sqlState}")
+        fun databaseFailure(@PathVariable sqlState: String): Nothing = throw checkNotNull(
+            exceptionTranslator.translate("test", null, SQLException(SENSITIVE_VALUE, sqlState)),
+        )
+
         @GetMapping("/internal/api/v1/failure")
         fun fail(): Nothing = throw IllegalStateException(SENSITIVE_VALUE)
 
@@ -87,6 +132,12 @@ class ApiExceptionHandlerTest {
 
         @GetMapping("/internal/api/v1/temporary-database-contention/transaction")
         fun transactionTimeout(): Nothing = throw TransactionTimedOutException(SENSITIVE_VALUE)
+
+        @GetMapping("/internal/api/v1/temporary-database-contention/connection")
+        fun connectionFailure(): Nothing = throw CannotGetJdbcConnectionException(SENSITIVE_VALUE)
+
+        @GetMapping("/internal/api/v1/temporary-database-contention/transaction-start")
+        fun transactionStartFailure(): Nothing = throw CannotCreateTransactionException(SENSITIVE_VALUE)
     }
 
     private companion object {

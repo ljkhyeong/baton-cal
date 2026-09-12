@@ -69,7 +69,7 @@ services:
     image: prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
     command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
     volumes:
-      - ./operations/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${CAL_ALERTMANAGER_CONFIG_FILE:-./operations/alertmanager/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
       - ${CAL_ALERT_WEBHOOK_URL_FILE:?알림 수신 URL을 담은 외부 파일이 필요합니다}:/run/secrets/alert-webhook-url:ro
       - alerts:/alertmanager
     ports:

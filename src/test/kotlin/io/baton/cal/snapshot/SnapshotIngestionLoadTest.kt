@@ -48,11 +48,16 @@ class SnapshotIngestionLoadTest @Autowired constructor(
     @Test
     fun `최초 적재와 같은 시즌 동시 변경 중 조건부 GET의 지연과 최종 피드를 확인한다`() {
         val itemCount = System.getProperty("baton.cal.load.item-count", "1000").toInt()
+        val batchSize = System.getProperty("baton.cal.load.batch-size", "1").toInt()
         require(itemCount >= 2) { "동시 수신 측정에는 두 항목 이상이 필요합니다" }
+        require(batchSize in 1..100) { "묶음 크기는 1부터 100까지입니다" }
+        println("LOAD itemCount=$itemCount batchSize=$batchSize")
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build().use { client ->
             val initialLatency = ConcurrentLinkedQueue<Double>()
             val initialStarted = System.nanoTime()
-            (1..itemCount).forEach { ingest(client, snapshot(it, 0), "APPLIED", initialLatency) }
+            (1..itemCount).toList().chunked(batchSize).forEach { indices ->
+                ingestGroup(client, indices.map { snapshot(it, 0) }, batchSize, initialLatency)
+            }
             report("initial", initialLatency, initialStarted)
 
             val credential = send(client, "/internal/api/v1/subscriptions", """{"seasonId":"$SEASON_ID"}""")
@@ -84,11 +89,10 @@ class SnapshotIngestionLoadTest @Autowired constructor(
                 try {
                     val writers = (1..2).map { first ->
                         executor.submit {
-                            (first..itemCount step 2).forEach { index ->
-                                val latest = snapshot(index, 2)
-                                ingest(client, latest, "APPLIED", updateLatency)
-                                if (index % 20 == 0) {
-                                    ingest(client, latest, "DUPLICATE", replayLatency)
+                            (first..itemCount step 2).toList().chunked(batchSize).forEach { indices ->
+                                ingestGroup(client, indices.map { snapshot(it, 2) }, batchSize, updateLatency)
+                                indices.filter { it % 20 == 0 }.forEach { index ->
+                                    ingest(client, snapshot(index, 2), "DUPLICATE", replayLatency)
                                     ingest(client, snapshot(index, 1, replay = true), "STALE", replayLatency)
                                 }
                             }
@@ -128,6 +132,20 @@ class SnapshotIngestionLoadTest @Autowired constructor(
             assertThat(unchanged.statusCode()).isEqualTo(304)
             assertThat(unchanged.body()).isEmpty()
         }
+    }
+
+    private fun ingestGroup(client: HttpClient, payloads: List<String>, batchSize: Int, latency: ConcurrentLinkedQueue<Double>) {
+        if (batchSize == 1) {
+            ingest(client, payloads.single(), "APPLIED", latency)
+            return
+        }
+        val started = System.nanoTime()
+        val response = send(client, "/internal/api/v1/schedule-snapshots/batch", """{"snapshots":[${payloads.joinToString(",")}]}""")
+        latency.add(elapsedMillis(started))
+        assertThat(response.statusCode()).isEqualTo(200)
+        val results = JSON.readTree(response.body())["results"].values()
+        assertThat(results).hasSize(payloads.size)
+        assertThat(results.map { it["result"].asString() }).containsOnly("APPLIED")
     }
 
     private fun ingest(client: HttpClient, payload: String, result: String, latency: ConcurrentLinkedQueue<Double>) {

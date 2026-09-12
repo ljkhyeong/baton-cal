@@ -3,20 +3,20 @@
 BATON CAL은 확정된 시즌 일정·회차·마감을 읽기 전용 캘린더 구독(.ics)으로 제공하는 독립 서비스다.
 
 > 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 안정 계약 `1.0.0`의
-> BATON 생산자 검증을 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
+> BATON의 계약 테스트를 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
 문서에서 **투영**은 확정 일정을 변환해 저장한 캘린더 데이터다. **골든 파일**은 출력 비교에 쓰는
 [기준 `.ics` 바이트](contracts/golden)를 Base64로 보관한 파일이다.
 
-## 서비스 경계
+## 서비스별 역할
 
 CAL이 담당한다.
 
 - 구독 토큰 발급·폐기·재발급, 원문 대신 해시 저장
 - 확정된 BATON 일정을 iCalendar로 변환
-- 안정적인 iCalendar `UID`, `SEQUENCE`와 취소 표식
-- `.ics` 피드, `ETag`, `Last-Modified`와 조건부 GET
+- 일정의 `UID` 유지, 개정 번호를 나타내는 `SEQUENCE`와 취소 표식 관리
+- `.ics` 피드, 본문 없는 상태 확인(HEAD), `ETag`, `Last-Modified`와 조건부 조회
 - 일정 이벤트 수신 기록과 멱등 처리, 재전달·캘린더 재생성 상태
 - 구독 요청·오류 모니터링
 
@@ -31,8 +31,8 @@ CAL이 담당한다.
 ## 첫 MVP
 
 1. BATON이 트랜잭션 커밋 이후 전달한 확정 일정 스냅샷만 수신한다.
-2. 시즌 범위의 폐기 가능한 읽기 전용 구독을 만든다.
-3. 안정적인 `UID`, 원본 개정 번호 기반 `SEQUENCE`와 취소 이벤트를 가진 `.ics`를 제공한다.
+2. 시즌별로 해제할 수 있는 읽기 전용 구독을 만든다.
+3. 같은 일정의 `UID`를 유지하고 원본 개정 번호를 `SEQUENCE`에 반영하며, 취소 표식을 담은 `.ics`를 제공한다.
 4. `ETag`와 `Last-Modified`로 캘린더 클라이언트의 반복 조회를 효율적으로 처리한다.
 5. 동일 내용 재전달, 순서가 뒤바뀐 갱신, 토큰 회전과 전체 재구축을 검증한다.
 
@@ -43,26 +43,34 @@ CAL이 담당한다.
 - 캘린더 설명에는 최소 정보와 권한이 필요 없는 위치 식별자만 포함한다.
 - 캘린더 클라이언트의 조회는 BATON의 권한 판단을 우회하지 않는다.
 
-## 운영 안전 기본값
+## 운영 기본 설정
 
+- 일정 묶음 수신은 최대 100건을 한 트랜잭션으로 처리하고, 변경된 시즌의 캘린더를 한 번씩 만든다.
+  전체 JSON 128 KiB 제한을 함께 적용하며 오류가 있으면 묶음 전체를 취소한다.
 - JSON 요청은 개별 DTO·JSON Schema 필드 제약과 별개로 전체 문서 128 KiB(131,072바이트),
-  필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 256개까지 파싱한다. 이 요청 제한을 하나라도
+  필드명 64자, 중첩 16단계, 숫자 10자리와 토큰 8,192개까지 파싱한다. 이 요청 제한을 하나라도
   넘으면 기존 계약과 같은 `413`, `REQUEST_TOO_LARGE`,
   `request body exceeds the maximum size`를 반환한다.
+- 개정 번호와 건수는 소수점·지수·따옴표 없는 정수로 보낸다. `0.5`, `1.0`, `1e0`, `"1"`은
+  `400 INVALID_REQUEST`로 거부하며, 타임스탬프의 소수 초는 기존대로 허용한다.
+- 제목·설명·장소·시즌 이름 등 문자열 필드에는 JSON 문자열을 보낸다. 숫자·불리언을 문자열로 바꾸지 않고
+  `400 INVALID_REQUEST`로 거부한다. `"123"`, `"true"`처럼 따옴표로 감싼 문자열은 허용한다.
 - 공개 피드 기준 URL은 외부 또는 비루프백 주소에서 HTTPS만 허용한다. 루프백 HTTP는 로컬
   개발에서만 허용하며 `prod` 프로필은 `BATON_CAL_PUBLIC_BASE_URL`을 명시하지 않거나 HTTPS가
   아니면 시작에 실패한다.
 - 로컬 실행은 `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`의 개발 기본값을 제공한다.
   `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
+- DB 비밀번호와 내부 토큰은 Spring Boot의 `configtree`로 k3s Secret 파일에서 읽을 수 있다.
+  파일 이름과 재시작 기준은 [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
-  맞게 조정한다. 잠금·SQL·트랜잭션 제한 시간을 넘으면 `503 SERVICE_BUSY`와 `Retry-After: 1`을
-  반환하므로 내부 호출자는 헤더에 맞춰 재시도한다.
+  맞게 조정한다. DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패, 잠금·SQL·트랜잭션 시간 초과에는
+  `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
   기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
-- 공개 `/calendars/v1/**` 요청의 고카디널리티 `http.url` 관측값은 실제 토큰 대신
-  `/calendars/v1/{token}.ics`로 기록한다.
-- 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·표현 크기는
+- 공개 `/calendars/v1/**` 요청을 추적할 때 `http.url`에는 실제 토큰 대신
+  `/calendars/v1/{token}.ics`를 기록한다.
+- 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·캘린더 크기(바이트)는
   `baton.cal.projection.rebuild`, `baton.cal.projection.items`, `baton.cal.projection.bytes`, 시즌
   잠금 획득 시간은 `baton.cal.projection.lock.acquire`로 기록한다. 내부 인증 결과는
   `baton.cal.internal.authentication`의 `current`, `previous`, `unauthorized` 세 값만 사용한다.
@@ -177,6 +185,7 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 `PUT /internal/api/v1/subscriptions/{subscriptionId}`에 `{seasonId}`를 보낸다. 최초 성공의 `201`만
 토큰·피드 URL을 반환한다. 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은
 `409 SUBSCRIPTION_SCOPE_CONFLICT`이며 기존 토큰·상태·세대를 바꾸지 않는다.
+상태 조회의 `404`와 생성 충돌의 `409`에도 `Cache-Control: no-store`를 적용해 이전 오류 응답의 재사용을 막는다.
 
 응답을 잃으면 같은 ID로 상태를 조회한다. `404`일 때는 같은 ID·시즌으로 PUT을 재전달할 수 있다.
 활성 구독이 있지만 자격 증명을 받지 못했다면 사용자 요청에 따라 rotate로 다시 발급한다. 폐기된
@@ -314,13 +323,13 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 병합하지 않는 `release/contracts-` 풀 리퀘스트는 일반 merge 검증과 별도로 브랜치의 정확한 HEAD를
 체크아웃해 계약 ZIP을 검증하고 별도 산출물로 올린다.
 
-현재 생산자 기준은 [불변 안정 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
+BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산
 `baton-cal-contracts-1.0.0.zip`의 SHA-256은
 `b1aea8fed42c7b3f38320e1e0d883bd99c4d78e09d5b1dbddd4c90b2154146a7`이다.
-릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 생산자 계약 테스트를
+릴리스와 자산 증명 검증을 통과했고 BATON이 이 버전과 해시를 고정해 계약 테스트를
 완료했다. 이 자산에는 루트 `LICENSE`가 없으므로 계약 의미를 유지한 `1.0.1` 호환 보완판으로
-재포장해 BATON 고정을 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
+재포장해 BATON이 사용하는 버전과 해시를 갱신할 예정이다. 사전 릴리스 이력과 다음 버전 규칙은
 [계약 릴리스 현황](docs/contract-release-history.md), 실제 게시 명령은
 [계약 릴리스 절차](docs/contract-release-procedure.md)에 정리한다.
 
@@ -334,7 +343,7 @@ GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`
 
 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 고정된 복원 매니페스트
 예시를 추가했다.
-아직 게시하거나 BATON 생산자에 고정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
+아직 게시하거나 BATON의 사용 버전으로 지정하지 않았다. 기존 `rc.1` 자산은 변경하지 않는다.
 
 ## OCI 이미지 검증
 
@@ -395,13 +404,17 @@ GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테�
 
 ## 공개 운영 준비
 
-`cal.b4ton.com`용 단일 호스트 구성을 `compose.operations.yml`에 준비했다. Nginx HTTPS·요청 제한,
-Prometheus·Alertmanager와 준비 상태 점검을 포함한다. 기본 바인드는 루프백이며 실제 서버·DNS·
-공인 인증서·외부 알림 채널은 아직 연결하지 않았다. 배포 환경과 외부 비밀 설정을 준비한 뒤
-[운영 절차](docs/operations.md)를 따른다.
+공개 주소는 `cal.b4ton.com`이다. 운영 대상은 Ubuntu 홈서버의 k3s이며, 사용자 확인 기준으로 DNS·
+공인 IP·포트포워딩·인증서는 준비됐고 k3s는 구축 전이다. `compose.operations.yml`은 Nginx HTTPS·
+요청 제한, Prometheus·Alertmanager·인증서 점검의 로컬 통합 검증에도 사용한다. Slack·Discord는
+Alertmanager의 기본 연동으로 연결한다. 실제 홈서버 배포와 알림 채널 연결은 수행하지 않았다.
+서버·모니터링 중단 감지는 Healthchecks.io의 무료 점검을 선택해 연결할 수 있다. Prometheus와
+Alertmanager의 정상 신호가 끊기면 외부 서비스가 알리며, 계정 등록과 실제 연결은 별도다.
+[운영 연동 안내](docs/operations.md), [외부 API 검토](docs/external-api-options.md).
 
 ```shell
 ./scripts/smoke-operations.sh baton-cal:smoke
+bash scripts/smoke-alert-channels.sh
 ./gradlew --no-daemon ingestionLoadTest -PloadItemCount=1000
 ```
 

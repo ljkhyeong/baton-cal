@@ -4,13 +4,13 @@
 - 결정일: 2026-08-11
 - 관련 문서: ADR-0001, PRD-0002
 
-## 맥락
+## 배경
 
 BATON CAL MVP는 다음 특성을 가진다.
 
 - 커밋 후 최소 한 번 전달되는 HTTP 스냅샷을 짧은 트랜잭션으로 멱등 처리한다.
-- 수신함, 마지막으로 채택된 스냅샷, 투영과 해시된 토큰 수명주기에 관계형 제약조건과
-  원자적 갱신이 필요하다.
+- 수신 기록, 최신 스냅샷, 캘린더 투영과 구독 토큰 상태는 DB 제약조건으로 검증하고
+  관련 변경을 한 트랜잭션에서 처리해야 한다.
 - 공개 캘린더 클라이언트의 반복 GET에 같은 입력이면 항상 같은 iCalendar 바이트와 조건부 요청 검증 값을
   반환한다.
 - 반복 일정이나 마감 계산, 제공자 API, 양방향 동기화와 스트리밍 전송은 하지 않는다.
@@ -29,12 +29,21 @@ BATON CAL MVP는 다음 특성을 가진다.
 - Java 25 툴체인, JVM 대상과 실행 환경을 기준으로 한다.
 - Spring Boot 4.1.1과 동기식 Spring MVC를 쓴다.
 - JSON 바인딩과 검증은 Spring MVC의 Jackson/Bean Validation 통합 기능을 쓴다.
+- `spring.jackson.deserialization.accept-float-as-int=false`로 개정 번호와 건수의 소수·지수 표기를
+  거부한다. 기존 `allow-coercion-of-scalars=false`만으로는 소수의 정수 변환을 막지 못한다.
+  공통 파싱 설정으로 `400 INVALID_REQUEST`를 반환하며 필드별 파서나 추가 검증기는 두지 않는다.
+- `JsonMapperBuilderCustomizer`에서 `LogicalType.Textual`의 숫자·불리언 변환을 `CoercionAction.Fail`로
+  지정한다. `allow-coercion-of-scalars`의 문자열 제외를 보완하며, 기존 Mapper와 Bean Validation을 사용한다.
+  사용자 정의 문자열 파서나 DTO별 타입 검증은 추가하지 않는다.
+- 묶음 수신은 기존 판정 함수를 재사용한다. 요청의 시즌을 정렬해 잠근 뒤 입력 순서대로 반영하고,
+  변경된 시즌만 마지막에 재생성한다. Spring 트랜잭션으로 전체를 커밋하거나 취소한다.
+  목록 항목 검증에는 `List<@Valid ScheduleSnapshotRequest>`와 Kotlin JVM 타입 어노테이션을 쓴다.
 - Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
-  16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
+  16단계, 숫자를 10자리, 토큰을 8,192개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
   별도로 적용하는 파싱 제한이며, Spring MVC 오류 처리기가 어느 제한을 넘든 고정된
   `413 REQUEST_TOO_LARGE` API 오류로 변환한다. 별도 요청 본문 필터나 자체 JSON 파서는 두지 않는다.
 - 내부 API 인증은 배포 비밀값으로 주입한 CAL 전용 Bearer 토큰을 Spring MVC 필터에서 비교한다.
-  필수 현재 값과 회전 창에서만 쓰는 선택적 이전 값으로 최대 두 개를 구성하고, 제시된 값은
+  현재 토큰은 필수이며 교체 기간에만 이전 토큰 하나를 추가로 허용한다. 요청의 토큰은
   일치 여부와 관계없이 설정된 모든 값과 `MessageDigest.isEqual`로 비교한다. BATON이 새 값으로
   전환하면 이전 값을 제거하며 임의 목록이나 장기 유예를 두지 않는다. 최종 사용자 세션이나 BATON
   계정 토큰을 재사용하지 않는다.
@@ -51,22 +60,24 @@ BATON CAL MVP는 다음 특성을 가진다.
 - 스키마 마이그레이션의 유일한 기준은 Flyway다.
 - 영속성 접근에는 Spring `JdbcClient`와 명시적인 SQL을 쓴다.
 - PostgreSQL용 `SQLErrorCodeSQLExceptionTranslator` 빈을 등록하고 Spring Boot가 공통
-  `JdbcTemplate`에 적용하게 한다. 저장소별 SQLSTATE 분기 없이 시즌·복구 잠금과 SQL 실행 시간
-  초과를 표준 예외로 변환하며, HTTP 예외 처리기가 `503 SERVICE_BUSY`로 응답한다.
+  `JdbcTemplate`에 적용하게 한다. 저장소별 SQLSTATE 분기 없이 잠금 실패·교착 상태·직렬화 실패와
+  SQL 시간 초과를 표준 예외로 변환하며, HTTP 예외 처리기가 `503 SERVICE_BUSY`로 응답한다.
 - JPA/Hibernate 스키마 생성과 엔티티 수명주기를 사용하지 않는다.
 - 수신함 `event_id` 고유성과 하나의 일정 항목에 대한 최신 원본 개정 번호, 구독/토큰 상태를
   데이터베이스 제약조건으로 보호한다. 서로 다른 `eventId`로 온 완전 중복은 모두 수신함에
   남겨야 하므로 `(source_item_id, source_revision)` 동일성은 시즌 잠금 안의 페이로드 해시
   비교로 판정한다.
-- 스냅샷 처리 결과 판정과 채택된 스냅샷/투영 교체는 한 트랜잭션이다.
-- 타임스탬프는 PostgreSQL 정밀도와 같은 마이크로초로 정규화해 지문값, 비교와
-  저장 사이의 정밀도 차이를 막는다.
+- 수신 결과 판정과 최신 스냅샷·투영 갱신은 한 트랜잭션에서 처리한다.
+- 타임스탬프는 PostgreSQL과 같은 마이크로초 정밀도를 사용해 해시 계산·비교·저장 결과가
+  정밀도 차이로 달라지지 않게 한다.
 - 구독 행은 현재 토큰 해시 하나만 보관한다. 회전은 현재 해시를 조건으로 갱신해
   새 다이제스트를 한 트랜잭션에서 교체하며 과거 다이제스트를 남기지 않는다.
 - BATON이 구독 ID를 미리 정한 생성은 기존 `calendar_subscription.id` 기본키와
   `INSERT ... ON CONFLICT (id) DO NOTHING`을 사용한다. 최초 생성만 자격 증명을 반환하고 중복은
-  기존 상태를 보존한 `409`로 처리한다. 충돌 뒤 조회는 커밋된 행의 시즌을 대조하며 트랜잭션을
-  롤백해 부수적인 빈 투영도 남기지 않는다. 별도 멱등성 테이블·토큰 응답 저장·스키마 변경은 없다.
+  기존 상태를 보존한 `409`로 처리한다. 사전 조회에서 기존 구독을 찾으면 투영 준비와 토큰 생성을
+  생략한다. 사전 조회 이후의 동시 생성은 DB 기본키로 판정하고, 충돌 뒤 조회는 커밋된 행의 시즌을
+  대조한다. 두 경로는 같은 충돌 판정 함수를 사용한다. 구독의 투영 외래키 제약에 따라 투영을 먼저
+  준비하며, 실패하면 트랜잭션을 롤백한다. 별도 멱등성 테이블·토큰 응답 저장·스키마 변경은 없다.
   기존 POST 생성은 같은 서비스에 CAL이 만든 ID를 전달한다. 응답 유실 복구는 BATON의 사전 ID 저장,
   CAL 상태 GET과 명시적 토큰 회전으로 구성한다.
 - 구독 행에는 생성 또는 회전 시점의 외부 런타임 세대 UUID도 저장한다. 공개 조회 SQL은 `ACTIVE`
@@ -98,12 +109,15 @@ BATON CAL MVP는 다음 특성을 가진다.
 - 재구축은 시즌 단위 데이터베이스 잠금을 잡고 마지막으로 채택된 전체 스냅샷에서 새 투영을
   만든 뒤 원자적으로 교체한다. 공개 GET이 중간 상태를 관찰하지 않게 한다.
 - 투영의 ETag가 같으면 기존 Last-Modified를 보존하고 ETag가 달라지면 현재 UTC 시각의 초 단위 값을
-  사용한다. 공개 HTTP 경계는 저장값을 요청 처리 시각으로 제한해 응답 Date보다 미래가 되지 않게 한다.
+  사용한다. 공개 HTTP 응답은 저장값을 요청 처리 시각으로 제한해 응답 Date보다 미래가 되지 않게 한다.
   같은 초의 변경과 시계 역행은 Last-Modified만으로 구분하지 않고 강한 ETag가 정확한 판정을 맡는다.
   이 상한은 [RFC 9110 8.8.2.1절](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.2.1)을 따른다.
 
 Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조회는 MVP에 포함하지 않는다.
-조건부 GET은 정규 바이트와 PostgreSQL 투영 상태만으로 처리한다.
+조건부 GET은 저장된 캘린더 바이트와 PostgreSQL 투영 상태만으로 처리한다.
+공개 HEAD는 Spring MVC의 명시적 HEAD 매핑으로 처리하고 구독 검증 SQL에서 ETag·Last-Modified·
+`octet_length(representation)`만 조회한다. 본문을 가져와 길이를 계산하지 않는다. GET과 HEAD는
+캐시 판정과 응답 헤더 설정을 공유하며, 별도 파일 크기 열이나 캐시는 두지 않는다.
 
 ### iCalendar
 
@@ -196,6 +210,10 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
 - 로컬 실행에는 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
   `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 모두 외부에서 명시하도록 요구해
   개발 연결값으로 운영 애플리케이션이 시작되는 경로를 닫는다.
+- k3s Secret 파일은 Spring Boot의 `SPRING_CONFIG_IMPORT=configtree:/run/secrets/baton-cal/`로 읽는다.
+  비밀번호·현재 토큰은 기존 참조 이름, 이전 토큰은 `baton.cal.previous-internal-token` 파일로 제공한다.
+  필수 마운트에 `optional:`을 쓰지 않는다. 별도 Secret API 클라이언트·파일 판독기·자동 갱신 코드는
+  두지 않고 값 변경 후 모든 인스턴스를 재시작한다. [연결 기준](../../operations.md#secret-파일-연결)
 - 구독 세대는 비밀이 아닌 타입 지정 UUID 설정 `subscriptionGeneration`으로 주입한다. 정상
   재시작에는 같은 값을 유지하고 과거 DB 복원 전에만 새로운 non-NIL UUID로 바꾼다. 호환용 초기값은
   `00000000-0000-0000-0000-000000000001`이고 `prod`는
@@ -218,13 +236,16 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   고정한다.
 - Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
   설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
-  스레드 중단 코드를 만들지 않는다. 잠금·쿼리·트랜잭션 제한 시간 예외는 Spring 예외 계층에서
-  `503 SERVICE_BUSY`와 `Retry-After: 1`로 변환한다.
+  스레드 중단 코드를 만들지 않는다. Spring의 `PessimisticLockingFailureException`으로 잠금 실패·교착 상태·
+  직렬화 실패를 함께 처리한다. 쿼리·트랜잭션 제한 시간 초과와
+  `CannotGetJdbcConnectionException`·`CannotCreateTransactionException`은 공통 오류 처리기에서
+  `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`로 응답한다. 메시지 문자열로 예외를 분류하거나
+  서버 내부에서 재시도하지 않는다. 데이터 제약 위반·SQL 오류 등 예상 밖 실패는 기존 `500` 처리를 유지한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
   `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
   기본 동작을 유지한다.
-- Micrometer로 일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·표현 바이트와 시즌 잠금
+- Micrometer로 일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·캘린더 크기(바이트)와 시즌 잠금
   획득 시간을 기록한다. 태그는 `applied`·`duplicate`·`stale`, `current`·`previous`·`unauthorized`
   처럼 값의 종류가 제한된 결과만 사용하고 토큰·시즌·항목 식별자는 넣지 않는다. 표준 HTTP 서버
   지표로 이미 구분할 수 있는 공개 피드 상태를 별도 카운터로 중복 구현하지 않는다.
@@ -241,19 +262,28 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
 
 ### 공개 프록시와 관측 배포 구성
 
-단일 호스트의 첫 배포 구성은 Nginx, Prometheus, Alertmanager와 Blackbox Exporter를 Docker
-Compose로 조합한다. Nginx 표준 요청률·동시 처리 제한으로 공개 피드를 보호하고 CAL 내부에
-분산 제한 저장소를 추가하지 않는다. `cal.b4ton.com`이 공개 HTTPS 호스트이며 기존 UID 식별자는
-유지한다. 런타임 비밀과 인증서는 외부에서 주입한다.
+Nginx, Prometheus, Alertmanager와 Blackbox Exporter를 Docker Compose로 조합해 연동을 검증한다.
+실제 운영 대상은 Ubuntu 홈서버의 k3s이며 설치·배포는 별도 작업이다. Nginx 표준 요청률·동시 처리
+제한으로 공개 피드를 보호하고 CAL 내부에 분산 제한 저장소를 추가하지 않는다. `cal.b4ton.com`이
+공개 HTTPS 호스트이며 기존 UID 식별자는 유지한다. 런타임 비밀과 인증서는 외부에서 주입한다.
 
 정상 접근 로그는 상태·처리 시간·제한 결과만 남긴다. Nginx 오류 원문은 비밀 URL을 포함할 수 있어
 기록하지 않으며 설정 검증과 안전한 지표로 진단한다. 프록시는 조건부 GET 헤더와 고정 Host만
 CAL에 전달하고 쿼리는 버린다. 공개 프록시를 우회하는 내부·관리 포트는 루프백 또는 내부 네트워크에
 한정한다. 앞단 CDN 추가 시 실제 클라이언트 IP 신뢰 범위는 별도로 정한다.
 
-Prometheus는 표준 HTTP·잠금 지표와 DB 포함 준비 상태를 수집한다. Alertmanager는 운영 webhook에
-발생·해제를 전달한다. 로컬 검증은 실제 애플리케이션 중단을 주입하고 테스트 수신기까지 도착하는지
-확인한다. 단일 호스트 전체 장애와 공인 TLS는 별도의 외부 점검이 필요하다. 설정 수치와 배포 절차는
+Prometheus는 표준 HTTP·잠금 지표와 DB 포함 준비 상태를 수집한다. Blackbox의 TLS 검사로 호스트 이름·
+인증서 체인·만료 시각을 확인하며 별도 인증서 점검 프로그램을 만들지 않는다. 구독 토큰은 점검에 사용하지 않는다.
+공개 라우팅은 Blackbox HTTP 점검으로 발급될 수 없는 고정 주소의 빈 본문 `404`를 확인한다.
+Nginx의 HTML 오류 페이지와 구분하며 실제 구독 토큰이나 전용 공개 상태 API를 추가하지 않는다.
+유효한 피드 내용과 외부 인입 검증은 별도로 유지한다.
+Alertmanager는 일반 웹훅 또는 Slack·Discord 기본 연동으로 운영 장애 발생·해제를 전달한다.
+채널별 메시지 변환·재시도는 Alertmanager에 맡기며 별도 중계 서버를 두지 않는다. 제품 알림은
+기존 RELAY의 역할을 유지한다. 로컬 검증은 실제 애플리케이션 중단을 주입하고 테스트 수신기까지
+도착하는지 확인한다. 모니터링 경로 자체의 중단은 Prometheus의 상시 정상 신호와 Alertmanager 웹훅을
+Healthchecks.io의 무료 점검에 연결해 확인할 수 있다. 송신 타이머·API 클라이언트·누락 판정을 CAL에
+구현하지 않는다. 기본 알림에는 정상 신호를 보내지 않으며 외부 전송은 선택 설정으로 분리한다.
+공인 DNS·인입 HTTPS는 별도의 외부 HTTP 점검이 필요하다. 설정 수치와 배포 절차는
 [운영 문서](../../operations.md)에서 관리하며 운영 환경 검증을 로컬 스모크로 대신하지 않는다.
 
 ### 검증 전략
@@ -282,8 +312,9 @@ Prometheus는 표준 HTTP·잠금 지표와 DB 포함 준비 상태를 수집한
 - JSON UUID는 스키마와 같은 36자 표준 문자열만 허용하고, 내부 Bearer 설정은 RFC 6750 `b64token`
   문자 범위를 벗어나면 애플리케이션 시작 시 거부한다.
 - 애플리케이션 테스트에서 PostgreSQL 잠금·SQL 제한 시간과 Spring 트랜잭션 제한 시간 기본값을
-  확인하고, Spring의 쿼리 제한 시간 예외가 고정된 `503 SERVICE_BUSY`와 `Retry-After: 1`로
-  변환되는지 검증한다. Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
+  확인하고, 연결 실패·교착 상태·직렬화 실패·제한 시간 초과가 `503 SERVICE_BUSY`·`Retry-After: 1`·`Cache-Control: no-store`로
+  응답하는지 검증한다. 실제 Hikari 연결을 모두 점유한 상태에서 발급과 조회를 요청하고, 연결 반환 뒤 정상 처리를 확인한다.
+  Micrometer 지표는 기존 성공·중복·역순·인증·동시 잠금 시나리오에서
   증가량만 확인해 같은 도메인 흐름을 중복 구현하지 않는다.
 - JUnit `load` 태그의 `projectionLoadTest`는 기본 `test`에서 제외하고, 실제 PostgreSQL에서
   500·1,000·5,000·10,000개 시즌의 전체 투영 재구축 시간과 표현 크기를 필요할 때 반복 측정한다.

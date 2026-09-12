@@ -1,0 +1,25 @@
+route:
+  receiver: operations
+  group_by: [alertname]
+  group_wait: 5s
+  group_interval: 10s
+  repeat_interval: 4h
+  routes:
+    - matchers: ['alertname="CalWatchdog"']
+      receiver: healthchecks
+      group_wait: 0s
+      group_interval: 10s
+      repeat_interval: 1m
+receivers:
+  - name: operations
+    webhook_configs:
+      - url_file: /run/secrets/alert-webhook-url
+        send_resolved: true
+  - name: healthchecks
+    webhook_configs:
+      - url_file: /run/secrets/healthchecks-ping-url
+        send_resolved: false
+        timeout: 10s
+        payload:
+          service: baton-cal
+          status: alive

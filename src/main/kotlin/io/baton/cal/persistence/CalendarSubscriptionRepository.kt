@@ -81,7 +81,8 @@ class CalendarSubscriptionRepository(
             """
             SELECT
                 projection.etag,
-                projection.last_modified
+                projection.last_modified,
+                octet_length(projection.representation) AS content_length
             FROM calendar_subscription subscription
             JOIN season_feed_projection projection
               ON projection.season_id = subscription.season_id

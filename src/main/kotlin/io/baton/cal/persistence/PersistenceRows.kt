@@ -62,6 +62,7 @@ data class SeasonFeedProjectionRow(
 data class SeasonFeedProjectionMetadata(
     val etag: String,
     val lastModified: Instant,
+    val contentLength: Int,
 )
 
 enum class CalendarSubscriptionStatus {

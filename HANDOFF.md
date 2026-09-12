@@ -2,70 +2,122 @@
 
 ## 현재 상태
 
-- CAL은 일정 수신·캘린더 투영·구독·복구 진단을 구현했다. BATON의 개인 구독, 내 구독 목록,
-  여러 구독 선택 해제와 문구 개선도 로컬 검증을 마쳤다. 기능 설명은 [README](README.md),
-  API 기준은 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
-- 2026-09-05 확인 시 CAL 기능 변경은 로컬 `main`의 `592dc8b`, BATON 화면 변경은 `fc3d90f1`에
-  포함됐다. 이후 지시 정리는 `codex/streamline-cal-instructions`에서 진행했다. 다음 작업은 실제
-  브랜치·미커밋 변경부터 확인한다.
-- 표준 API 검토의 4건을 반영했다. PostgreSQL 예외 변환을 공통 설정으로 옮기고, 복구의 수동 행 매핑·
-  중복 정렬·완료 직후 재조회와 같은 값 재검증을 제거했다. 추가 검토한 일정 상태 조회도 응답에 필요한
-  5개 열만 읽도록 반영했다. 복구 시즌 검증은 완료 재시도에 필요한 매니페스트만 조회하고,
-  완료 상태 조회는 저장된 시즌 수를 사용하고, 완료 후 매니페스트 재시도는 시즌 잠금을 잡지 않는다.
-  [변경과 검증](docs/reviews/2026-09-05-standard-api-review.md)
-- CI의 반복 단계를 공유하고, 기본 주소·UTC 시계 검증을 DB가 필요 없는 설정 테스트로 옮겼다.
-  스킬 검증은 공통 지침의 `~/.codex/venvs/skill-validation` 환경을 사용한다.
-- 앱별 무료 구독 등록 안내와 문구·문서 개선은 BATON 원격 `main`의 `5a7db89f`에 병합했다.
-  작업 경로는 `/private/tmp/baton-cal-registration-20260907`이며 운영 활성화는 별도다.
-- CAL `01d8015`까지 원격 `main`에 반영했다. 운영 스모크는 서버 중단 후 연결 거부·시간 초과에 따른
-  `502`·`504`를 모두 검증하도록 보완했다. 최신 필수 CI는 각 저장소의 GitHub Actions에서 확인한다.
-- 현재 경로는 CAL `/Users/lim/devProject/personal/baton-cal`, BATON `/Users/lim/devProject/personal/manager`다.
-  과거 `/Users/lim/Documents/` 경로를 재사용하지 말고 다른 작업 트리는 Git 등록 상태를 확인한다.
-- 공식 게시된 후보 계약은 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다. 안정 기준은 `1.0.0`이며,
-  `rc.2` 공식 게시·BATON 자산 고정·안정 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
-- `cal.b4ton.com`용 로컬 HTTPS·프록시·Prometheus·알림 구성은 검증했다. 실제 서버·DNS·공인 인증서·
-  운영 알림 채널은 연결하지 않았다. BATON 기능 플래그와 실제 운영 활성화도 별도 작업이다.
+- CAL의 일정 수신·캘린더 변환·구독·복구 진단을 구현했다. 기능은 [README](README.md),
+  API는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
+- 공개 HEAD는 캘린더 본문을 조회하지 않고 구독 상태·캐시 검증 값·파일 크기를 반환한다.
+  [후속 기능 검토](docs/reviews/2026-09-12-feature-review.md)에 채택 근거와 보류 항목을 정리했다.
+- `POST /internal/api/v1/schedule-snapshots/batch`는 1~100건을 한 트랜잭션으로 처리하고 변경된 시즌별로
+  한 번 재생성한다. JSON 128 KiB 상한을 유지하고 토큰 상한을 8,192개로 늘렸다. 기존 단건 경로는 유지한다.
+  BATON 아웃박스의 묶음 전송은 아직 연결하지 않았다. [측정 결과](docs/performance-baseline.md)
+- 개정 번호·복구 건수의 소수·지수 표기를 정수로 잘라 받던 동작을 차단했다. `0.5`, `1.0`, `1e0`은
+  저장 전에 `400 INVALID_REQUEST`로 반환한다. 타임스탬프의 소수 초와 허용된 `null`은 유지한다.
+- 문자열 필드의 숫자·불리언 입력도 변환 없이 `400 INVALID_REQUEST`로 반환한다. 정상 문자열과
+  허용된 필드 생략·`null`은 유지하며 Jackson의 타입별 설정을 사용한다.
+- DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패와 시간 초과는 `503 SERVICE_BUSY`와 재시도 간격을 반환한다.
+  교착 상태·직렬화 실패는 Spring의 공통 잠금 실패 예외로 처리한다. 실제 연결 풀 고갈 테스트에서는
+  연결 반환 후 기존 구독 조회와 같은 ID의 발급 재시도가 정상 처리되는지 확인했다.
+- 이미 저장된 구독의 재요청은 캘린더 준비와 토큰 생성을 생략한다. 동시 생성은 DB 기본키로 판정한다.
+  V3의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
+- 일정·구독·복구 상태 조회의 `404`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503`에도
+  `Cache-Control: no-store`를 적용한다. 상태가 바뀐 뒤 이전 오류 응답이 재사용되는 것을 막는다.
+- 파일 작성 직후 검사와 종료 전 전체 diff·ArchUnit 검사를 추가했다. 기존 Spring Repository 주입 구조를
+  유지하며 Controller의 DB 접근, 도메인의 실행 계층 의존, Service의 JDBC 사용·Repository 생성을 검사한다.
+  실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
+- BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
+  실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
+- CAL 경로는 `/Users/lim/devProject/personal/baton-cal`이다. BATON 작업 경로는
+  `/Users/lim/devProject/personal/manager`에서 `git worktree list`로 확인한다.
+  이전 `/private/tmp/baton-cal-registration-20260907`은 Git 작업 트리 정보가 삭제되어 작업 경로로 사용하지 않는다.
+- 안정 계약은 `1.0.0`, 게시된 후보는 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다.
+  [rc.2 릴리스 노트](docs/releases/contracts-v1.1.0-rc.2.md)를 작성했다. 게시·BATON 사용 버전 지정·
+  안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
+- 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
+  인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
+  [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
+- Blackbox의 공개 경로 점검을 추가했다. 발급될 수 없는 고정 주소의 빈 `404`로 프록시→CAL 연결을
+  확인하고, HTML 오류 페이지·연결 장애가 30초 지속되면 알린다. 실제 구독 토큰은 사용하지 않는다.
+  [점검 범위](docs/operations.md#모니터링과-알림)
+- 서버·모니터링 중단을 확인할 Healthchecks.io 선택 연동을 추가했다. Prometheus 정상 신호를
+  Alertmanager가 외부로 전송하며, 기본 알림 채널에서는 이 신호를 제외한다. 무료 점검 1개를 쓰는
+  설정이고 실제 계정·수신 채널은 아직 연결하지 않았다. [연결 방법](docs/operations.md#서버와-모니터링-중단-감지)
+- Spring Boot `configtree`로 DB 비밀번호·현재 및 이전 내부 토큰을 Secret 파일에서 읽는 경로를 검증했다.
+  제품 코드·의존성 추가 없이 기존 운영 설정에 연결한다. 파일 이름과 재시작 기준은
+  [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다. 실제 k3s 마운트는 배포 시 적용한다.
+- 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
+  로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
-## 최근 검증 근거
+## 최근 검증
 
-다음 결과는 해당 시점의 기록이다. 재사용 전 [개발 검증 절차](docs/development.md)에 따라
-소스·미추적 파일·설정·환경 차이를 확인한다.
+- 2026-09-12 묶음 수신: `81cd46a`에서 HTTP 회귀 11개, 전체 일반 164개·구조 3개 테스트와 계약 ZIP이
+  통과했다. 최초 전체 실행은 공유 DB의 연결 한도 때문에 입력 테스트 컨텍스트 29건이 시작하지 못했다.
+  테스트 전용 유휴 연결 설정(`a8d2ac0`)으로 원인을 고친 뒤 해당 29건과 전체 검증을 통과했다.
+  로그: `/private/tmp/baton-cal-batch-retry.log`, `/private/tmp/baton-cal-batch-db-retry.log`,
+  `/private/tmp/baton-cal-batch-check-final.log`. 최종 `check`는 3개 작업 실행·7개 기존 결과 재사용이다.
+  같은 코드의 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
+  두 실행 모두 성공했고 최종 1,000개 UID·개정 2·취소 500개·동일 ETag를 확인했다.
+  로그와 XML: `/private/tmp/baton-cal-batch-load-single.{log,xml}`, `/private/tmp/baton-cal-batch-load-100.log`.
+  파일·구조 검사와 전체 diff를 검토했다. 이후에는 검증 기록만 수정했다.
 
-| 기준 | 범위·환경 | 결과와 제한 |
-| --- | --- | --- |
-| CAL `01d8015` + 운영 스모크 보완 | 2026-09-08, [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34171484723), `bash -n scripts/smoke-operations.sh`, `git diff --check` | CI의 전체 테스트·계약 ZIP·이미지 빌드·OCI 스모크 성공. 운영 스모크의 서버 중단 후 응답 검사에서 실패해 `502`·`504`를 구분하도록 보완. 셸 구문·차이 검사 성공. 이후 전체 결과는 main CI 참조. 실패 로그: `/private/tmp/baton-cal-main-ci-failed-20260908.log` |
-| BATON `5a7db89f` | 2026-09-08, Node 25.4.0·npm 11.7.0. `npm run typecheck`, `npm run build`, 캘린더 구독·목록·일괄 해제 E2E | 타입·빌드 성공. 최신 main의 화면 개편에 병합한 뒤 PC·390px 모바일·WebKit 75개 성공, 실패·제외 0개. 테스트 포트는 다른 작업과 겹치지 않는 3137 사용. 백엔드·API 생성물은 원격 기준 `a9d1feb9`와 동일. 명령·로그는 작업 경로의 `output/verification/latest.md` 참조 |
-| CAL `5d41971` | 2026-09-08, Java 25.0.3, `./gradlew --no-daemon test --tests 'io.baton.cal.config.CalPropertiesTest'` | 설정 테스트 8개 새 실행 성공, 실패·제외 0개. URL 오류 안내만 변경하고 기존 검증 유지. 로그: `/private/tmp/baton-cal-wording-config-20260908.log`. HTTP 계약·DB·의존성 변경이 없어 전체 테스트·계약 ZIP 제외 |
-| CAL `f8f7337` | Python 3.14.7·PyYAML 6.0.3의 `safe_load`로 `465d2c3`와 CI 전체 구성 비교 | 참조를 펼친 3개 작업의 단계·권한·조건·설정 일치. 이미지 명령은 같아 로컬 OCI 재실행 제외. 원격 CI는 미실행 |
-| CAL `f8f7337` + 스킬 검증 스크립트·문서 미커밋 변경 | 공용 Python 3.14.7·PyYAML 6.0.3, `bash -n scripts/validate-skill.sh`, `./scripts/validate-skill.sh /Users/lim/.codex/skills/baton-cal-flows` | 성공. 기존 공용 환경을 사용해 추가 설치 없이 검증. 문서 변경 뒤 앱 테스트는 반복하지 않음 |
-| CAL `465d2c3` | 2026-09-06, Java 25.0.3·PostgreSQL 18.6 Testcontainers, `./gradlew --no-daemon test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'` | 복구 HTTP 테스트 13개 새 실행 성공. 다른 트랜잭션의 시즌 잠금 중 완료 재시도 `200`·충돌 `409`, 진행 중 검증의 시간 초과 `503` 확인. 전체 테스트·계약 ZIP·운영 검증 제외 |
-| BATON `68179922` | 문구 변경 관련 Playwright 38건, PC·모바일·WebKit, 타입 검사 포함 프로덕션 빌드 | 성공. 서버·외부 앱 검증은 제외. [기록](docs/reviews/2026-09-05-wording-followup-review.md) |
+- 2026-09-12 문자열 입력: 기준 `8e2c7fb` 이후 설정·테스트·계약 변경을 `b417560`으로 커밋했다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.SnapshotInputContractTest'
+  --tests 'io.baton.cal.web.SeasonCalendarMetadataHttpTest'`로 문자열 필드의 숫자·불리언 입력 12건이
+  기존에 `200`으로 처리되는 것을 재현했다. 수정 후 관련 34개 테스트가 통과했고 오류 응답·미저장·
+  정상 문자열 재요청·Unicode·줄바꿈·선택 필드와 기존 정수 입력 규칙을 확인했다.
+  `./gradlew --no-daemon --max-workers=2 check`는 일반 153개·구조 3개 테스트와 계약 ZIP을 통과했다.
+  Java 25·Spring Boot 4.1.1·Jackson 3.1.5·PostgreSQL 18.6, 실패·제외 없음. 4개 작업을 새로 실행하고
+  검사 스크립트 11개를 포함한 6개 작업은 Gradle의 기존 성공 결과를 재사용했다.
+  로그: `/private/tmp/baton-cal-text-types-before.log`, `/private/tmp/baton-cal-text-types-after.log`,
+  `/private/tmp/baton-cal-text-types-check.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
+  이후에는 검증 기록만 수정했다. HTTP JSON 바인딩 설정만 바꿨으며 DB 처리·배포 구성은 같다.
+  변경 이미지 빌드·운영 스모크는 미실행이며 새 CI는 미푸시로 실행하지 않았다.
+- 2026-09-12 공개 경로: 기준 `c6e5615` 이후 운영 설정·검증 스크립트를 `c85312d`로 커밋했다.
+  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 빈 `404`·프록시 HTML `404` 구분,
+  공개 경로·준비 상태의 장애 발생·복구 알림, 규칙 8개와 기존 HTTPS·TLS·정상 신호 중단·재개·토큰
+  비노출을 확인했다. 모두 통과하고 격리 자원을 정리했다. 로그: `/private/tmp/baton-cal-public-route-smoke.log`.
+  제품 코드·의존성이 같아 기존 OCI 이미지와 일반 테스트 결과를 재사용했다. 채널 설정·스크립트도 같아
+  `13737a7`의 `bash scripts/smoke-alert-channels.sh` 성공 결과를 재사용했다.
+  채널 로그: `/private/tmp/baton-cal-healthchecks-channels.log`. 종료 파일·구조 검사와 전체 diff 검토도 통과했다.
+  동작 검증 이후에는 문서만 변경했다. 실제 공인 DNS·인입 HTTPS·수신 채널·k3s 연결은 미검증이며 새 CI는
+  미푸시로 실행하지 않았다. 정상 신호의 전송 검사 간격 10초와 반복 기준 1분은 유지한다.
+- CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
+  전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
+  `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
+- BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
+  현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
+  이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
 
-이전 서버·OCI·복원 검증과 WebKit 시간 초과 기록은 `git show 6c8eec6:HANDOFF.md`에서 확인할 수 있다.
-과거 테스트 개수와 브랜치 목록을 새 인수인계에 반복해서 추가하지 않는다.
+결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
 
 ## 남은 작업
 
 외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
 앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
+`5b7e0c1` 기준 재검토에서는 추가할 새 API를 찾지 못했다. 제품의 직접 HTTP 호출 부재, Dependabot 주간
+설정과 iCal4j의 시간대 자동 갱신 기본값 `false`를 확인했다. 외부 연동 검토는 `81b2e99`에 기록했고,
+이후 제품 수정의 검증은 위 최근 결과를 따른다. 남은 후보는 아래 조건이 정해지면 진행한다.
 
-1. `1.1.0-rc.2` 릴리스 노트 작성·검토·게시 후 BATON을 공식 자산·증명으로 고정하고 검증한 계약을 안정 버전으로
-   승격한다. `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
-2. 실제 서버·DNS 업체와 비밀 관리 시스템을 정하고 `cal.b4ton.com` HTTPS·인증서 갱신·알림 수신·
-   외부 점검을 연결한다. 내부 Bearer 회전과 실제 프록시·추적의 토큰 비노출을 검증한다.
+1. 작성한 `1.1.0-rc.2` 릴리스 노트를 게시할 커밋과 대조한 뒤 게시한다. BATON에서 공식 ZIP과 릴리스 증명을 검증한 뒤
+   사용할 버전·해시를 지정한다. 연동 검증 후 안정 버전을 게시한다.
+   `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
+2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
+   인증서 갱신·외부 점검·비밀 관리에 사용할 도구를 연결하고 내부 Bearer 회전과 프록시·추적의
+   토큰 비노출을 검증한다. Healthchecks를 사용하면 첫 신호 수신과 누락·복구 알림을 실제 계정에서 확인한다.
+   홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
 3. 실제 캘린더 앱에서 구독·이름 표시·갱신·취소를 확인한 뒤 BATON의 관련 기능과 이름 보정·전달을
    활성화한다. [앱별 확인표](docs/calendar-subscription-guide.md)
 4. 운영 RTO/RPO·백업 저장소·암호화와 실제 복원 훈련을 정한다. 구독 세대 교체, 최신 재전달·완료 확인,
    복구 모드 해제 순서를 운영 절차에 연결한다. 배포 이미지 digest 고정과 builder 갱신도 적용한다.
 5. 실제 수신량·제공자 공유 IP·로그 보존 정책에 맞춰 요청 제한과 알림을 조정한다. 데이터 규모와
-   복구 목표 시간을 정한 뒤 성능을 측정하고, 목표를 넘으면 묶음 수신 계약을 검토한다.
+   복구 목표 시간을 정한 뒤 BATON의 기존 단건 전달을 묶음 수신 API에 연결한다.
 6. 시간대 데이터 갱신이 필요하면 iCal4j 의존성 잠금·골든 바이트·ETag를 검토한 새 계약 후보를 만든다.
 
 ## 현재 제한
 
+- Codex 자동 훅의 실제 세션 실행은 미검증이다. `.codex/hooks.json`의 세 훅을 `/hooks`에서 검토·신뢰해야
+  자동 실행된다. 신뢰 전에는 AGENTS.md의 수동 파일·종료 검사를 사용한다.
 - 로컬 복원은 대표 데이터 검증이다. 실제 운영 전체 데이터·백업 저장소 복원이나 운영 준비 완료를 뜻하지 않는다.
-- 복구 상태 GET은 저장된 기록을 반환하며 현재 원본 완전성을 다시 판정하거나 복구 모드를 해제하지 않는다.
+- 복구 상태 GET은 저장된 기록을 반환한다. 최신 원본의 반영 여부를 다시 확인하거나 복구 모드를 해제하지 않는다.
 - ID 지정 PUT의 응답 유실은 사전 저장한 ID로 조회할 수 있다. 기존 POST 생성과 rotate의 토큰 원문은
-  다시 조회할 수 없으며 명시적 회전이 필요하다.
+  다시 조회할 수 없으므로 구독 주소를 재발급해야 한다.
 - 시간대 입력과 출력은 iCal4j 4.3.0 내장 Olson `2025a` 기준이다.
 - CI 산출물·공식 계약 릴리스·BATON의 계약 채택·운영 배포는 구분한다.

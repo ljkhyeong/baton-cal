@@ -43,10 +43,25 @@ class SnapshotIngestionService(
     }
 
     @Transactional
-    fun ingest(snapshot: ScheduleSnapshot): SnapshotIngestionResult {
+    fun ingest(snapshot: ScheduleSnapshot): SnapshotIngestionResult = ingestBatch(listOf(snapshot)).single()
+
+    @Transactional
+    fun ingestBatch(snapshots: List<ScheduleSnapshot>): List<SnapshotIngestionResult> {
+        // 여러 시즌을 받는 요청도 항상 같은 순서로 잠가 서로 기다리는 상황을 줄인다.
+        snapshots.map { it.seasonId }.distinct().sorted().forEach(lockRepository::acquire)
+        val changedSeasons = linkedSetOf<UUID>()
+        val results = snapshots.map { snapshot ->
+            applySnapshot(snapshot).also { result ->
+                if (result == SnapshotIngestionResult.APPLIED) changedSeasons.add(snapshot.seasonId)
+            }
+        }
+        changedSeasons.forEach(projectionService::rebuildWhileLocked)
+        return results
+    }
+
+    private fun applySnapshot(snapshot: ScheduleSnapshot): SnapshotIngestionResult {
         val payloadHash = SnapshotFingerprint.sha256(snapshot)
         val receivedAt = clock.instant().truncatedTo(ChronoUnit.MICROS)
-        lockRepository.acquire(snapshot.seasonId)
 
         val inserted = inboxRepository.insert(
             SourceEventInboxRow(
@@ -82,10 +97,7 @@ class SnapshotIngestionService(
 
         val acceptedAt = receivedAt.truncatedTo(ChronoUnit.SECONDS)
         return when (itemRepository.applyIfNewer(snapshot.toRow(acceptedAt))) {
-            CalendarItemApplyOutcome.APPLIED -> {
-                projectionService.rebuildWhileLocked(snapshot.seasonId)
-                SnapshotIngestionResult.APPLIED
-            }
+            CalendarItemApplyOutcome.APPLIED -> SnapshotIngestionResult.APPLIED
 
             CalendarItemApplyOutcome.STALE -> SnapshotIngestionResult.STALE
             CalendarItemApplyOutcome.SCOPE_CONFLICT -> throw SnapshotConflictException(
