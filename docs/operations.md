@@ -104,6 +104,9 @@ BATON_CAL_PUBLIC_BASE_URL=https://cal.b4ton.com
 값을 바꾸면 모든 CAL 인스턴스를 재시작한다. 내부 토큰 교체 순서는
 [기존 회전 절차](../README.md#내부-bearer-회전)를 따른다.
 
+CAL이 직접 HTTPS를 제공할 때 TLS 인증서·키 파일은 재시작 없이 갱신할 수 있다. 위 비밀번호·토큰과
+갱신 방식이 다르므로 [TLS 인증서 연결 조건](integration-runtime.md#인증서-갱신-반영)을 따른다.
+
 이 설정은 k3s 등에서 CAL 컨테이너를 실행할 때 사용할 연결 기준이다. 기존 `compose.operations.yml`은
 환경 변수 입력 방식이며, 여기에 import 값만 추가해 파일 입력으로 전환할 수는 없다. 이번 검증은 실제
 Spring Boot의 파일 바인딩·잘못된 토큰 거부·로그 비노출을 확인했으며 k3s 배포는 수행하지 않았다.

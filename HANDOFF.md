@@ -55,18 +55,22 @@
   인증서는 생성 후 2일간 유효하고 로컬 DB 연결값은 실행 환경에 맞춰야 한다.
 - `prod`는 API 포트에 `/livez`·`/readyz`를 제공한다. Spring Boot 상태를 재사용하고 준비 상태에만
   기존 DB 점검을 포함한다. k3s 점검에 사용할 경로이며 실제 배포 설정은 적용하지 않았다.
+- `tls`는 SSL bundle의 파일 갱신 감시로 인증서·키 교체를 재시작 없이 반영한다. Secret 디렉터리의
+  링크 교체와 새 HTTPS 연결의 인증서 변경을 검증했다. `subPath` 마운트는 갱신되지 않으며 DB 비밀번호·
+  내부 토큰은 기존대로 재시작해야 한다. [연결 조건](docs/integration-runtime.md#인증서-갱신-반영)
 - 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
   로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
 
-- 최신 작업 기준은 `9a93cb1`이다. prod 상태 점검 설정과 HTTPS 테스트를 변경했다.
-  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.TlsHttpIntegrationTest'
-  --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest'
-  --tests 'io.baton.cal.web.OperationalHttpTest' bootJar`에서 14개 테스트와 JAR 빌드가 통과했다.
+- 최신 작업 기준은 `79520a4`다. TLS 파일 갱신 설정과 기존 HTTPS 통합 테스트를 변경했다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.TlsHttpIntegrationTest' bootJar`에서
+  통합 테스트 1개와 JAR 빌드가 통과했다. 재시작 없는 인증서 교체, 구독 주소·캘린더 바이트·ETag 유지,
+  인증·관리 포트 분리·준비 상태 전환과 비밀값 비노출을 확인했다.
   Java 25.0.3·PostgreSQL 18.6, Gradle 작업 3개 실행·5개 결과 재사용이다.
-  API 포트의 상태 정보 비노출, 준비 중단 `503`·생존 유지 `200`·준비 복귀 `200`과 관리 포트 분리를
-  확인했다. 로그: `/private/tmp/baton-cal-main-port-probes.log`. 이미지 빌드·운영 설정은 하지 않았다.
+  로그: `/private/tmp/baton-cal-tls-reload.log`. 실제 k3s 갱신·이미지 빌드·운영 설정은 실행하지 않았다.
+  TLS 외 설정·제품·의존성과 웹훅 입력이 같아 기존 검증은 재사용했다. 파일 검사의 Gradle 캐시 접근
+  실패는 권한을 부여한 뒤 해당 검사만 재실행해 통과했다.
 - 웹훅 실패 검증 기준은 `b0369f0`다. 웹훅 스모크·모의 수신기와 문서만 변경했다.
   `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개가 통과했다.
   각 메시지에 `429`·`503`을 순서대로 반환한 뒤 장애·복구 메시지 각 1건의 수신, 정상 신호 분리와

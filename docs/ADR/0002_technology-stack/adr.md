@@ -209,7 +209,8 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
 
 - BATON의 내부 호출은 HTTPS 출처를 요구한다. CAL이 직접 HTTPS를 제공해야 하면 선택형 `tls`
   프로필에서 Spring Boot PEM SSL bundle을 사용한다. API 포트 전체에 TLS를 적용하고 관리 포트는
-  별도 HTTP로 유지한다. 인증서 파서·별도 서버·갱신 감시 코드를 추가하지 않으며 파일 교체 후 재시작한다.
+  별도 HTTP로 유지한다. `reload-on-update`로 파일 갱신을 Tomcat에 반영하며 인증서 파서·별도 서버·
+  갱신 감시 코드를 추가하지 않는다. 인증서와 키의 디렉터리 링크 교체를 실제 HTTPS로 검증한다.
   공개 구독과 사설 내부 API의 라우팅은 운영에서 분리한다. [실행 입력](../../integration-runtime.md)
 - 로컬 실행에는 개발용 PostgreSQL URL·사용자명·비밀번호 기본값을 제공한다. `prod` 프로필은
   `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`를 모두 외부에서 명시하도록 요구해

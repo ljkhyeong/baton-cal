@@ -64,6 +64,7 @@ CAL이 담당한다.
   파일 이름과 재시작 기준은 [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다.
 - CAL 자체 HTTPS는 `prod,tls` 프로필과 PEM 인증서·개인키 파일로 제공한다. 기본 8080이 HTTPS로
   바뀌며 관리 8081은 HTTP를 유지한다. [환경변수 예시와 BATON 연결 조건](docs/integration-runtime.md)을 따른다.
+  인증서 파일 갱신은 재시작 없이 반영한다. [인증서 마운트 조건](docs/integration-runtime.md#인증서-갱신-반영)을 따른다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
   맞게 조정한다. DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패, 잠금·SQL·트랜잭션 시간 초과에는

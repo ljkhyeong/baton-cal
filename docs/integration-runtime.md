@@ -11,7 +11,7 @@ CAL의 API·웹훅 연결에 필요한 애플리케이션 입력을 정리한다
 | 공휴일 | 한국천문연구원 특일 정보 API | BATON에 수집 코드가 있다. BATON의 키와 활성화 설정이 필요하며 CAL은 확정 일정만 수신 |
 | 장애·복구 알림 | Alertmanager의 Slack·Discord 웹훅 | 기본 제공 발송·재시도 기능 사용. 단독·Healthchecks 조합 중 선택 |
 | 서버 중단 감지 | Alertmanager → Healthchecks.io | 채널별 조합과 모의 수신 검증 구현. 사용할 계정의 무료 점검과 수신 채널 등록 필요 |
-| 내부 API의 HTTPS | Spring Boot PEM SSL bundle | `tls` 프로필 추가. 인증서·개인키 파일로 HTTPS를 제공하며 별도 서버 코드는 없음 |
+| 내부 API의 HTTPS | Spring Boot PEM SSL bundle | `tls` 프로필로 HTTPS 제공·인증서 파일 갱신 반영. 별도 서버·파일 감시 코드는 없음 |
 | DB 비밀번호·내부 토큰 | Spring Boot `configtree` | Secret 파일 연결 지원. 별도 비밀 관리 API·파일 파서는 없음 |
 
 CAL에 추가할 새 제공자 API는 선정하지 않았다. 현재 기능에서는 계정 동의·토큰 보관·동기화 상태 관리가
@@ -35,13 +35,14 @@ CAL에 추가할 새 제공자 API는 선정하지 않았다. 현재 기능에�
 | `BATON_CAL_SUBSCRIPTION_GENERATION` | 새 DB 최초 실행 때 정한 UUID. 기존 DB는 사용하던 값을 유지 |
 | `BATON_CAL_TLS_CERTIFICATE` | `tls` 사용 시 PEM 인증서 체인. 예: `file:/run/secrets/baton-cal-tls/tls.crt` |
 | `BATON_CAL_TLS_PRIVATE_KEY` | `tls` 사용 시 PEM 개인키. 예: `file:/run/secrets/baton-cal-tls/tls.key` |
+| `BATON_CAL_TLS_RELOAD_ON_UPDATE` | `tls` 인증서 파일 자동 반영. 기본 `true`, `false`이면 교체 후 재시작 |
 
 CAL 자체는 RFC 6750 형식을 허용하지만 BATON의 전송 설정은 더 좁은 문자·길이 범위를 요구한다.
 위 토큰 기준은 두 서비스가 함께 쓸 수 있는 범위다. 일반 Base64의 `+`, `/`, `=`는 BATON에서 거부된다.
 Python `secrets.token_urlsafe(48)`로 생성한 값은 이 범위에 맞는다. 로컬 임시 토큰도 이 방식으로 준비했다.
 
 이전 내부 토큰은 회전 기간에만 `baton.cal.previous-internal-token` 파일로 추가한다. 사용하지 않을 때는
-빈 파일을 만들지 않는다. Secret 값이나 인증서 교체 후에는 애플리케이션을 재시작한다. 토큰 원문·개인키는
+빈 파일을 만들지 않는다. DB 비밀번호·내부 토큰 변경 후에는 애플리케이션을 재시작한다. 토큰 원문·개인키는
 이미지나 Git에 넣지 않는다. [Secret 연결 기준](operations.md#secret-파일-연결)
 
 ## 공개 주소와 BATON API 주소
@@ -69,6 +70,20 @@ Nginx 예시는 CAL의 HTTP 포트를 전제로 하므로 `tls` 프로필만 켜
 BATON의 `BATON_CAL_BEARER_TOKEN` 또는 해당 Secret 파일에는 CAL 현재 내부 토큰과 같은 값을 전달한다.
 캡처·전달·구독 활성화와 기존 데이터 보정 순서는 BATON의
 [연동 문서](https://github.com/ljkhyeong/baton/blob/main/docs/runbooks/free-integrations.md)를 따른다.
+
+## 인증서 갱신 반영
+
+`tls` 프로필은 Spring Boot의 `reload-on-update`를 사용한다. 외부 인증서 관리 도구가 설정된 PEM
+인증서·개인키 파일을 바꾸면, 파일 변경이 멈춘 뒤 새 HTTPS 연결에 반영한다. CAL 재시작은 필요 없다.
+인증서 발급·갱신 도구는 운영에서 연결한다. [Spring Boot SSL bundle 갱신](https://docs.spring.io/spring-boot/reference/features/ssl.html#features.ssl.reloading)
+
+- 인증서와 키는 같은 Secret에 넣고 디렉터리 전체를 읽기 전용으로 마운트한다. `subPath` 파일 마운트는
+  Secret 갱신을 전달하지 않는다. 실제 파일 반영까지는 kubelet 동기화 시간이 걸릴 수 있다.
+  [Kubernetes Secret 갱신 조건](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod)
+- 파일 경로와 읽기 권한을 유지하고 인증서·키를 한 묶음으로 교체한다. 컨테이너가 심볼릭 링크의 대상도
+  읽을 수 있어야 한다. 갱신 뒤 새 연결에서 인증서와 체인이 바뀌었는지 확인한다.
+- 자동 반영을 끄려면 `BATON_CAL_TLS_RELOAD_ON_UPDATE=false`를 사용하고 파일 교체 후 재시작한다.
+  DB 비밀번호·내부 토큰·파일 경로 설정 변경은 자동 반영 대상이 아니며 재시작해야 한다.
 
 ## k3s 상태 점검에 사용할 경로
 
@@ -106,7 +121,8 @@ bash scripts/smoke-alert-channels.sh
 
 HTTPS 테스트는 임시 인증서와 격리된 PostgreSQL을 사용해 인증, 구독 발급·조회·해제, 공개 호스트,
 관리 포트 분리와 토큰 비노출을 확인한다. API 포트의 `/livez`·`/readyz`와 준비 상태 변경 시 `503`,
-정상 복귀 후 `200`도 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
+정상 복귀 후 `200`도 확인한다. Secret 볼륨처럼 디렉터리 링크를 교체한 뒤 새 HTTPS 연결의 인증서,
+기존 구독의 캘린더 바이트·ETag 유지도 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
 Docker 네트워크에서 채널별 단독·Healthchecks 조합의 장애·복구 메시지와 정상 신호 분리를 확인한다.
 모의 API가 메시지별로 `429`, `503`을 반환한 뒤 성공하게 하여 재전송, 실제 수신 건수와 오류 로그의
 웹훅 주소 비노출도 검사한다. 전송·재시도에는 기존 Alertmanager를 사용한다.
