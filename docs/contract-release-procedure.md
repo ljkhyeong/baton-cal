@@ -83,9 +83,8 @@ gh release view contracts-v1.0.1 --json assets \
 
 ## 새 사전 릴리스 게시
 
-`1.1.0-rc.1`은 이미 게시됐다. 새 후보 버전은 `contracts/VERSION`에서 읽고, 해당 버전의
-`docs/releases/contracts-v{버전}.md`를 준비한다. 현재 후보의 [1.1.0-rc.2 릴리스 노트](releases/contracts-v1.1.0-rc.2.md)는
-작성했으며 게시할 커밋의 변경 사항과 최종 검증 결과를 대조한다.
+`1.1.0-rc.2`까지 게시됐다. 계약 ZIP의 입력을 바꾸면 먼저 `contracts/VERSION`을 새 버전으로 올린다.
+해당 버전의 `docs/releases/contracts-v{버전}.md`를 준비하고 게시할 커밋의 변경 사항과 검증 결과를 대조한다.
 게시한 태그와 자산은 교체하지 않으며, 릴리스 노트에는 새 버전의 변경 사항을 반영한다.
 
 후보 변경과 릴리스 노트가 `main`에 반영되고 로컬 `main`이 `origin/main`과 같은지 확인한다.
