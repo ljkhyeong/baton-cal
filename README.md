@@ -80,6 +80,8 @@ CAL이 담당한다.
 - Prometheus 형식은 `/actuator/prometheus`에서 제공한다. `prod` 프로필은 관리 서버를 기본
   `8081` 포트로 분리하며, 공개 역방향 프록시는 이 포트를 노출하지 않고 메트릭 수집기만 접근하게 한다.
   포트는 `MANAGEMENT_SERVER_PORT`로 바꿀 수 있다.
+- `prod`의 `/livez`·`/readyz`는 API 포트에서 생존·준비 상태를 제공한다. k3s 점검에는 이 경로를
+  사용하며 준비 상태에만 DB 점검을 포함한다. [점검 연결 기준](docs/integration-runtime.md#k3s-상태-점검에-사용할-경로)
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
   하고 RFC 6750 `b64token` 문자 범위와 끝의 `=` 패딩만 사용한다. 선택적 값을 빈 문자열로 설정하면

@@ -1,7 +1,7 @@
 # 추가 요금 없는 외부 API 연동
 
 - 확인일: 2026-09-12
-- 기준: CAL `b0369f0`, BATON 원격 main `c94469e`의 API·웹훅 연결과 실패 처리 재검토
+- 기준: CAL `9a93cb1`, BATON 원격 main `c94469e`의 API·웹훅 연결과 실행 조건 재검토
 - 선택: `.ics` 구독 유지, 기본 제공 알림·인증서·공개 경로 점검·외부 정상 신호와 Secret 파일 연동
 
 ## 검토 결과
@@ -14,6 +14,7 @@
 | 공개 요청 경로 점검 | Blackbox Exporter HTTP 검사와 Prometheus | 전용 공개 상태 API·점검 클라이언트 | 실제 구독 토큰 없이 프록시→CAL 응답을 확인하는 설정과 장애·복구 검증 추가 |
 | 비밀값 전달 | Spring Boot `configtree`와 k3s Secret 파일 | Secret 조회 API·파일 판독·문자열 변환 코드 | 기존 기능으로 연결 가능. 실제 설정 바인딩·실패 시 비노출 검증과 연결 기준 추가 |
 | 내부 API HTTPS | Spring Boot PEM SSL bundle | 인증서 파서·HTTPS 서버 구성 코드 | 선택형 `tls` 프로필과 실제 HTTPS API 검증 추가 |
+| k3s 생존·준비 점검 | Spring Boot Kubernetes Probes | 전용 상태 API·DB 점검 코드 | API 포트에 `/livez`·`/readyz` 제공. 실제 배포 설정은 운영에서 적용 |
 | 의존성 버전 확인 | GitHub Dependabot | 패키지·이미지 버전 조회 봇 | Gradle·GitHub Actions·Compose의 기존 주간 설정 유지 |
 | 시간대 정보 갱신 | iCal4j의 TZURL 갱신 기능 | 시간대 API 클라이언트 | 자동 갱신 비활성 유지. 라이브러리 버전 변경 때 캘린더 결과를 검증 |
 | 인증서 발급·갱신 | ACME 지원 인증서 관리자 | CAL 전용 발급·갱신 API 클라이언트 | 준비된 인증서 유지. 갱신은 운영에서 선택한 관리 도구에 연결 |
@@ -34,6 +35,8 @@ HTTPS를 선택할 수 있도록 준비했다. [API·웹훅 실행 입력](integ
 내부 토큰 허용 범위 차이는 [공통으로 사용할 입력 기준](integration-runtime.md#애플리케이션-입력)에 반영했다.
 웹훅은 `429`·`503` 뒤의 전달 재개와 오류 로그 비노출까지 모의 API로 검증한다. CAL에 별도 재시도
 클라이언트를 만들지 않고 고정한 Alertmanager의 기본 동작을 사용한다. [검증 범위](operations.md#재현-가능한-로컬-검증)
+관리 포트만 확인하면 API 포트의 연결 문제를 놓칠 수 있어 Spring Boot의 추가 점검 경로를 활성화했다.
+[k3s 점검에 사용할 경로](integration-runtime.md#k3s-상태-점검에-사용할-경로)
 
 버전 확인은 [기존 Dependabot 설정](../.github/dependabot.yml)을 사용한다. 원격 작업의 실행 상태나
 자동 병합을 이번 검토에서 확인·변경하지 않았다. 고정한 iCal4j 4.3.0의 시간대 외부 갱신은 기본값이

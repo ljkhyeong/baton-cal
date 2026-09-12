@@ -50,6 +50,7 @@ Python `secrets.token_urlsafe(48)`로 생성한 값은 이 범위에 맞는다. 
 | --- | --- | --- |
 | 캘린더 앱 → CAL | `https://cal.b4ton.com/calendars/v1/{token}.ics` | 공개 GET·HEAD만 허용 |
 | BATON → CAL | `/internal/api/v1/**` | 사설 연결, HTTPS, CAL 전용 Bearer 필요 |
+| k3s → CAL | API 포트의 `/livez`, `/readyz` | `prod`는 HTTP, `prod,tls`는 HTTPS. 외부 공개 제외 |
 | 상태 점검·Prometheus → CAL | 내부 `8081/actuator/**` | HTTP 관리 포트. 외부 공개 제외 |
 
 BATON의 `BATON_CAL_BASE_URL`은 **내부 API에 도달하는 HTTPS 출처**여야 한다. `/internal/api/v1`을
@@ -68,6 +69,21 @@ Nginx 예시는 CAL의 HTTP 포트를 전제로 하므로 `tls` 프로필만 켜
 BATON의 `BATON_CAL_BEARER_TOKEN` 또는 해당 Secret 파일에는 CAL 현재 내부 토큰과 같은 값을 전달한다.
 캡처·전달·구독 활성화와 기존 데이터 보정 순서는 BATON의
 [연동 문서](https://github.com/ljkhyeong/baton/blob/main/docs/runbooks/free-integrations.md)를 따른다.
+
+## k3s 상태 점검에 사용할 경로
+
+`prod`는 API 포트(기본 8080)에도 Spring Boot의 `/livez`, `/readyz`를 제공한다. 별도 관리 포트만
+점검하면 API 포트가 요청을 받지 못하는 문제를 놓칠 수 있어, k3s 점검에는 API 포트를 사용한다.
+
+| 용도 | 경로 | 확인 내용 |
+| --- | --- | --- |
+| 생존 상태 | `/livez` | 애플리케이션 생존 상태. DB 장애만으로 재시작하지 않도록 DB 점검 제외 |
+| 요청 처리 준비 | `/readyz` | 애플리케이션 준비 상태와 기존 DB 연결 점검 |
+
+Pod에 직접 연결할 때 프로토콜은 `prod`의 HTTP 또는 `prod,tls`의 HTTPS에 맞춘다. 응답에는 상태만
+포함하며 DB 상세 정보는 노출하지 않는다. 공개 프록시는 두 경로를 차단하고 메트릭은 기존 관리 포트로
+수집한다. k3s의 점검 주기·실패 횟수와 배포 설정은 운영에서 정한다.
+[Spring Boot의 API 포트 점검 권고](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html#actuator.endpoints.kubernetes-probes)
 
 ## 웹훅과 검증
 
@@ -89,7 +105,8 @@ bash scripts/smoke-alert-channels.sh
 ```
 
 HTTPS 테스트는 임시 인증서와 격리된 PostgreSQL을 사용해 인증, 구독 발급·조회·해제, 공개 호스트,
-관리 포트 분리와 토큰 비노출을 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
+관리 포트 분리와 토큰 비노출을 확인한다. API 포트의 `/livez`·`/readyz`와 준비 상태 변경 시 `503`,
+정상 복귀 후 `200`도 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
 Docker 네트워크에서 채널별 단독·Healthchecks 조합의 장애·복구 메시지와 정상 신호 분리를 확인한다.
 모의 API가 메시지별로 `429`, `503`을 반환한 뒤 성공하게 하여 재전송, 실제 수신 건수와 오류 로그의
 웹훅 주소 비노출도 검사한다. 전송·재시도에는 기존 Alertmanager를 사용한다.
