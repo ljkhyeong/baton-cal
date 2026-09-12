@@ -12,6 +12,9 @@
   V3의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
 - 일정·구독·복구 상태 조회의 `404`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503`에도
   `Cache-Control: no-store`를 적용한다. 상태가 바뀐 뒤 이전 오류 응답이 재사용되는 것을 막는다.
+- 파일 작성 직후 검사와 종료 전 전체 diff·ArchUnit 검사를 추가했다. 기존 Spring Repository 주입 구조를
+  유지하며 Controller의 DB 접근, 도메인의 실행 계층 의존, Service의 JDBC 사용·Repository 생성을 검사한다.
+  실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL 경로는 `/Users/lim/devProject/personal/baton-cal`이다. BATON 작업 경로는
@@ -28,19 +31,15 @@
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
-- 2026-09-12 상태 오류 캐시 정책: 기준 `53a9063`의 변경을 `e1551ad`로 커밋했다.
-  공통 오류 처리 변경이 여러 API에 영향을 주므로 `./gradlew --no-daemon --max-workers=2 check`를 실행했다.
-  Java 25 툴체인·PostgreSQL 18.6에서 전체 125개 테스트와 계약 ZIP을 새로 검증했다. 실패·제외 없음.
-  구독 생성 전 `404`와 생성 후 `200`, 중복 생성·시즌 충돌·일정 및 복구 상태 조회·복구 중 발급 차단의
-  캐시 정책을 기존 테스트에서 확인했다. 빌드 작업 2개와 구성 캐시는 재사용했다.
-  최종 로그: `/private/tmp/baton-cal-state-error-cache-check-20260912.log`.
-  클래스별 결과: `/private/tmp/baton-cal-state-error-cache-results-20260912.json`.
-  이미지·운영 구성 변경이 없어 스모크는 반복하지 않았다. 실제 캐시·캘린더 앱 검증은 미실행이다.
-- 2026-09-12 릴리스 문서 준비: 기준 `697f2b1`에서 계약 안내·릴리스 문서만 변경했다.
-  소스·테스트·의존성·설정이 위 검증과 같아 125개 테스트 결과를 재사용했다.
-  `./gradlew --no-daemon --max-workers=2 verifyContractsZip`으로 변경된 계약 ZIP을 새로 검증하고
-  관련 문서 상대 링크 22개를 확인했다. 로그: `/private/tmp/baton-cal-rc2-notes-contracts-20260912.log`.
-  `rc.1` 이후 기존 JSON 스키마·골든·DB 마이그레이션 변경은 없고, 진단 스키마 두 개가 추가된 것을 확인했다.
+- 2026-09-12 검증 루프: 기준 `0a7cd0a`에서 검사·테스트·의존성·CI 변경을 `82295dc`로 커밋했다.
+  `./gradlew --no-daemon --max-workers=2 check`로 일반 125개·구조 3개·스크립트 11개 테스트와 계약 ZIP을
+  검증했다. Java 25·PostgreSQL 18.6, 실패·제외 없음. 4개 작업을 새로 실행하고 6개는 기존 결과를 재사용했다.
+  로그: `/private/tmp/baton-cal-feedback-check-final.log`.
+  실제 위반 탐지·정상 주입 허용, 새 파일·스테이징·중간 커밋 포함, 같은 실패의 자동 재실행 방지,
+  수동 재시도·훅 JSON 응답을 확인했다. 테스트용 Spring 클래스는 제품 자동 탐색 범위 밖에 두었다.
+  이후 지시·문서만 변경하며 동일 테스트 결과를 재사용한다. 종료 검사는
+  `python3 -B scripts/agent_feedback.py final`로 실행하고 출력된 전체 diff를 검토한다.
+  이미지·운영 구성은 변경하지 않아 스모크를 반복하지 않았다. 새 CI 실행은 미푸시로 미실행이다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
@@ -67,6 +66,8 @@
 
 ## 현재 제한
 
+- Codex 자동 훅의 실제 세션 실행은 미검증이다. `.codex/hooks.json`의 세 훅을 `/hooks`에서 검토·신뢰해야
+  자동 실행된다. 신뢰 전에는 AGENTS.md의 수동 파일·종료 검사를 사용한다.
 - 로컬 복원은 대표 데이터 검증이다. 실제 운영 전체 데이터·백업 저장소 복원이나 운영 준비 완료를 뜻하지 않는다.
 - 복구 상태 GET은 저장된 기록을 반환한다. 최신 원본의 반영 여부를 다시 확인하거나 복구 모드를 해제하지 않는다.
 - ID 지정 PUT의 응답 유실은 사전 저장한 ID로 조회할 수 있다. 기존 POST 생성과 rotate의 토큰 원문은
