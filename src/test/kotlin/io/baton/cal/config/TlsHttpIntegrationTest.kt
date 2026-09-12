@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import org.springframework.boot.SpringApplication
+import org.springframework.boot.availability.AvailabilityChangeEvent
+import org.springframework.boot.availability.ReadinessState
 import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -77,6 +79,17 @@ class TlsHttpIntegrationTest {
                     assertThat(request(subscriptionUrl, "DELETE", authorized = true).statusCode()).isEqualTo(204)
                     assertThat(request("$baseUrl${feedUrl.rawPath}").statusCode()).isEqualTo(404)
                     assertThat(request("$managementUrl/actuator/health/readiness").statusCode()).isEqualTo(200)
+                    for (path in listOf("/livez", "/readyz")) {
+                        val health = request("$baseUrl$path")
+                        assertThat(health.statusCode()).isEqualTo(200)
+                        assertThat(health.body()).isEqualTo("""{"status":"UP"}""")
+                    }
+                    AvailabilityChangeEvent.publish(context, ReadinessState.REFUSING_TRAFFIC)
+                    assertThat(request("$baseUrl/readyz").statusCode()).isEqualTo(503)
+                    assertThat(request("$managementUrl/actuator/health/readiness").statusCode()).isEqualTo(503)
+                    assertThat(request("$baseUrl/livez").statusCode()).isEqualTo(200)
+                    AvailabilityChangeEvent.publish(context, ReadinessState.ACCEPTING_TRAFFIC)
+                    assertThat(request("$baseUrl/readyz").statusCode()).isEqualTo(200)
                     val metrics = request("$managementUrl/actuator/prometheus")
                     assertThat(metrics.statusCode()).isEqualTo(200)
                     assertThat(metrics.body()).doesNotContain(feedUrl.rawPath, INTERNAL_TOKEN)

@@ -5,6 +5,10 @@ spring:
     password: ${DATABASE_PASSWORD}
 
 management:
+  endpoint:
+    health:
+      probes:
+        add-additional-paths: true
   server:
     port: ${MANAGEMENT_SERVER_PORT:8081}
 
