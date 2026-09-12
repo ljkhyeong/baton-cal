@@ -32,6 +32,9 @@ BATON CAL MVP는 다음 특성을 가진다.
 - `spring.jackson.deserialization.accept-float-as-int=false`로 개정 번호와 건수의 소수·지수 표기를
   거부한다. 기존 `allow-coercion-of-scalars=false`만으로는 소수의 정수 변환을 막지 못한다.
   공통 파싱 설정으로 `400 INVALID_REQUEST`를 반환하며 필드별 파서나 추가 검증기는 두지 않는다.
+- `JsonMapperBuilderCustomizer`에서 `LogicalType.Textual`의 숫자·불리언 변환을 `CoercionAction.Fail`로
+  지정한다. `allow-coercion-of-scalars`의 문자열 제외를 보완하며, 기존 Mapper와 Bean Validation을 사용한다.
+  사용자 정의 문자열 파서나 DTO별 타입 검증은 추가하지 않는다.
 - Jackson의 읽기 제약으로 JSON 전체 문서를 128 KiB(131,072바이트), 필드명을 64자, 중첩을
   16단계, 숫자를 10자리, 토큰을 256개로 제한한다. 이는 DTO와 JSON Schema의 개별 필드 제약과
   별도로 적용하는 파싱 제한이며, Spring MVC 오류 처리기가 어느 제한을 넘든 고정된

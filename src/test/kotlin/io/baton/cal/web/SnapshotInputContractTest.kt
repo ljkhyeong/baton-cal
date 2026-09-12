@@ -4,6 +4,7 @@ import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.support.PostgreSqlTestContainer
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -52,6 +53,18 @@ class SnapshotInputContractTest @Autowired constructor(
     fun `개정 번호의 소수와 지수 표기는 저장하지 않고 정수로 수정한 요청은 처리한다`(revision: String) {
         val payload = utcSnapshot()
         assertInvalid(payload.replace("\"revision\": 0", "\"revision\": $revision"))
+        assertApplied(payload)
+    }
+
+    @ParameterizedTest(name = "{0} = {1}")
+    @CsvSource(
+        "summary, 123", "summary, 12.5", "summary, true",
+        "description, 123", "description, 12.5", "description, true",
+        "location, 123", "location, 12.5", "location, true",
+    )
+    fun `TEXT의 숫자와 불리언은 저장하지 않고 따옴표로 감싼 문자열은 처리한다`(field: String, value: String) {
+        val payload = utcSnapshot(summary = value, description = value, location = value)
+        assertInvalid(payload.replace("\"$field\": \"$value\"", "\"$field\": $value"))
         assertApplied(payload)
     }
 
