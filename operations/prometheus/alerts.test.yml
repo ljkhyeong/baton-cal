@@ -2,6 +2,15 @@ rule_files: [alerts.yml]
 evaluation_interval: 1m
 tests:
   - interval: 1m
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: CalWatchdog
+        exp_alerts:
+          - exp_labels: {severity: none}
+            exp_annotations:
+              summary: CAL 모니터링 정상 신호
+              description: 외부 점검 서비스에 주기적으로 보내는 신호입니다. 장애 알림이 아닙니다.
+  - interval: 1m
     input_series:
       - series: 'probe_success{job="baton-cal-tls",instance="cal.b4ton.com:443"}'
         values: '0+0x10'

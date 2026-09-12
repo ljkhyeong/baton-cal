@@ -1,6 +1,12 @@
 groups:
   - name: baton-cal
     rules:
+      - alert: CalWatchdog
+        expr: vector(1)
+        labels: {severity: none}
+        annotations:
+          summary: CAL 모니터링 정상 신호
+          description: 외부 점검 서비스에 주기적으로 보내는 신호입니다. 장애 알림이 아닙니다.
       - alert: CalMetricsUnavailable
         expr: up{job="baton-cal"} == 0
         for: 30s

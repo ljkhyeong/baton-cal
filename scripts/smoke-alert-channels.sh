@@ -42,12 +42,18 @@ wait_message() {
   return 1
 }
 
-for channel in slack discord; do
+for channel in alertmanager slack discord; do
   printf '%s\n' "http://alert-receiver:8080/$channel/smoke-secret-marker" > "$scratch/webhook-url"
   docker run --rm --network none --entrypoint amtool \
     --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
     --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \
     "$alertmanager_image" check-config /config.yml > /dev/null
+  docker run --rm --network none --entrypoint amtool \
+    --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
+    --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \
+    "$alertmanager_image" config routes test --config.file=/config.yml \
+    --verify.receivers=discard alertname=CalWatchdog > /dev/null
+  if [[ "$channel" == alertmanager ]]; then continue; fi
   docker run --detach --name "$sender" --network "$project_name" --network-alias alert-sender \
     --volume "$project_directory/operations/alertmanager/$channel.yml:/config.yml:ro" \
     --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro" \

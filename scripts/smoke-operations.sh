@@ -20,9 +20,11 @@ export CAL_INTERNAL_PORT=0 CAL_HTTP_PORT=0 CAL_HTTPS_PORT=0 CAL_PROMETHEUS_PORT=
 export CAL_REQUEST_RATE=10r/s CAL_REQUEST_BURST=20 CAL_CONNECTION_LIMIT=20
 export CAL_TLS_DIRECTORY="$scratch/tls" CAL_ACME_DIRECTORY="$scratch/acme"
 export CAL_ALERT_WEBHOOK_URL_FILE="$scratch/webhook-url"
-export CAL_ALERTMANAGER_CONFIG_FILE="$project_directory/operations/alertmanager/alertmanager.yml"
+export CAL_HEALTHCHECKS_PING_URL_FILE="$scratch/healthchecks-url"
+export CAL_ALERTMANAGER_CONFIG_FILE="$project_directory/operations/alertmanager/healthchecks.yml"
 compose=(docker compose --ansi never --project-name "$project_name"
-  --file "$project_directory/compose.operations.yml" --file "$project_directory/compose.operations-smoke.yml")
+  --file "$project_directory/compose.operations.yml" --file "$project_directory/compose.healthchecks.yml"
+  --file "$project_directory/compose.operations-smoke.yml")
 request=(curl --silent --show-error --connect-timeout 2 --max-time 10)
 
 cleanup() {
@@ -46,6 +48,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=cal.b4ton.com \
   -keyout "$CAL_TLS_DIRECTORY/live/cal.b4ton.com/privkey.pem" \
   -out "$CAL_TLS_DIRECTORY/live/cal.b4ton.com/fullchain.pem" >"$scratch/openssl.log" 2>&1
 printf '%s\n' http://alert-receiver:8080/alerts > "$CAL_ALERT_WEBHOOK_URL_FILE"
+printf '%s\n' http://alert-receiver:8080/healthchecks/heartbeat-secret-marker > "$CAL_HEALTHCHECKS_PING_URL_FILE"
 printf '%s' acme-smoke > "$CAL_ACME_DIRECTORY/.well-known/acme-challenge/smoke"
 
 "${compose[@]}" config --quiet
@@ -60,6 +63,7 @@ internal_url="http://$(address app 8080)"
 management_url="http://$(address app 8081)"
 prometheus_url="http://$(address prometheus 9090)"
 receiver_url="http://$(address alert-receiver 8080)"
+alertmanager_url="http://$(address alertmanager 9093)"
 blackbox_url="http://$(address blackbox 9115)"
 https_address=$(address gateway 443)
 https_port=${https_address##*:}
@@ -165,11 +169,45 @@ wait_ready
 wait_alert resolved
 echo "CAL 재시작 뒤 알림 해제 전달을 확인했습니다."
 
+heartbeat_count() {
+  "${request[@]}" --fail "$receiver_url/alerts" | jq '[.[] | select(.channel == "healthchecks")] | length'
+}
+wait_heartbeat() {
+  local expected=$1
+  for ((attempt=0; attempt<80; attempt++)); do
+    if (( $(heartbeat_count) >= expected )); then return 0; fi
+    sleep 1
+  done
+  echo "외부 정상 신호 대기 시간을 넘었습니다." >&2
+  return 1
+}
+wait_heartbeat 2
+# 다음 신호를 받은 직후 원본 갱신을 멈추고 만료시켜, 진행 중인 전송과 경합하지 않는다.
+expected=$(( $(heartbeat_count) + 1 ))
+wait_heartbeat "$expected"
+"${compose[@]}" stop prometheus
+jq -n '[{labels: {alertname: "CalWatchdog", severity: "none"},
+  startsAt: (now - 60 | todate), endsAt: (now | todate)}]' > "$scratch/watchdog-resolved.json"
+"${request[@]}" --fail -H 'Content-Type: application/json' --data-binary @"$scratch/watchdog-resolved.json" \
+  "$alertmanager_url/api/v2/alerts" > /dev/null
+for ((attempt=0; attempt<65; attempt++)); do
+  if (( $(heartbeat_count) != expected )); then
+    echo "정상 신호 해제 후에도 외부 점검 요청이 전송됐습니다." >&2
+    exit 1
+  fi
+  sleep 1
+done
+"${compose[@]}" start prometheus
+prometheus_url="http://$(address prometheus 9090)"
+wait_heartbeat "$((expected + 1))"
+"${request[@]}" --fail "$receiver_url/alerts" | jq -e 'all(.[]; .alertname != "CalWatchdog")' > /dev/null
+echo "외부 정상 신호의 반복 전송·해제 후 중단·재개와 일반 알림 분리를 확인했습니다."
+
 "${compose[@]}" logs --no-color > "$scratch/logs"
 "${request[@]}" --fail "$management_url/actuator/prometheus" > "$scratch/metrics"
 "${request[@]}" --fail --get --data-urlencode 'match[]={job="baton-cal"}' \
   "$prometheus_url/api/v1/series" > "$scratch/series"
-for secret in "$token" "$BATON_CAL_INTERNAL_TOKEN" query-smoke-marker; do
+for secret in "$token" "$BATON_CAL_INTERNAL_TOKEN" query-smoke-marker heartbeat-secret-marker; do
   if grep -Fq "$secret" "$scratch/logs" "$scratch/metrics" "$scratch/series"; then
     echo "로그 또는 관측 데이터에서 비밀 표식이 발견됐습니다. 원문은 출력하지 않습니다." >&2
     exit 1
