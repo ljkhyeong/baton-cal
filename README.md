@@ -396,13 +396,15 @@ GitHub Actions도 `main` 푸시와 모든 풀 리퀘스트에서 Java 25로 테�
 
 ## 공개 운영 준비
 
-`cal.b4ton.com`용 단일 호스트 구성을 `compose.operations.yml`에 준비했다. Nginx HTTPS·요청 제한,
-Prometheus·Alertmanager와 준비 상태 점검을 포함한다. 기본 바인드는 루프백이며 실제 서버·DNS·
-공인 인증서·외부 알림 채널은 아직 연결하지 않았다. 배포 환경과 외부 비밀 설정을 준비한 뒤
-[운영 절차](docs/operations.md)를 따른다.
+공개 주소는 `cal.b4ton.com`이다. 운영 대상은 Ubuntu 홈서버의 k3s이며, 사용자 확인 기준으로 DNS·
+공인 IP·포트포워딩·인증서는 준비됐고 k3s는 구축 전이다. `compose.operations.yml`은 Nginx HTTPS·
+요청 제한, Prometheus·Alertmanager·인증서 점검의 로컬 통합 검증에도 사용한다. Slack·Discord는
+Alertmanager의 기본 연동으로 연결한다. 실제 홈서버 배포와 알림 채널 연결은 수행하지 않았다.
+[운영 연동 안내](docs/operations.md), [외부 API 검토](docs/external-api-options.md).
 
 ```shell
 ./scripts/smoke-operations.sh baton-cal:smoke
+bash scripts/smoke-alert-channels.sh
 ./gradlew --no-daemon ingestionLoadTest -PloadItemCount=1000
 ```
 

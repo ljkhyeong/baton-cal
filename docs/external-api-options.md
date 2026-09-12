@@ -1,8 +1,31 @@
 # 추가 요금 없는 외부 API 연동
 
-- 확인일: 2026-09-07
-- 기준: CAL `30f88e7`, 외부 서비스 이용료를 추가하지 않는다는 사용자 요청
-- 선택: 기존 `.ics` 구독의 앱별 등록 편의 개선. 제공자 API 직접 연동은 보류
+- 확인일: 2026-09-12
+- 기준: CAL `efed802`, 추가 요금 없는 외부 API·운영 연동 검토
+- 선택: `.ics` 구독 유지, 기본 제공 알림 연동과 인증서 점검 적용
+
+## 검토 결과
+
+| 대상 | 활용할 API·표준 연동 | 줄일 수 있는 직접 구현 | 결정 |
+| --- | --- | --- | --- |
+| 운영 알림 | Alertmanager의 Slack·Discord 웹훅 연동 | 메시지 변환 서버, API 호출·재시도 코드 | 수신 설정과 모의 API 검증 추가 |
+| 인증서 점검 | Blackbox Exporter TLS 검사와 Prometheus | 인증서 파싱·만료일 점검 스크립트 | 이름·체인 확인, 14일 이내 만료 알림 추가 |
+| 인증서 발급·갱신 | ACME 지원 인증서 관리자 | CAL 전용 발급·갱신 API 클라이언트 | 준비된 인증서 유지. 갱신은 운영에서 선택한 관리 도구에 연결 |
+| 공휴일 | 한국천문연구원 특일 정보 | 설날·추석·대체공휴일 계산 | 일정 원본을 결정하는 BATON에서 활용. CAL에는 추가하지 않음 |
+| 캘린더 앱의 빠른 갱신 | Google Calendar·Microsoft Graph | 외부 앱에 일정 생성·수정·삭제 | 계정 연결과 상태 관리가 더 필요해 현재 `.ics` 구독 유지 |
+| DNS 변경 | DNS 업체 API·기존 DDNS 도구 | IP 변경 감지·레코드 갱신 스크립트 | DNS·공인 IP가 준비되어 있어 새 자동화는 추가하지 않음 |
+
+BATON은 `b4ton.com`, 마이크로서비스 공개 호스트는 `<서비스명>.b4ton.com`을 사용한다. CAL은
+`cal.b4ton.com`이다. 홈서버의 Ubuntu·DNS·공인 IP·80/443 포트포워딩·인증서는 사용자 확인 기준으로
+준비됐고 k3s는 아직 구축 전이다. 이 변경은 연동 설정이며 홈서버 설치나 배포를 수행하지 않는다.
+
+알림은 [Slack 설정](../operations/alertmanager/slack.yml) 또는
+[Discord 설정](../operations/alertmanager/discord.yml)을 선택하고 수신 URL을 외부 파일로 제공한다.
+기존 웹훅 수신 서버가 있으면 일반 웹훅 설정도 사용할 수 있다. 별도 중계 서비스나 유료 알림 서비스를
+추가하지 않으며, 기존 계정에서 웹훅을 등록할 수 있는 권한이 필요하다. [연결 방법](operations.md#운영-알림-채널-연결)
+
+인증서 검사는 토큰 없는 TLS 연결만 사용한다. 준비된 인증서를 교체하거나 갱신하지 않으며,
+HTTPS 연결 실패와 만료 임박을 기존 알림 경로로 전달한다.
 
 ## 적용 기준
 
@@ -24,7 +47,7 @@ Google 공식 문서의 일일 기준은 프로젝트당 1,000,000회다. 실제
 설정에 따라 확인해야 한다. 서비스 자체 호출량과 재시도를 제한하고, 제공자 측의 무료 한도 차단 조건을
 확인한 뒤 활성화한다. 이 문서는 한도 차단 구현이나 비용 보장을 완료했다는 뜻이 아니다.
 
-## 이번 적용 범위
+## 캘린더 연동 범위
 
 추가 요금과 연동 코드를 늘리지 않도록 기존 구독을 활용한다. BATON에서 주소 발급 후 등록 안내를
 자동으로 펼치고 Google·Apple·Outlook 개인/회사·학교 계정 중 선택한 앱의 절차만 표시한다.
@@ -43,6 +66,11 @@ Google의 공식 URL 등록 화면과 앱별 공식 페이지를 새 탭으로 �
 
 ## 공식 근거
 
+- [Alertmanager: 서비스별 기본 제공 알림 연동](https://prometheus.io/docs/alerting/latest/configuration/)
+- [Slack Incoming Webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
+- [Discord Webhook API](https://docs.discord.com/developers/resources/webhook)
+- [Blackbox Exporter: TLS 점검 설정](https://github.com/prometheus/blackbox_exporter/blob/master/CONFIGURATION.md)
+- [Let's Encrypt: ACME 인증 방식](https://letsencrypt.org/docs/challenge-types/)
 - [한국천문연구원 특일 정보: 비용·활용 신청·요청 제한](https://www.data.go.kr/data/15012690/openapi.do)
 - [Google Calendar API: 무료 범위·초과 사용 과금 계획·요청 제한](https://developers.google.com/workspace/calendar/api/guides/quota)
 - [Microsoft Graph: 표준 API와 과금 API 구분](https://learn.microsoft.com/en-us/graph/metered-api-overview)

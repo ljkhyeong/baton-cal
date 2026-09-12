@@ -1,4 +1,4 @@
-# cal.b4ton.com 운영 구성과 배포 준비
+# cal.b4ton.com 운영 연동과 검증
 
 ## 현재 범위
 
@@ -8,9 +8,10 @@ JSON Schema `$id`는 식별자이므로 도메인에 맞춰 바꾸지 않는다.
 
 [compose.operations.yml](../compose.operations.yml)은 단일 Docker 호스트용 구성이다.
 Nginx HTTPS·요청 제한, CAL, PostgreSQL, Prometheus, Alertmanager와 준비 상태 점검용
-Blackbox Exporter를 포함한다. 2026-09-05 현재 실제 서버·DNS·공인 인증서·운영 알림 수신기는
-미구축 상태다. 로컬 스모크는 자체 서명 인증서를 신뢰하도록 설정해 실행한다. 공인 인증서 발급과
-Google·Outlook의 구독 조회는 별도로 확인해야 한다.
+Blackbox Exporter를 포함한다. 이 구성은 로컬 통합 검증에도 사용한다. 사용자 확인 기준으로 홈서버는
+Ubuntu이며 DNS·공인 IP·80/443 포트포워딩·인증서가 준비됐고, 실제 운영은 아직 구축 전인 k3s를 사용할
+예정이다. 여기서 홈서버 설치·k3s 배포는 수행하지 않는다. 로컬 스모크는 자체 서명 인증서를 신뢰하도록
+설정해 실행한다. 실제 운영 연결과 Google·Outlook의 구독 조회는 별도로 확인해야 한다.
 
 ## 연결과 공개 범위
 
@@ -55,20 +56,38 @@ Compose 파일과 저장소에 운영 비밀번호·토큰을 쓰지 않는다. 
 | `BATON_CAL_RECOVERY_MODE` | 정상 `false`, 과거 백업 복원 중 `true` |
 | `CAL_TLS_DIRECTORY` | 외부 인증서 디렉터리. 기본 Certbot 구조이면 `/etc/letsencrypt` |
 | `CAL_ACME_DIRECTORY` | HTTP 인증서 갱신 파일 디렉터리. 예: `/srv/baton-cal/acme` |
-| `CAL_ALERT_WEBHOOK_URL_FILE` | Alertmanager 표준 webhook 수신 URL을 담은 외부 파일의 절대 경로 |
+| `CAL_ALERT_WEBHOOK_URL_FILE` | 선택한 채널의 웹훅 URL을 담은 외부 파일의 절대 경로 |
+| `CAL_ALERTMANAGER_CONFIG_FILE` | 알림 수신 설정 파일. 생략하면 기존 일반 웹훅 설정 |
 | `CAL_GATEWAY_BIND` | 로컬 점검은 기본 `127.0.0.1`, 외부 공개는 `0.0.0.0` |
 
 선택적인 포트는 `CAL_INTERNAL_PORT`, `CAL_HTTP_PORT`, `CAL_HTTPS_PORT`, `CAL_PROMETHEUS_PORT`,
 `CAL_ALERTMANAGER_PORT`로 조정한다. 포트 `0`은 스모크에서만 사용해 충돌 없는 동적 포트를 할당한다.
 
-Alertmanager는 표준 JSON webhook을 보낸다. Slack 등의 전용 incoming webhook URL을 이 파일에
-그대로 넣으면 형식이 다를 수 있으므로 수신 서비스가 정해진 뒤 해당 서비스 전용 수신 설정으로
-연결한다. 알림 URL 파일은 Alertmanager 사용자에게 읽기 권한만 부여하고 저장소 밖에서 관리한다.
-[Alertmanager webhook 형식](https://prometheus.io/docs/alerting/latest/configuration/#webhook_config).
+알림 URL 파일은 Alertmanager 사용자가 읽을 수 있게 하고 저장소 밖에서 관리한다. 채널에 맞는
+아래 수신 설정을 선택한다. 일반 웹훅 설정에 Slack·Discord URL만 넣으면 메시지 형식이 맞지 않는다.
+
+## 운영 알림 채널 연결
+
+| 수신 채널 | `CAL_ALERTMANAGER_CONFIG_FILE` | URL 파일 내용 |
+| --- | --- | --- |
+| 기존 일반 웹훅 수신기 | 생략 | Alertmanager 표준 JSON을 받는 URL |
+| Slack | `./operations/alertmanager/slack.yml` | 채널의 Incoming Webhook URL |
+| Discord | `./operations/alertmanager/discord.yml` | 채널의 Webhook URL |
+
+`CAL_ALERT_WEBHOOK_URL_FILE`에는 위 URL을 담은 파일의 절대 경로를 지정한다. 실제 URL을 Compose·Git·
+명령 인수에 직접 넣지 않는다. 두 채널 모두 장애 발생과 복구를 알리며, 전송 형식과 재시도는
+Alertmanager가 처리한다. 새 유료 서비스나 알림 중계 서버가 필요하지 않다.
+
+예를 들어 Slack을 선택하면 기존 운영 환경에서 `CAL_ALERTMANAGER_CONFIG_FILE`만 Slack 설정 경로로
+바꾸고 기존 URL 파일에 채널 웹훅 URL을 제공한다. 수신 채널의 실제 동작 확인은 별도로 진행한다.
+
+k3s에서도 같은 YAML을 Alertmanager 설정으로 사용하고, 수신 URL은 Secret 파일을
+`/run/secrets/alert-webhook-url`에 마운트하면 된다. 이는 연동에 필요한 값이며 k3s 설치 절차는 아니다.
+[Alertmanager 기본 연동](https://prometheus.io/docs/alerting/latest/configuration/).
 
 ## 최초 HTTPS 연결 순서
 
-아래는 **아직 실행하지 않은 운영 절차**다. 서버 주소와 DNS 제공자를 정한 뒤 실행한다.
+아래는 기존 **Docker Compose 배포 참고 절차**다. 이미 준비된 인증서를 다시 발급하는 작업은 아니다.
 운영 비밀번호·토큰·서버 경로·이미지는 실제 배포에 사용할 값으로 준비한다.
 
 1. 배포 서버에 Docker Compose와 Certbot을 준비한다. DNS에 `cal` A 레코드를 서버의 공인 IPv4로
@@ -153,6 +172,13 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 | `CalReadinessFailed` | 준비 상태 실패 또는 점검기 수집 실패가 30초 지속 | CAL·PostgreSQL·Blackbox |
 | `CalHttpServerErrors` | 최근 5분의 CAL 5xx가 5회 이상인 상태가 1분 지속 | DB·일시적 503·잠금 지연 |
 | `CalProjectionLockSlow` | 최근 5분 평균 잠금 획득 시간이 1초 초과한 상태가 2분 지속 | 같은 시즌의 동시 수신량과 전체 재구축 소요 시간 |
+| `CalTlsFailed` | TLS 점검 또는 점검기 수집 실패가 5분 지속 | 인증서 이름·체인·HTTPS 포트 연결 |
+| `CalCertificateExpiresSoon` | 인증서의 남은 기간이 14일 미만인 상태가 10분 지속 | 기존 인증서 관리 도구의 갱신·적용 상태 |
+
+TLS 점검은 1분마다 `gateway:443`에 연결해 `cal.b4ton.com`의 이름과 인증서 체인을 확인한다.
+구독 주소나 토큰은 사용하지 않는다. k3s에서 TLS를 Traefik이 처리하면 이 대상만 실제 TLS 서비스
+주소로 바꾼다. 예: `traefik.kube-system.svc.cluster.local:443`. 같은 홈서버 안의 검사는 공인 DNS·
+공유기·인터넷 회선 장애를 확인하는 외부 점검과 구분한다.
 
 알림의 `for`는 조건이 계속 유지돼야 하는 시간이며 실제 도착에는 수집·평가와 Alertmanager의
 그룹 대기 시간이 추가된다. [Prometheus 알림 규칙](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
@@ -164,6 +190,7 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 ```shell
 ./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
 ./scripts/smoke-operations.sh baton-cal:smoke
+bash scripts/smoke-alert-channels.sh
 ```
 
 별도 Compose 프로젝트·빈 DB·테스트용 인증 정보·임시 인증서로 실행하고 종료 시 해당 자원만 정리한다. 실제 DNS를
@@ -172,6 +199,7 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 - Compose·Prometheus 규칙·Alertmanager·Nginx 설정 구문.
 - HTTPS 이름 검증, 피드 200·304, 내부·관리 경로 404, 허용하지 않는 메서드 405.
 - ACME 파일, HTTP→HTTPS 이동, 실제 요청 초과 429와 재시도 헤더.
+- Blackbox의 TLS 인증서 확인·만료 시각 수집, 연결 실패 탐지와 인증서 알림 규칙.
 - CAL 중단 후 프록시의 `502` 또는 `504`, 준비 상태 장애→로컬 webhook의 `firing`, 재시작→`resolved` 전달.
 - 정상·제한·upstream 실패 경로의 컨테이너 로그, 원본 메트릭과 Prometheus 저장 라벨에
   구독 토큰·내부 Bearer·쿼리 표식이 없는지 확인.
@@ -179,3 +207,6 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 스모크 수신기는 테스트 전용이며 운영 Compose에는 포함되지 않는다. 메트릭 규칙의 구문은 전부
 검증하고 실제 장애 주입은 준비 상태 실패를 사용한다. 모든 임계값을 부하로 재현한 시험이나
 운영 수신 채널·네트워크 검증으로 확대해 기록하지 않는다.
+
+알림 채널 스모크는 외부 통신을 차단한 Docker 네트워크에서 실제 Alertmanager와 모의 Slack·Discord
+API를 사용한다. 채널별 메시지 형식·발생·해제·웹훅 주소 비노출을 확인하며 실제 채널로 보내지 않는다.

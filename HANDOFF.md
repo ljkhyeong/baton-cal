@@ -23,11 +23,23 @@
 - 안정 계약은 `1.0.0`, 게시된 후보는 `1.1.0-rc.1`, 현재 작업 후보는 `1.1.0-rc.2`다.
   [rc.2 릴리스 노트](docs/releases/contracts-v1.1.0-rc.2.md)를 작성했다. 게시·BATON 사용 버전 지정·
   안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
-- `cal.b4ton.com`용 로컬 HTTPS·프록시·Prometheus·알림 구성은 검증했다. 실제 서버·DNS·공인 인증서·
-  운영 알림 채널은 연결하지 않았다.
+- 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
+  인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
+  [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
+- 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
+  로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
 
+- 2026-09-12 외부 연동: 기준 `efed802` 이후 운영 설정·검증 스크립트·CI 변경을 `9d5406f`로 커밋했다.
+  `bootBuildImage --imageName=baton-cal:external-integrations` 성공 후
+  `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 기존 HTTPS·장애 복구·토큰 비노출과
+  새 TLS 점검·인증서 알림 규칙을 확인했다. `bash scripts/smoke-alert-channels.sh`로 실제 Alertmanager와
+  모의 Slack·Discord API의 장애 발생·복구 알림, 웹훅 주소 비노출을 확인했다. 모두 통과했다.
+  로그: `/private/tmp/baton-cal-external-operations.log`, `/private/tmp/baton-cal-alert-channels.log`.
+  종료 파일·구조 검사와 전체 diff 검토도 통과했다. 구조 검사·검증 루프 테스트의 Gradle 작업 7개는
+  입력이 같아 기존 결과를 재사용했다. CAL 소스·의존성도 그대로여서 아래 `82295dc`의 일반 테스트 결과를
+  재사용한다. 실제 수신 채널과 홈서버 연결은 미검증이며 새 CI는 미푸시로 실행하지 않았다.
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
@@ -37,9 +49,8 @@
   로그: `/private/tmp/baton-cal-feedback-check-final.log`.
   실제 위반 탐지·정상 주입 허용, 새 파일·스테이징·중간 커밋 포함, 같은 실패의 자동 재실행 방지,
   수동 재시도·훅 JSON 응답을 확인했다. 테스트용 Spring 클래스는 제품 자동 탐색 범위 밖에 두었다.
-  이후 지시·문서만 변경하며 동일 테스트 결과를 재사용한다. 종료 검사는
+  종료 검사는
   `python3 -B scripts/agent_feedback.py final`로 실행하고 출력된 전체 diff를 검토한다.
-  이미지·운영 구성은 변경하지 않아 스모크를 반복하지 않았다. 새 CI 실행은 미푸시로 미실행이다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
@@ -54,8 +65,9 @@
 1. 작성한 `1.1.0-rc.2` 릴리스 노트를 게시할 커밋과 대조한 뒤 게시한다. BATON에서 공식 ZIP과 릴리스 증명을 검증한 뒤
    사용할 버전·해시를 지정한다. 연동 검증 후 안정 버전을 게시한다.
    `1.0.x` 유지가 필요하면 `LICENSE`를 포함한 `1.0.1` 호환 보완판도 게시한다.
-2. 실제 서버·DNS 업체와 비밀 관리 시스템을 정하고 `cal.b4ton.com` HTTPS·인증서 갱신·알림 수신·
-   외부 점검을 연결한다. 내부 Bearer 회전과 실제 프록시·추적의 토큰 비노출을 검증한다.
+2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
+   인증서 갱신·외부 점검·비밀 관리에 사용할 도구를 연결하고 내부 Bearer 회전과 프록시·추적의
+   토큰 비노출을 검증한다. 홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
 3. 실제 캘린더 앱에서 구독·이름 표시·갱신·취소를 확인한 뒤 BATON의 관련 기능과 이름 보정·전달을
    활성화한다. [앱별 확인표](docs/calendar-subscription-guide.md)
 4. 운영 RTO/RPO·백업 저장소·암호화와 실제 복원 훈련을 정한다. 구독 세대 교체, 최신 재전달·완료 확인,
