@@ -3,6 +3,7 @@ spring:
     bundle:
       pem:
         cal:
+          reload-on-update: ${BATON_CAL_TLS_RELOAD_ON_UPDATE:true}
           keystore:
             certificate: ${BATON_CAL_TLS_CERTIFICATE}
             private-key: ${BATON_CAL_TLS_PRIVATE_KEY}
