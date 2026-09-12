@@ -34,7 +34,7 @@ wait_message() {
       "$scratch/events.json" > /dev/null; then return 0; fi
     sleep 1
   done
-  echo "$channel 알림 전달 실패: $title" >&2
+  echo "$configuration 알림 전달 실패: $title" >&2
   return 1
 }
 
@@ -62,6 +62,7 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
   if [[ "$channel" == alertmanager ]]; then continue; fi
   # 조합마다 새 수신기를 사용해 이전 수신 기록이 검증에 섞이지 않게 한다.
   docker run --detach --name "$receiver" --network "$project_name" --network-alias alert-receiver \
+    --env ALERT_TEST_FAILURES=429,503 \
     --volume "$project_directory/scripts/fixtures/alert-receiver.py:/app/receiver.py:ro" \
     --volume "$scratch:/data:ro" \
     python:3.14.7-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5 \
@@ -92,16 +93,30 @@ PY
     if [[ "$state" == firing ]]; then wait_message '장애 발생: CalTlsFailed'; else wait_message '복구: CalTlsFailed'; fi
   done
   request "$receiver_url/alerts" > "$scratch/events.json"
-  jq -e --arg channel "$channel" --arg watchdog "$watchdog_receiver" \
+  if ! jq -e --arg channel "$channel" --arg watchdog "$watchdog_receiver" \
     '([.[] | select(.channel == $channel)] | length == 2) and
      (all(.[] | select(.channel == $channel); .title | contains("CalWatchdog") | not)) and
      (([.[] | select(.channel == "healthchecks")] | length > 0) == ($watchdog == "healthchecks"))' \
-    "$scratch/events.json" > /dev/null
+    "$scratch/events.json" > /dev/null; then
+    echo "$configuration 알림 건수 또는 정상 신호의 수신 경로가 다릅니다." >&2
+    exit 1
+  fi
+  request "$receiver_url/rejections" > "$scratch/rejections.json"
+  if ! jq -e --arg channel "$channel" --arg watchdog "$watchdog_receiver" \
+    '. as $attempts |
+     (all(["장애 발생: CalTlsFailed", "복구: CalTlsFailed"][]; . as $title |
+       [$attempts[] | select(.channel == $channel and .title == $title) | .status] == [429, 503])) and
+     ([$attempts[] | select(.channel == "healthchecks") | .status] ==
+       (if $watchdog == "healthchecks" then [429, 503] else [] end))' \
+    "$scratch/rejections.json" > /dev/null; then
+    echo "$configuration 429·503 응답 후 재전송을 확인하지 못했습니다." >&2
+    exit 1
+  fi
   docker logs "$sender" > "$scratch/sender.log" 2>&1
   if grep -Fq smoke-secret-marker "$scratch/sender.log"; then
     echo "알림 로그에 웹훅 주소가 기록됐습니다." >&2
     exit 1
   fi
   docker rm --force "$sender" "$receiver" > /dev/null
-  echo "$configuration 알림 발생·해제, 정상 신호 분리와 웹훅 주소 비노출을 확인했습니다."
+  echo "$configuration 429·503 후 알림 발생·해제, 정상 신호 분리와 오류 로그의 웹훅 주소 비노출을 확인했습니다."
 done
