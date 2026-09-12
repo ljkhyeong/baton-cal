@@ -1,0 +1,42 @@
+{
+  "description": "CAL 파일 검사와 종료 전 구조 검사",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$(git rev-parse --show-toplevel)/scripts/agent_feedback.py\" hook",
+            "timeout": 15,
+            "statusMessage": "검사 기준 기록"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$(git rev-parse --show-toplevel)/scripts/agent_feedback.py\" hook",
+            "timeout": 240,
+            "statusMessage": "변경 파일 검사"
+          }
+        ],
+        "matcher": "^(apply_patch|Edit|Write|Bash)$"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$(git rev-parse --show-toplevel)/scripts/agent_feedback.py\" hook",
+            "timeout": 420,
+            "statusMessage": "전체 변경·계층 검사"
+          }
+        ]
+      }
+    ]
+  }
+}
