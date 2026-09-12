@@ -62,6 +62,8 @@ CAL이 담당한다.
   `prod` 프로필은 세 값을 모두 외부 환경에서 명시하지 않으면 시작에 실패한다.
 - DB 비밀번호와 내부 토큰은 Spring Boot의 `configtree`로 k3s Secret 파일에서 읽을 수 있다.
   파일 이름과 재시작 기준은 [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다.
+- CAL 자체 HTTPS는 `prod,tls` 프로필과 PEM 인증서·개인키 파일로 제공한다. 기본 8080이 HTTPS로
+  바뀌며 관리 8081은 HTTP를 유지한다. [환경변수 예시와 BATON 연결 조건](docs/integration-runtime.md)을 따른다.
 - PostgreSQL 잠금 대기는 기본 5초, SQL 실행과 Spring 트랜잭션은 기본 30초로 제한한다.
   `DATABASE_LOCK_TIMEOUT`, `DATABASE_STATEMENT_TIMEOUT`, `DATABASE_TRANSACTION_TIMEOUT`으로 환경에
   맞게 조정한다. DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패, 잠금·SQL·트랜잭션 시간 초과에는
@@ -249,6 +251,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [cal.b4ton.com HTTPS·프록시·모니터링 운영 구성](docs/operations.md)
 - [캘린더 앱별 구독 안내와 호환성 확인표](docs/calendar-subscription-guide.md)
 - [추가 요금 없는 외부 API 연동 기준](docs/external-api-options.md)
+- [API·웹훅 연동 실행 준비와 환경변수](docs/integration-runtime.md)
 - [기능 추가·개선 검토](docs/reviews/2026-09-05-feature-review.md)
 - [다음 작업](HANDOFF.md)
 

@@ -15,6 +15,10 @@ Ubuntu이며 DNS·공인 IP·80/443 포트포워딩·인증서가 준비됐고, 
 
 ## 연결과 공개 범위
 
+BATON 클라이언트는 내부 API에도 HTTPS를 요구한다. 아래 Compose 예시의 CAL은 HTTP이므로 실제
+BATON 연결에는 별도 내부 HTTPS 경로 또는 CAL의 `tls` 프로필이 필요하다.
+[애플리케이션 입력과 주소 구분](integration-runtime.md#공개-주소와-baton-api-주소)을 확인한다.
+
 ```mermaid
 flowchart LR
   Client[캘린더 앱] -->|HTTPS 443| Nginx[Nginx]

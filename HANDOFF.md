@@ -25,11 +25,9 @@
   실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
-- CAL 경로는 `/Users/lim/devProject/personal/baton-cal`이다. BATON 계약 적용은 `89d323df`에서 분리한
-  `/private/tmp/baton-cal-adoption-20260912`의 `codex/cal-contract-rc2-adoption`에서 진행했다.
-  계약 고정은 `7a064bcd`, 최신 main 병합은 `6c3e5f5d`다. 둘 다 푸시했으며
-  [BATON PR #21](https://github.com/ljkhyeong/baton/pull/21)에서 병합·CI 상태를 확인한다.
-  원본 `/Users/lim/devProject/personal/manager`의 다른 미커밋 작업은 변경하지 않았다.
+- CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
+  BATON [PR #21](https://github.com/ljkhyeong/baton/pull/21)은 `c94469e`로 원격 main에 병합됐다.
+  BATON 필수 CI와 브라우저 테스트 746개가 통과했다. 다른 작업 브랜치는 변경하지 않았다.
 - 안정 계약은 `1.0.0`, 공식 후보는 `1.1.0-rc.2`다. `3ba5889`에서 게시한 불변 릴리스·ZIP 증명을
   검증하고 BATON의 버전·해시와 구독·복구 스키마 출처를 고정했다. 실제 앱 검증·운영 활성화와
   안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
@@ -46,11 +44,26 @@
 - Spring Boot `configtree`로 DB 비밀번호·현재 및 이전 내부 토큰을 Secret 파일에서 읽는 경로를 검증했다.
   제품 코드·의존성 추가 없이 기존 운영 설정에 연결한다. 파일 이름과 재시작 기준은
   [Secret 파일 연결](docs/operations.md#secret-파일-연결)을 따른다. 실제 k3s 마운트는 배포 시 적용한다.
+- BATON의 HTTPS 필수 조건과 공개 프록시의 내부 API 차단을 함께 확인했다. CAL 직접 HTTPS용 `tls`
+  프로필, `.env.production.example`, [API·웹훅 실행 입력](docs/integration-runtime.md)을 추가했다.
+  `.env.integration.local`과 `build/local-integration/`에는 Git에서 제외한 로컬 임시값만 준비했다.
+  인증서는 생성 후 2일간 유효하고 로컬 DB 연결값은 실행 환경에 맞춰야 한다.
 - 사용자 확인 기준으로 Ubuntu 홈서버·DNS·공인 IP·80/443 포트포워딩·인증서는 준비됐고 k3s는 구축 전이다.
   로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
 
+- 이번 작업은 `118577a`에서 시작했다. TLS 프로필·통합 테스트 외 제품·의존성·계약 변경은 없다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.TlsHttpIntegrationTest'
+  --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest' bootJar`가 통과했다.
+  Java 25.0.3·PostgreSQL 18.6에서 테스트 6개를 실행했고 Gradle 작업 3개 실행·5개 결과를 재사용했다.
+  로그: `/private/tmp/baton-cal-integration-runtime-tests.log`. HTTPS 인증·구독 발급/조회/해제,
+  관리 HTTP 포트 분리와 토큰 비노출을 확인했다. 새 OCI 이미지는 빌드하지 않았다.
+- `bash scripts/smoke-alert-channels.sh`가 통과했다. 외부 통신 차단 네트워크에서 Slack·Discord의
+  장애·복구 메시지와 웹훅 주소 비노출을 확인하고 임시 컨테이너를 정리했다.
+  로그: `/private/tmp/baton-cal-integration-webhooks.log`. 실제 수신 채널에는 발송하지 않았다.
+- 파일·종료 검사와 전체 `review.diff` 검토를 마쳤다. ArchUnit 3개를 실행해 통과했고 검사 스크립트의
+  기존 성공 결과를 재사용했다. 기록: `build/agent-feedback/0cb1831a1bec612d/`.
 - CAL 제품 기준 `81cd46a`, 병합 커밋 `3ba5889`의 제품·테스트·계약 입력은 같다.
   `./gradlew --no-daemon --max-workers=2 check`로 일반 164개·구조 3개 테스트와 계약 ZIP이 통과했다.
   최초 전체 실행의 입력 테스트 29건은 공유 PostgreSQL 연결 한도로 시작하지 못했다.
@@ -88,19 +101,22 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이후 게시 기록만 변경했으며 동작 검증은 반복하지 않는다. 과거 검증은 Git 이력을 참고한다.
+기존 일반 HTTP·계약 입력은 유지되므로 이번에는 추가한 TLS와 Secret 연결을 검증했다.
+과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
 
 외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
 앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
-`5b7e0c1` 기준 재검토에서는 추가할 새 API를 찾지 못했다. 제품의 직접 HTTP 호출 부재, Dependabot 주간
-설정과 iCal4j의 시간대 자동 갱신 기본값 `false`를 확인했다. 외부 연동 검토는 `81b2e99`에 기록했고,
-이후 제품 수정의 검증은 위 최근 결과를 따른다. 남은 후보는 아래 조건이 정해지면 진행한다.
+`118577a` 기준 재검토에서도 새 제공자 API는 선정하지 않았다. BATON에는 공휴일 API 수집 코드가 있다.
+CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS 연결 입력을 보완했다.
+남은 후보는 아래 조건이 정해지면 진행한다.
 
 1. 실제 캘린더 앱·운영 연결 검증 후 `1.1.0` 안정 버전 승격을 판단한다.
    `1.0.x` 유지가 필요할 때만 `LICENSE`를 포함한 `1.0.1` 호환 보완판을 게시한다.
 2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
+   BATON에는 공개 구독 주소와 구분되는 사설 HTTPS 연결을 제공한다. CAL `tls` 사용 시 공개 프록시의
+   상위 서버 프로토콜도 HTTPS로 맞춘다. 기존 HTTP Compose에 프로필만 추가해서는 연결되지 않는다.
    인증서 갱신·외부 점검·비밀 관리에 사용할 도구를 연결하고 내부 Bearer 회전과 프록시·추적의
    토큰 비노출을 검증한다. Healthchecks를 사용하면 첫 신호 수신과 누락·복구 알림을 실제 계정에서 확인한다.
    홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
