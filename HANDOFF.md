@@ -6,6 +6,9 @@
   API는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
 - 공개 HEAD는 캘린더 본문을 조회하지 않고 구독 상태·캐시 검증 값·파일 크기를 반환한다.
   [후속 기능 검토](docs/reviews/2026-09-12-feature-review.md)에 채택 근거와 보류 항목을 정리했다.
+- `POST /internal/api/v1/schedule-snapshots/batch`는 1~100건을 한 트랜잭션으로 처리하고 변경된 시즌별로
+  한 번 재생성한다. JSON 128 KiB 상한을 유지하고 토큰 상한을 8,192개로 늘렸다. 기존 단건 경로는 유지한다.
+  BATON 아웃박스의 묶음 전송은 아직 연결하지 않았다. [측정 결과](docs/performance-baseline.md)
 - 개정 번호·복구 건수의 소수·지수 표기를 정수로 잘라 받던 동작을 차단했다. `0.5`, `1.0`, `1e0`은
   저장 전에 `400 INVALID_REQUEST`로 반환한다. 타임스탬프의 소수 초와 허용된 `null`은 유지한다.
 - 문자열 필드의 숫자·불리언 입력도 변환 없이 `400 INVALID_REQUEST`로 반환한다. 정상 문자열과
@@ -44,6 +47,16 @@
   로컬 연동만 검증했으며 실제 서버·DNS·인증서·운영 알림 채널을 변경하지 않았다.
 
 ## 최근 검증
+
+- 2026-09-12 묶음 수신: `81cd46a`에서 HTTP 회귀 11개, 전체 일반 164개·구조 3개 테스트와 계약 ZIP이
+  통과했다. 최초 전체 실행은 공유 DB의 연결 한도 때문에 입력 테스트 컨텍스트 29건이 시작하지 못했다.
+  테스트 전용 유휴 연결 설정(`a8d2ac0`)으로 원인을 고친 뒤 해당 29건과 전체 검증을 통과했다.
+  로그: `/private/tmp/baton-cal-batch-retry.log`, `/private/tmp/baton-cal-batch-db-retry.log`,
+  `/private/tmp/baton-cal-batch-check-final.log`. 최종 `check`는 3개 작업 실행·7개 기존 결과 재사용이다.
+  같은 코드의 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
+  두 실행 모두 성공했고 최종 1,000개 UID·개정 2·취소 500개·동일 ETag를 확인했다.
+  로그와 XML: `/private/tmp/baton-cal-batch-load-single.{log,xml}`, `/private/tmp/baton-cal-batch-load-100.log`.
+  파일·구조 검사와 전체 diff를 검토했다. 이후에는 검증 기록만 수정했다.
 
 - 2026-09-12 문자열 입력: 기준 `8e2c7fb` 이후 설정·테스트·계약 변경을 `b417560`으로 커밋했다.
   `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.SnapshotInputContractTest'
@@ -95,7 +108,7 @@
 4. 운영 RTO/RPO·백업 저장소·암호화와 실제 복원 훈련을 정한다. 구독 세대 교체, 최신 재전달·완료 확인,
    복구 모드 해제 순서를 운영 절차에 연결한다. 배포 이미지 digest 고정과 builder 갱신도 적용한다.
 5. 실제 수신량·제공자 공유 IP·로그 보존 정책에 맞춰 요청 제한과 알림을 조정한다. 데이터 규모와
-   복구 목표 시간을 정한 뒤 성능을 측정하고, 목표를 넘으면 묶음 수신 계약을 검토한다.
+   복구 목표 시간을 정한 뒤 BATON의 기존 단건 전달을 묶음 수신 API에 연결한다.
 6. 시간대 데이터 갱신이 필요하면 iCal4j 의존성 잠금·골든 바이트·ETag를 검토한 새 계약 후보를 만든다.
 
 ## 현재 제한
