@@ -10,24 +10,6 @@ import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
-data class RecoverySeasonManifestRow(
-    val recoveryId: UUID,
-    val seasonId: UUID,
-    val itemCount: Int,
-    val itemDigest: String,
-    val metadataRevision: Int?,
-    val metadataDigest: String?,
-    val verifiedAt: Instant,
-) {
-    fun state() = RecoverySeasonState(
-        seasonId = seasonId,
-        itemCount = itemCount,
-        itemDigest = itemDigest,
-        metadataRevision = metadataRevision,
-        metadataDigest = metadataDigest,
-    )
-}
-
 data class RecoveryRunCompletionRow(
     val recoveryId: UUID,
     val seasonCount: Int,
@@ -97,7 +79,7 @@ class RecoveryManifestRepository(
         )
     }
 
-    fun upsertSeasonManifest(row: RecoverySeasonManifestRow) {
+    fun upsertSeasonManifest(recoveryId: UUID, state: RecoverySeasonState, verifiedAt: Instant) {
         jdbcClient.sql(
             """
             INSERT INTO recovery_season_manifest (
@@ -115,40 +97,38 @@ class RecoveryManifestRepository(
                 verified_at = EXCLUDED.verified_at
             """.trimIndent(),
         )
-            .param("recoveryId", row.recoveryId)
-            .param("seasonId", row.seasonId)
-            .param("itemCount", row.itemCount)
-            .param("itemDigest", row.itemDigest)
-            .param("metadataRevision", row.metadataRevision, java.sql.Types.INTEGER)
-            .param("metadataDigest", row.metadataDigest, java.sql.Types.CHAR)
-            .param("verifiedAt", row.verifiedAt.atOffset(ZoneOffset.UTC))
+            .param("recoveryId", recoveryId)
+            .param("seasonId", state.seasonId)
+            .param("itemCount", state.itemCount)
+            .param("itemDigest", state.itemDigest)
+            .param("metadataRevision", state.metadataRevision, java.sql.Types.INTEGER)
+            .param("metadataDigest", state.metadataDigest, java.sql.Types.CHAR)
+            .param("verifiedAt", verifiedAt.atOffset(ZoneOffset.UTC))
             .update()
     }
 
-    fun findSeasonManifest(recoveryId: UUID, seasonId: UUID): RecoverySeasonManifestRow? = jdbcClient.sql(
+    fun findVerifiedSeasonState(recoveryId: UUID, seasonId: UUID): RecoverySeasonState? = jdbcClient.sql(
         """
-        SELECT recovery_id, season_id, item_count, item_digest,
-               metadata_revision, metadata_digest, verified_at
+        SELECT season_id, item_count, item_digest, metadata_revision, metadata_digest
         FROM recovery_season_manifest
         WHERE recovery_id = :recoveryId AND season_id = :seasonId
         """.trimIndent(),
     )
         .param("recoveryId", recoveryId)
         .param("seasonId", seasonId)
-        .query(RecoverySeasonManifestRow::class.java)
+        .query(RecoverySeasonState::class.java)
         .optional()
         .getOrNull()
 
-    fun listSeasonManifests(recoveryId: UUID): List<RecoverySeasonManifestRow> = jdbcClient.sql(
+    fun listVerifiedSeasonStates(recoveryId: UUID): List<RecoverySeasonState> = jdbcClient.sql(
         """
-        SELECT recovery_id, season_id, item_count, item_digest,
-               metadata_revision, metadata_digest, verified_at
+        SELECT season_id, item_count, item_digest, metadata_revision, metadata_digest
         FROM recovery_season_manifest
         WHERE recovery_id = :recoveryId
         """.trimIndent(),
     )
         .param("recoveryId", recoveryId)
-        .query(RecoverySeasonManifestRow::class.java)
+        .query(RecoverySeasonState::class.java)
         .list()
         .requireNoNulls()
 

@@ -59,7 +59,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         ingest("schedule-snapshot.zoned-active-r0.json")
         val state = repository.currentSeasonState(SEASON_ID)
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
-        val before = repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))
+        val before = storedManifests()
 
         readRunStatus("IN_PROGRESS", 1)
         val completed = complete(completionPayload(listOf(state)))
@@ -77,7 +77,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val status = readRunStatus("COMPLETED", 1)
 
         assertThat(JsonPath.read<String>(status, "$.completedAt")).isEqualTo(completedAt)
-        assertThat(repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))).isEqualTo(before)
+        assertThat(storedManifests()).isEqualTo(before)
     }
 
     @Test
@@ -110,7 +110,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             .andReturn().response.contentAsString
         ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 정수 입력 오류 응답")
-        assertThat(repository.listSeasonManifests(UUID.fromString(RECOVERY_ID))).isEmpty()
+        assertThat(repository.listVerifiedSeasonStates(UUID.fromString(RECOVERY_ID))).isEmpty()
         verifySeason(0, state.itemDigest, 2, state.metadataDigest)
     }
 
@@ -336,6 +336,13 @@ class RecoveryManifestHttpTest @Autowired constructor(
             .andExpect(status().isConflict)
             .andExpect(content().json(Path("contracts/examples/api-error.recovery-manifest-mismatch.json").readText()))
     }
+
+    private fun storedManifests() = jdbcClient.sql(
+        "SELECT * FROM recovery_season_manifest WHERE recovery_id = :recoveryId",
+    )
+        .param("recoveryId", UUID.fromString(RECOVERY_ID))
+        .query()
+        .listOfRows()
 
     private fun ingest(fileName: String) {
         mockMvc.perform(
