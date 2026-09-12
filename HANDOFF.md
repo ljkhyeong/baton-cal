@@ -6,8 +6,9 @@
   API는 [PRD-0002](docs/PRD/0002_mvp-contract/spec.md)를 따른다.
 - 공개 HEAD는 캘린더 본문을 조회하지 않고 구독 상태·캐시 검증 값·파일 크기를 반환한다.
   [후속 기능 검토](docs/reviews/2026-09-12-feature-review.md)에 채택 근거와 보류 항목을 정리했다.
-- DB 연결·트랜잭션 시작 실패는 `503 SERVICE_BUSY`와 재시도 간격을 반환한다. 연결 반환 후 기존 구독 조회와
-  같은 ID의 발급 재시도가 정상 처리되는지 실제 연결 풀 고갈 테스트로 확인했다.
+- DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패와 시간 초과는 `503 SERVICE_BUSY`와 재시도 간격을 반환한다.
+  교착 상태·직렬화 실패는 Spring의 공통 잠금 실패 예외로 처리한다. 실제 연결 풀 고갈 테스트에서는
+  연결 반환 후 기존 구독 조회와 같은 ID의 발급 재시도가 정상 처리되는지 확인했다.
 - 이미 저장된 구독의 재요청은 캘린더 준비와 토큰 생성을 생략한다. 동시 생성은 DB 기본키로 판정한다.
   V3의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
 - 일정·구독·복구 상태 조회의 `404`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503`에도
@@ -40,14 +41,16 @@
 
 ## 최근 검증
 
-- 2026-09-12 Secret 파일: 기준 `fc85d0d` 이후 테스트 변경을 `18168b5`로 커밋했다.
-  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest'
-  --tests 'io.baton.cal.config.CalPropertiesTest'`로 파일 바인딩·누락된 디렉터리·잘못된 토큰의 시작 차단과
-  로그 비노출을 포함한 13개 테스트를 실행해 통과했다. Java 25·Spring Boot 4.1.1, Docker 없이 검증했다.
-  로그: `/private/tmp/baton-cal-secret-files-test.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
-  제품 코드·의존성·운영 설정이 같아 나머지 일반 테스트와 OCI·운영 스모크는 아래 결과를 재사용했다.
-  동작 검증 이후에는 문서만 변경했다. 실제 Secret 마운트·DB 자격 증명 연결은 미검증이며 새 CI는
-  미푸시로 실행하지 않았다.
+- 2026-09-12 DB 동시 처리: 기준 `81b2e99` 이후 코드·테스트·계약 변경을 `a7fd35d`로 커밋했다.
+  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.ApiExceptionHandlerTest'`로
+  교착 상태·직렬화 실패의 기존 `500`을 재현한 뒤 수정 후 10개 테스트가 통과했다.
+  `./gradlew --no-daemon --max-workers=2 check`는 일반 133개·구조 3개 테스트와 계약 ZIP을 통과했다.
+  Java 25·Spring Boot 4.1.1·Spring 7.0.9·PostgreSQL 18.6, 실패·제외 없음. 4개 작업을 새로 실행하고
+  검사 스크립트 11개를 포함한 6개 작업은 Gradle의 기존 성공 결과를 재사용했다.
+  로그: `/private/tmp/baton-cal-db-contention-before.log`, `/private/tmp/baton-cal-db-contention-after.log`,
+  `/private/tmp/baton-cal-db-contention-check.log`. 파일·구조 검사와 전체 diff 검토도 통과했다.
+  이후에는 검증 기록만 수정했다. 실제 DB 교착 상태 유발, 변경 이미지 빌드·운영 스모크는 미실행이다.
+  HTTP 예외 분류만 바꿨으며 DB 처리·운영 설정은 같다. 새 CI는 미푸시로 실행하지 않았다.
 - 2026-09-12 공개 경로: 기준 `c6e5615` 이후 운영 설정·검증 스크립트를 `c85312d`로 커밋했다.
   `bash scripts/smoke-operations.sh baton-cal:external-integrations`로 빈 `404`·프록시 HTML `404` 구분,
   공개 경로·준비 상태의 장애 발생·복구 알림, 규칙 8개와 기존 HTTPS·TLS·정상 신호 중단·재개·토큰
@@ -60,14 +63,6 @@
 - CAL `3c2936d`: [필수 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34172597027) 통과.
   전체 테스트·계약 ZIP·OCI 이미지·운영 스모크를 포함한다. 서버 중단 후 프록시 응답은 연결 거부 시
   `502`, 연결 시간 초과 시 `504`를 허용하며, 알림 발생·해제와 토큰 비노출을 확인했다.
-- 2026-09-12 검증 루프: 기준 `0a7cd0a`에서 검사·테스트·의존성·CI 변경을 `82295dc`로 커밋했다.
-  `./gradlew --no-daemon --max-workers=2 check`로 일반 125개·구조 3개·스크립트 11개 테스트와 계약 ZIP을
-  검증했다. Java 25·PostgreSQL 18.6, 실패·제외 없음. 4개 작업을 새로 실행하고 6개는 기존 결과를 재사용했다.
-  로그: `/private/tmp/baton-cal-feedback-check-final.log`.
-  실제 위반 탐지·정상 주입 허용, 새 파일·스테이징·중간 커밋 포함, 같은 실패의 자동 재실행 방지,
-  수동 재시도·훅 JSON 응답을 확인했다. 테스트용 Spring 클래스는 제품 자동 탐색 범위 밖에 두었다.
-  종료 검사는
-  `python3 -B scripts/agent_feedback.py final`로 실행하고 출력된 전체 diff를 검토한다.
 - BATON `0861b040`의 이전 검증 기록은 `/private/tmp/baton-cal-registration-20260907/output/verification/latest.md`에 있다.
   현재 BATON 검증 결과로 재사용하려면 변경 파일과 실행 환경을 먼저 비교한다.
   이전 코드 검토는 [표준 API 검토](docs/reviews/2026-09-05-standard-api-review.md), 과거 검증은 Git 기록을 참고한다.
@@ -79,8 +74,8 @@
 외부 연동은 [추가 요금 없는 연동 기준](docs/external-api-options.md)을 따른다. 권장 방향으로 기존 구독의
 앱별 등록 편의를 개선했다. 제공자 API 직접 연동은 보류하며 공휴일 활용은 BATON의 별도 작업이다.
 `5b7e0c1` 기준 재검토에서는 추가할 새 API를 찾지 못했다. 제품의 직접 HTTP 호출 부재, Dependabot 주간
-설정과 iCal4j의 시간대 자동 갱신 기본값 `false`를 확인했다. 이번 변경은 검토 문서뿐이며 실행 코드·설정은
-같아 위 검증 결과를 재사용한다. 남은 후보는 아래 조건이 정해지면 진행한다.
+설정과 iCal4j의 시간대 자동 갱신 기본값 `false`를 확인했다. 외부 연동 검토는 `81b2e99`에 기록했고,
+이후 DB 오류 처리 개선과 검증은 위 최근 결과를 따른다. 남은 후보는 아래 조건이 정해지면 진행한다.
 
 1. 작성한 `1.1.0-rc.2` 릴리스 노트를 게시할 커밋과 대조한 뒤 게시한다. BATON에서 공식 ZIP과 릴리스 증명을 검증한 뒤
    사용할 버전·해시를 지정한다. 연동 검증 후 안정 버전을 게시한다.
