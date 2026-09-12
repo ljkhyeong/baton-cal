@@ -1,14 +1,14 @@
 # 추가 요금 없는 외부 API 연동
 
 - 확인일: 2026-09-12
-- 기준: CAL `118577a`, BATON 원격 main `c94469e`의 API 연결 입력 재검토
+- 기준: CAL `285e99a`, BATON 원격 main `c94469e`의 API·웹훅 연결 입력 재검토
 - 선택: `.ics` 구독 유지, 기본 제공 알림·인증서·공개 경로 점검·외부 정상 신호와 Secret 파일 연동
 
 ## 검토 결과
 
 | 대상 | 활용할 API·표준 연동 | 줄일 수 있는 직접 구현 | 결정 |
 | --- | --- | --- | --- |
-| 운영 알림 | Alertmanager의 Slack·Discord 웹훅 연동 | 메시지 변환 서버, API 호출·재시도 코드 | 수신 설정과 모의 API 검증 추가 |
+| 운영 알림 | Alertmanager의 Slack·Discord 웹훅 연동 | 메시지 변환 서버, API 호출·재시도 코드 | 단독·Healthchecks 조합 설정과 모의 API 검증 추가 |
 | 서버·모니터링 중단 | Healthchecks.io Pinging API와 Alertmanager | 정상 신호 전송 프로그램, 신호 누락 판정·외부 알림 | 무료 점검 1개를 사용하는 선택 설정과 로컬 검증 추가 |
 | 인증서 점검 | Blackbox Exporter TLS 검사와 Prometheus | 인증서 파싱·만료일 점검 스크립트 | 이름·체인 확인, 14일 이내 만료 알림 추가 |
 | 공개 요청 경로 점검 | Blackbox Exporter HTTP 검사와 Prometheus | 전용 공개 상태 API·점검 클라이언트 | 실제 구독 토큰 없이 프록시→CAL 응답을 확인하는 설정과 장애·복구 검증 추가 |
@@ -28,6 +28,10 @@
 공개 프록시는 이 경로를 차단하고 CAL은 기본 HTTP로 실행된다. 이 연결 조건을 명시하고 CAL 자체
 HTTPS를 선택할 수 있도록 준비했다. [API·웹훅 실행 입력](integration-runtime.md)
 남은 후보는 표에 적힌 조건이 정해지면 진행한다.
+
+후속 검토에서는 Slack·Discord와 Healthchecks를 함께 쓰는 설정이 수동 편집에 의존하는 점을 보완했다.
+채널별 완성된 조합을 제공하고 정상 신호가 채널 메시지에 섞이지 않는지 검증한다. BATON과 CAL의
+내부 토큰 허용 범위 차이는 [공통으로 사용할 입력 기준](integration-runtime.md#애플리케이션-입력)에 반영했다.
 
 버전 확인은 [기존 Dependabot 설정](../.github/dependabot.yml)을 사용한다. 원격 작업의 실행 상태나
 자동 병합을 이번 검토에서 확인·변경하지 않았다. 고정한 iCal4j 4.3.0의 시간대 외부 갱신은 기본값이

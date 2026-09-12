@@ -145,9 +145,13 @@ Hobbyist 점검 1개를 사용한다. 기준일은 2026-09-12이며 무료 한�
 URL 파일의 절대 경로를 지정한다. 기본 선택은 일반 웹훅과 Healthchecks를 함께 쓰는 설정이다.
 `CAL_ALERTMANAGER_CONFIG_FILE`을 지정하면 해당 파일을 사용한다.
 
-Slack·Discord와 함께 쓰려면 해당 채널 설정의 `CalWatchdog` 경로를 Healthchecks 설정의 같은 경로로
-교체하고 `healthchecks` 수신기를 추가한다. 채널의 `operations` 수신기는 유지하며, 합친 파일 경로를
-`CAL_ALERTMANAGER_CONFIG_FILE`에 지정한다. 일반 웹훅 수신기에 Slack·Discord URL을 넣지 않는다.
+Slack·Discord와 함께 쓰면 `CAL_ALERTMANAGER_CONFIG_FILE`에 아래 조합 중 하나를 지정한다.
+파일을 직접 합칠 필요 없이 채널 URL과 Healthchecks URL 파일을 함께 연결한다.
+
+| 수신 채널 | 조합 설정 |
+| --- | --- |
+| Slack + Healthchecks | [slack-healthchecks.yml](../operations/alertmanager/slack-healthchecks.yml) |
+| Discord + Healthchecks | [discord-healthchecks.yml](../operations/alertmanager/discord-healthchecks.yml) |
 
 `CalWatchdog`는 장애 유무와 관계없이 유지하는 정상 신호다. 기본 일반 웹훅·Slack·Discord 설정은
 이를 버리며, Healthchecks를 선택하면 1분을 반복 전송 기준으로 삼고 10초마다 전송 여부를 확인한다.
@@ -299,6 +303,7 @@ bash scripts/smoke-alert-channels.sh
 운영 수신 채널·네트워크 검증으로 확대해 기록하지 않는다.
 
 알림 채널 스모크는 외부 통신을 차단한 Docker 네트워크에서 실제 Alertmanager와 모의 Slack·Discord
-API를 사용한다. 채널별 메시지 형식·발생·해제·웹훅 주소 비노출을 확인하며 실제 채널로 보내지 않는다.
+API를 사용한다. 채널별 단독·Healthchecks 조합에서 메시지 형식·발생·해제·정상 신호 분리와
+웹훅 주소 비노출을 확인하며 실제 채널로 보내지 않는다.
 운영 스모크는 Healthchecks 연결 설정과 모의 API도 사용한다. 외부 서비스의 누락 판정·실제 알림 도착은
 계정 연결 후 확인해야 하며, 로컬 검증 결과에 포함하지 않는다.

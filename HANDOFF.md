@@ -35,6 +35,9 @@
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
   [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
+- Slack·Discord와 Healthchecks를 함께 쓰는 완성된 조합을 추가했다. 채널 알림과 정상 신호를 분리하며
+  설정을 직접 합칠 필요가 없다. BATON 연결용 내부 토큰은 32~200자, 영문·숫자와 `-._~`로 안내했다.
+  CAL의 기존 Bearer 허용 범위는 유지한다. [설정 선택과 입력 기준](docs/integration-runtime.md)
 - Blackbox의 공개 경로 점검을 추가했다. 발급될 수 없는 고정 주소의 빈 `404`로 프록시→CAL 연결을
   확인하고, HTML 오류 페이지·연결 장애가 30초 지속되면 알린다. 실제 구독 토큰은 사용하지 않는다.
   [점검 범위](docs/operations.md#모니터링과-알림)
@@ -53,7 +56,13 @@
 
 ## 최근 검증
 
-- 이번 작업은 `118577a`에서 시작했다. TLS 프로필·통합 테스트 외 제품·의존성·계약 변경은 없다.
+- 후속 작업 기준은 `285e99a`다. 알림 조합·스모크와 안내만 바뀌었으며 제품·Kotlin 테스트·의존성·계약 입력은
+  같아 기존 HTTPS 테스트와 JAR 빌드 결과를 재사용했다. 새 이미지 빌드·게시·운영 변경은 하지 않았다.
+  `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개를 검증했다.
+  장애·복구 메시지, 정상 신호의 수신 경로 분리와 URL 비노출이 통과했다. 각 조합은 새 모의 수신기와
+  실제 Alertmanager를 외부 통신 차단 네트워크에서 사용하고 정리했다.
+  로그: `/private/tmp/baton-cal-combined-webhooks.log`.
+- TLS 추가 검증은 `118577a`에서 시작했다. 당시 TLS 프로필·통합 테스트 외 제품·의존성·계약 변경은 없다.
   `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.TlsHttpIntegrationTest'
   --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest' bootJar`가 통과했다.
   Java 25.0.3·PostgreSQL 18.6에서 테스트 6개를 실행했고 Gradle 작업 3개 실행·5개 결과를 재사용했다.

@@ -9,8 +9,8 @@ CAL의 API·웹훅 연결에 필요한 애플리케이션 입력을 정리한다
 | --- | --- | --- |
 | Google·Apple·Outlook 캘린더 | 표준 `.ics` 구독 | 발급·조회·해제와 앱별 안내 구현. 실제 앱의 갱신 확인은 배포 후 필요 |
 | 공휴일 | 한국천문연구원 특일 정보 API | BATON에 수집 코드가 있다. BATON의 키와 활성화 설정이 필요하며 CAL은 확정 일정만 수신 |
-| 장애·복구 알림 | Alertmanager의 Slack·Discord 웹훅 | 기본 제공 발송·재시도 기능 사용. 수신 URL 파일만 연결 |
-| 서버 중단 감지 | Alertmanager → Healthchecks.io | 선택 설정과 모의 수신 검증 구현. 사용할 계정의 무료 점검과 수신 채널 등록 필요 |
+| 장애·복구 알림 | Alertmanager의 Slack·Discord 웹훅 | 기본 제공 발송·재시도 기능 사용. 단독·Healthchecks 조합 중 선택 |
+| 서버 중단 감지 | Alertmanager → Healthchecks.io | 채널별 조합과 모의 수신 검증 구현. 사용할 계정의 무료 점검과 수신 채널 등록 필요 |
 | 내부 API의 HTTPS | Spring Boot PEM SSL bundle | `tls` 프로필 추가. 인증서·개인키 파일로 HTTPS를 제공하며 별도 서버 코드는 없음 |
 | DB 비밀번호·내부 토큰 | Spring Boot `configtree` | Secret 파일 연결 지원. 별도 비밀 관리 API·파일 파서는 없음 |
 
@@ -30,11 +30,15 @@ CAL에 추가할 새 제공자 API는 선정하지 않았다. 현재 기능에�
 | `SPRING_CONFIG_IMPORT` | `configtree:/run/secrets/baton-cal/` — 끝의 `/` 포함 |
 | `DATABASE_URL`, `DATABASE_USERNAME` | CAL 전용 PostgreSQL 주소·계정. 예시의 `postgres`는 실제 DB 호스트로 변경 |
 | `DATABASE_PASSWORD` | 위 Secret 디렉터리의 같은 이름 파일 |
-| `BATON_CAL_INTERNAL_TOKEN` | 위 Secret 디렉터리의 같은 이름 파일. BATON→CAL 전용 Bearer, 32자 이상 |
+| `BATON_CAL_INTERNAL_TOKEN` | 위 Secret 디렉터리의 같은 이름 파일. BATON 연결 시 32~200자, 영문·숫자와 `-._~`만 사용 |
 | `BATON_CAL_PUBLIC_BASE_URL` | `https://cal.b4ton.com` |
 | `BATON_CAL_SUBSCRIPTION_GENERATION` | 새 DB 최초 실행 때 정한 UUID. 기존 DB는 사용하던 값을 유지 |
 | `BATON_CAL_TLS_CERTIFICATE` | `tls` 사용 시 PEM 인증서 체인. 예: `file:/run/secrets/baton-cal-tls/tls.crt` |
 | `BATON_CAL_TLS_PRIVATE_KEY` | `tls` 사용 시 PEM 개인키. 예: `file:/run/secrets/baton-cal-tls/tls.key` |
+
+CAL 자체는 RFC 6750 형식을 허용하지만 BATON의 전송 설정은 더 좁은 문자·길이 범위를 요구한다.
+위 토큰 기준은 두 서비스가 함께 쓸 수 있는 범위다. 일반 Base64의 `+`, `/`, `=`는 BATON에서 거부된다.
+Python `secrets.token_urlsafe(48)`로 생성한 값은 이 범위에 맞는다. 로컬 임시 토큰도 이 방식으로 준비했다.
 
 이전 내부 토큰은 회전 기간에만 `baton.cal.previous-internal-token` 파일로 추가한다. 사용하지 않을 때는
 빈 파일을 만들지 않는다. Secret 값이나 인증서 교체 후에는 애플리케이션을 재시작한다. 토큰 원문·개인키는
@@ -67,9 +71,14 @@ BATON의 `BATON_CAL_BEARER_TOKEN` 또는 해당 Secret 파일에는 CAL 현재 �
 
 ## 웹훅과 검증
 
-Slack은 [slack.yml](../operations/alertmanager/slack.yml), Discord는
-[discord.yml](../operations/alertmanager/discord.yml)을 사용한다. 웹훅 URL은 Alertmanager 컨테이너의
-`/run/secrets/alert-webhook-url` 파일로 전달한다. CAL 환경변수에 넣지 않는다.
+| 수신 채널 | 채널 알림만 사용 | Healthchecks도 사용 |
+| --- | --- | --- |
+| Slack | [slack.yml](../operations/alertmanager/slack.yml) | [slack-healthchecks.yml](../operations/alertmanager/slack-healthchecks.yml) |
+| Discord | [discord.yml](../operations/alertmanager/discord.yml) | [discord-healthchecks.yml](../operations/alertmanager/discord-healthchecks.yml) |
+
+선택한 파일을 Alertmanager 설정으로 사용한다. 채널 웹훅 URL은 `/run/secrets/alert-webhook-url`,
+Healthchecks 성공 URL은 `/run/secrets/healthchecks-ping-url` 파일로 전달한다. CAL 환경변수에 넣지 않는다.
+조합 설정은 정상 신호를 Healthchecks로만 보내고, Slack·Discord에는 장애와 복구만 알린다.
 실제 채널 설정 전에도 아래 검증은 외부 메시지를 보내지 않고 실행할 수 있다.
 
 ```shell
@@ -81,7 +90,8 @@ bash scripts/smoke-alert-channels.sh
 
 HTTPS 테스트는 임시 인증서와 격리된 PostgreSQL을 사용해 인증, 구독 발급·조회·해제, 공개 호스트,
 관리 포트 분리와 토큰 비노출을 확인한다. 인증서 검증을 끄지 않는다. 웹훅 검증은 외부 통신이 차단된
-Docker 네트워크에서 모의 수신기로 장애·복구 메시지를 받는다. 실행에는 Docker와 Java 25 툴체인이 필요하다.
+Docker 네트워크에서 채널별 단독·Healthchecks 조합의 장애·복구 메시지와 정상 신호 분리를 확인한다.
+실행에는 Docker와 Java 25 툴체인이 필요하다.
 실행 JAR는 `build/libs/baton-cal-0.0.1-SNAPSHOT.jar`에 생성된다.
 
 로컬 임시값은 Git에서 제외되는 `.env.integration.local`과 `build/local-integration/`에 둔다.
