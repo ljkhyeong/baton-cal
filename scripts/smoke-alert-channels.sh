@@ -72,9 +72,14 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
     "$alertmanager_image" --config.file=/config.yml --cluster.listen-address= > /dev/null
   sender_url=http://alert-sender:9093
   for ((attempt=0; attempt<30; attempt++)); do
-    request "$sender_url/-/ready" > /dev/null 2>&1 && break
+    if request "$receiver_url/alerts" > /dev/null 2>&1 && \
+      request "$sender_url/-/ready" > /dev/null 2>&1; then break; fi
     sleep 1
   done
+  if ((attempt == 30)); then
+    echo "$configuration 알림 송신기 또는 수신기가 준비되지 않았습니다." >&2
+    exit 1
+  fi
   for state in firing resolved; do
     python3 -B - "$state" > "$scratch/alert.json" <<'PY'
 from datetime import datetime, timedelta, timezone
