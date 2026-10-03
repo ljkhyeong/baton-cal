@@ -13,7 +13,7 @@ services:
       - target: 8081
         host_ip: 127.0.0.1
   alert-receiver:
-    image: python:3.14.7-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5
+    image: python:3.15.0rc2-alpine3.23@sha256:75d43df049f78e2fcb35085fe676fc486af08e0362aa2805e705fdec476d9cd9
     command: [python, /app/alert-receiver.py]
     volumes:
       - ./scripts/fixtures/alert-receiver.py:/app/alert-receiver.py:ro
