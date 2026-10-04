@@ -33,6 +33,7 @@ class InternalCalendarController(
     private val recoveryManifestService: RecoveryManifestService,
     meterRegistry: MeterRegistry,
 ) {
+    // 서비스 트랜잭션이 커밋된 뒤 증가시켜 롤백된 묶음 수신의 앞 항목을 집계하지 않는다.
     private val ingestionCounters: Map<SnapshotIngestionResult, Counter> =
         SnapshotIngestionResult.entries.associateWith { result ->
             Counter.builder(INGESTION_METRIC)

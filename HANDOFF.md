@@ -29,9 +29,11 @@
 - 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
   같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유하고, 같은 설정의 HTTP 테스트는
   공용 토큰으로 Spring 컨텍스트를 재사용한다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
-- 일정 시간 열과 `ScheduleWindow`의 양방향 변환은 `persistence/CalendarItemRow.kt`, 복구 대조값 계산은
-  `RecoveryManifestDigest`가 맡는다. 영속성 계층은 SQL·행 변환만 하고 시즌 이름은 기존 저장소로 조회한다.
-  409 공통 예외는 `ConflictException`이다. 서비스가 `web` 예외·DTO를 쓰는 구조는 ADR-0002에 따라 유지한다.
+- 일정 시간 열과 `ScheduleWindow`의 양방향 변환·`ScheduleTimeType`은 `persistence/CalendarItemRow.kt`, 복구
+  대조값 계산은 `RecoveryManifestDigest`, 첫 투영의 Last-Modified는 `SeasonProjectionService`가 맡는다. 복구 서비스는
+  도메인 값만 받고 409는 모두 `ConflictException`이다. 피드 헤더 값 타입은 `SeasonFeedHeaders`이며 계약 TEXT·
+  다이제스트 입력 패턴은 `web/ContractInputPatterns.kt`에서 공유한다. 서비스가 `web` 예외·DTO를 쓰는 구조는
+  ADR-0002에 따라 유지한다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
@@ -72,20 +74,19 @@
 
 ## 최근 검증
 
-- 구조 리팩터링은 `ac7953d` 기준 미커밋 상태에서 `./gradlew --no-daemon --max-workers=2 check`로 일반 165개·
-  구조 3개 테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. Java 25 toolchain·PostgreSQL 18.6.
-  로그: `/private/tmp/baton-cal-structure-refactoring-check.log`. HTTP 응답·저장 열·다이제스트가 같아
-  OCI·운영 스모크는 아래 `62fb198` 결과를 재사용했다. 파일·종료 검사 기록: `build/agent-feedback/e5e14abbc7471406/`.
+- 2차 리팩터링은 `d7ae6c0` 커밋 상태에서 `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개
+  테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. 투영 테스트 2개를 추가해 렌더러에서 옮긴
+  Last-Modified 규칙을 검증한다. Java 25 toolchain·PostgreSQL 18.6.
+  로그: `/private/tmp/baton-cal-refactoring-review-check.log`. HTTP 응답·저장 열·다이제스트·ETag가 같아
+  OCI·운영 스모크는 실행하지 않았고 푸시 후 main CI에서 확인한다.
+- 원격 main `a0058f6`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37212960498)가 통과했다.
+  전체 테스트·계약 ZIP·OCI 이미지 빌드와 실행 스모크·HTTPS 프록시·운영 알림·알림 채널 스모크와 GHCR 이미지 게시를
+  포함한다. 로그: `/private/tmp/baton-cal-main-ci-a0058f6.log`.
 - Claude Code 스킬 추가는 `817720d` 기준 미커밋 상태에서 검증했다. `.claude/skills/`·지시·개발 문서만 바꿨고
   제품 코드·테스트·의존성·설정은 같아 기존 전체 검증 결과를 재사용한다. Python 3.14.7에서
   `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의
   링크 검사가 통과했다. 파일·종료 검사는 ArchUnit·검사 스크립트의 기존 성공 결과를 재사용해 통과했다.
   기록: `build/agent-feedback/f8327a0187405a2d/`.
-- `2e9e6ca`의 main CI에서 전체 테스트·계약·이미지 빌드·이미지 실행·HTTPS 운영 스모크는 통과했지만,
-  알림 채널 검사는 모의 수신기의 HTTP 준비 전 조회로 실패했다. 송신기와 수신기를 모두 기다리도록
-  수정하고 `bash scripts/smoke-alert-channels.sh`로 로컬 4개 조합의 오류 후 재전송·알림 발생과 해제를
-  확인했다. 로그: `/private/tmp/baton-cal-alert-readiness-smoke.log`. 제품 코드·의존성·설정은 같아
-  기존 CI의 전체 테스트와 이미지 검증 결과를 재사용했다.
 - 코드 정리는 `62fb198` 커밋 상태에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 165개·
   구조 3개 테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. Java 25 toolchain·PostgreSQL 18.6이며
   Spring 테스트 컨텍스트는 11개에서 9개로 줄었다. 로그: `/private/tmp/baton-cal-code-reduction-check-final.log`.

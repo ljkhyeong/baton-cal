@@ -157,11 +157,13 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 1. `calendar`: 일정 항목/시간 불변식과 정규 iCalendar 렌더링
 2. `snapshot`: 지문값, 멱등 수신과 채택한 항목 상태 조회 사용 사례
 3. `subscription`: 토큰 인코딩과 생성/회전/폐기/구독 상태·캘린더 피드 조회 사용 사례
-4. `projection`: 시즌 표시 이름 수신, 투영 재구축과 잠금 조정
+4. `projection`: 시즌 표시 이름 수신, 투영 재구축과 첫 투영의 Last-Modified 결정. 같은 시즌을 바꾸는 사용 사례는
+   각자 `SeasonProjectionLockRepository`로 시즌 잠금을 잡는다.
 5. `recovery`: 복구 대조값 다이제스트, 시즌 검증·전체 완료와 진단 조회 사용 사례
 6. `persistence`: JdbcClient SQL 행, 행과 도메인 값의 변환, 리포지토리. 다이제스트 같은 도메인 계산은 하지 않는다.
 7. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑
-8. `config`: 타입이 지정된 실행 환경 설정과 `Clock`
+8. `config`: 타입이 지정된 실행 환경 설정, `Clock`, 표준 UUID 입력 변환과 Jackson·JDBC 예외 변환·HTTP 관측 같은
+   Spring 공통 구성
 
 별도 Gradle 모듈은 실제 결합도나 빌드 필요가 확인될 때 ADR로 결정한다.
 
@@ -229,8 +231,9 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   `Uuid.parseHexDashOrNull`로 36자 표준 형식을 검사하고 NIL 여부는 설정 경계에서 한 번만 검증한다.
   별도 UUID 생성 로직은 애플리케이션에 두지 않는다.
 - 복구 모드는 기본 `false`인 `recoveryMode`를 `BATON_CAL_RECOVERY_MODE`에서 Spring Boot 설정
-  바인딩으로 읽는다. 구독 서비스의 생성·회전 진입점에서만 검사하고 기존 `ApiException` 처리로
-  `503 RECOVERY_IN_PROGRESS`를 반환한다. 복원되는 DB에는 모드를 저장하지 않으며 별도 필터,
+  바인딩으로 읽는다. 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`로 막고, 복구 매니페스트 검증·완료는
+  모드가 아니면 `409 RECOVERY_MODE_REQUIRED`로 거부한다. 둘 다 기존 `ApiException` 처리로 응답한다.
+  복원되는 DB에는 모드를 저장하지 않으며 별도 필터,
   상태 관리 테이블이나 자동 해제 작업은 두지 않는다. 수신·재구축·폐기·공개 조회와 readiness는
   유지한다. 복원 전 모든 인스턴스를 중지하고 새 구독 세대와 모드를 적용하며, 운영자가 전체
   재전달 완료를 확인한 뒤 같은 세대를 유지한 채 모드만 해제해 모든 인스턴스를 재시작한다.
