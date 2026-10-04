@@ -23,6 +23,9 @@
 - 파일 작성 직후 검사와 종료 전 전체 diff·ArchUnit 검사를 추가했다. 기존 Spring Repository 주입 구조를
   유지하며 Controller의 DB 접근, 도메인의 실행 계층 의존, Service의 JDBC 사용·Repository 생성을 검사한다.
   실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
+- Claude Code용 프로젝트 스킬 8개를 `.claude/skills/`에 추가했다. Codex 전역 `baton-cal-flows`를 저장소 기준으로
+  옮기고, 범용 검토·CI 실패·커밋 스킬을 CAL 규칙에 맞게 다시 작성했다. 문서·운영·의존성·계약 릴리스 스킬과
+  문서 링크 검사기도 추가했다. [스킬 목록](docs/development.md#claude-code-스킬)
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
@@ -63,6 +66,11 @@
 
 ## 최근 검증
 
+- Claude Code 스킬 추가는 `817720d` 기준 미커밋 상태에서 검증했다. `.claude/skills/`·지시·개발 문서만 바꿨고
+  제품 코드·테스트·의존성·설정은 같아 기존 전체 검증 결과를 재사용한다. Python 3.14.7에서
+  `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의
+  링크 검사가 통과했다. 파일·종료 검사는 ArchUnit·검사 스크립트의 기존 성공 결과를 재사용해 통과했다.
+  기록: `build/agent-feedback/f8327a0187405a2d/`.
 - `2e9e6ca`의 main CI에서 전체 테스트·계약·이미지 빌드·이미지 실행·HTTPS 운영 스모크는 통과했지만,
   알림 채널 검사는 모의 수신기의 HTTP 준비 전 조회로 실패했다. 송신기와 수신기를 모두 기다리도록
   수정하고 `bash scripts/smoke-alert-channels.sh`로 로컬 4개 조합의 오류 후 재전송·알림 발생과 해제를
@@ -169,6 +177,8 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
 
 - Codex 자동 훅의 실제 세션 실행은 미검증이다. `.codex/hooks.json`의 세 훅을 `/hooks`에서 검토·신뢰해야
   자동 실행된다. 신뢰 전에는 AGENTS.md의 수동 파일·종료 검사를 사용한다.
+- Claude Code에는 저장소 훅을 연결하지 않았다. 파일·종료 검사는 수동으로 실행한다. 저장소 `baton-cal-flows`와
+  Codex 전역 사본은 따로 관리되므로 한쪽만 고치면 내용이 달라진다.
 - 로컬 복원은 대표 데이터 검증이다. 실제 운영 전체 데이터·백업 저장소 복원이나 운영 준비 완료를 뜻하지 않는다.
 - 복구 상태 GET은 저장된 기록을 반환한다. 최신 원본의 반영 여부를 다시 확인하거나 복구 모드를 해제하지 않는다.
 - ID 지정 PUT의 응답 유실은 사전 저장한 ID로 조회할 수 있다. 기존 POST 생성과 rotate의 토큰 원문은

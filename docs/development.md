@@ -13,7 +13,7 @@
 
 | 변경 | 로컬 검증 |
 | --- | --- |
-| 문서·지시 | `git diff --check`, 바뀐 내용과 참조 경로 확인 |
+| 문서·지시 | `git diff --check`, `python3 -B .claude/skills/baton-cal-docs/scripts/check_links.py <바꾼 .md>`, 바뀐 내용 확인 |
 | 스킬 | `./scripts/validate-skill.sh <스킬 디렉터리>` |
 | 단일 기능 | `./gradlew --no-daemon test --tests '<관련 테스트 클래스>'` |
 | HTTP·계약 | 관련 HTTP 응답의 JSON Schema 테스트, `./gradlew --no-daemon verifyContractsZip` |
@@ -72,6 +72,22 @@ python3 -B scripts/agent_feedback.py final
 수동 작업의 세션은 `CODEX_THREAD_ID`가 있으면 그 값, 없으면 `manual`이다. 여러 터미널에서 작업하면
 각 명령에 같은 `--session <작업명>`을 붙인다. 이미 편집했다면 `start --base <편집 전 커밋>`으로 기준을
 지정한다. 상태가 삭제됐거나 환경·규칙이 바뀌었다면 `final`을 수동 실행해 검증한다.
+
+### Claude Code 스킬
+
+Claude Code는 `.codex/hooks.json`을 읽지 않는다. 세 검사 명령은 같은 `--session <작업명>`을 붙여 직접 실행한다.
+프로젝트 스킬은 `.claude/skills/`에 둔다. 공통 검증기를 통과하도록 frontmatter에는 `name`·`description`만 쓴다.
+
+| 스킬 | 사용 시점 |
+| --- | --- |
+| `baton-cal-flows` | 일정 수신·투영·구독·복구·DB 스키마·HTTP 계약 변경. Codex 전역 스킬을 저장소 기준으로 옮겼다 |
+| `baton-cal-docs` | README·PRD·ADR·HANDOFF·안내 문서 작성과 링크 검사 |
+| `baton-cal-operations` | Compose·프록시·모니터링·알림·TLS·Secret 파일과 운영 스모크 |
+| `baton-cal-dependencies` | 의존성·Wrapper·Actions·이미지 버전 갱신과 Dependabot PR |
+| `baton-cal-contract-release` | 계약 버전 결정과 공식 릴리스 게시 |
+| `baton-cal-review` | 종료 전 `review.diff`·브랜치·커밋·PR 결함 검토 |
+| `baton-cal-ci-fix` | GitHub Actions 실패 원인 분류와 로컬 재현 |
+| `baton-cal-finish` | 종료 검사, HANDOFF 갱신, 목적별 커밋, 요청 시 푸시·PR |
 
 ## 재실행과 종료
 
