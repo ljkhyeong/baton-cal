@@ -27,11 +27,11 @@ data class RecoverySeasonStateResponse(
 data class RecoverySeasonManifestRequest(
     @field:Min(0)
     val itemCount: Int,
-    @field:Pattern(regexp = "[0-9a-f]{64}")
+    @field:Pattern(regexp = SHA256_HEX)
     val itemDigest: String,
     @field:Min(0)
     val metadataRevision: Int?,
-    @field:Pattern(regexp = "[0-9a-f]{64}")
+    @field:Pattern(regexp = SHA256_HEX)
     val metadataDigest: String?,
 ) {
     fun toState(seasonId: UUID): RecoverySeasonState {
@@ -59,7 +59,7 @@ data class RecoverySeasonManifestResponse(
 data class RecoveryRunCompletionRequest(
     @field:Min(0)
     val seasonCount: Int,
-    @field:Pattern(regexp = "[0-9a-f]{64}")
+    @field:Pattern(regexp = SHA256_HEX)
     val seasonDigest: String,
 )
 
