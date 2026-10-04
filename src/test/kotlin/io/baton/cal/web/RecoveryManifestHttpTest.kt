@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.persistence.RecoveryManifestRepository
+import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.recovery.RecoverySeasonState
@@ -54,6 +55,7 @@ import kotlin.io.path.readText
 class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
+    private val metadataRepository: SeasonCalendarMetadataRepository,
     private val seasonLockRepository: SeasonProjectionLockRepository,
     private val jdbcClient: JdbcClient,
     transactionManager: PlatformTransactionManager,
@@ -63,7 +65,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @Test
     fun `복구 상태 조회는 진행과 완료를 구분하고 이후 원본 변경에도 완료 기록을 유지한다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
-        val state = repository.currentSeasonState(SEASON_ID)
+        val state = currentState()
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         val before = storedManifests()
 
@@ -91,7 +93,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @ValueSource(strings = ["itemCount", "metadataRevision"])
     fun `복구 매니페스트의 소수 건수와 개정 번호는 검증 기록을 남기지 않는다`(field: String) {
         updateMetadata()
-        val state = repository.currentSeasonState(SEASON_ID)
+        val state = currentState()
         val payload = """
             {
               "itemCount": 0,
@@ -177,7 +179,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     fun `전체 시즌 상태가 일치하면 복구 완료 신호를 멱등하게 반환한다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
         updateMetadata()
-        val state = repository.currentSeasonState(SEASON_ID)
+        val state = currentState()
 
         val manifestResponse = verifySeason(state.itemCount, state.itemDigest, state.metadataRevision, state.metadataDigest)
         ContractSchemaSupport.assertValid(
@@ -228,7 +230,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @ValueSource(booleans = [false, true])
     fun `매니페스트 검증은 복구 완료 전까지만 시즌 잠금을 기다린다`(completed: Boolean) {
         ingest("schedule-snapshot.zoned-active-r0.json")
-        val state = repository.currentSeasonState(SEASON_ID)
+        val state = currentState()
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         if (completed) complete(completionPayload(listOf(state)))
 
@@ -276,13 +278,13 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @Test
     fun `시즌 상태가 바뀌면 최신 매니페스트를 다시 검증하기 전까지 완료하지 않는다`() {
         ingest("schedule-snapshot.zoned-active-r0.json")
-        val initial = repository.currentSeasonState(SEASON_ID)
+        val initial = currentState()
         verifySeason(initial.itemCount, initial.itemDigest, null, null)
 
         ingest("schedule-snapshot.zoned-active-r2.json")
         assertCompletionMismatch(listOf(initial))
 
-        val current = repository.currentSeasonState(SEASON_ID)
+        val current = currentState()
         verifySeason(current.itemCount, current.itemDigest, null, null)
         complete(completionPayload(listOf(current)))
     }
@@ -290,7 +292,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @Test
     fun `현재 데이터에 없는 빈 시즌을 매니페스트에 추가하면 완료하지 않는다`() {
         val extraSeasonId = UUID.fromString("ea9696eb-4a62-4f37-a11d-9cb040b0fd03")
-        val extra = repository.currentSeasonState(extraSeasonId)
+        val extra = currentState(extraSeasonId)
         verifySeason(
             extra.itemCount,
             extra.itemDigest,
@@ -301,6 +303,12 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
         assertCompletionMismatch(listOf(extra))
     }
+
+    private fun currentState(seasonId: UUID = SEASON_ID) = RecoveryManifestDigest.seasonState(
+        seasonId,
+        repository.listItemStates(seasonId),
+        metadataRepository.findBySeasonId(seasonId)?.let { it.revision to it.displayName },
+    )
 
     private fun storedManifests() = jdbcClient.sql(
         "SELECT * FROM recovery_season_manifest WHERE recovery_id = :recoveryId",

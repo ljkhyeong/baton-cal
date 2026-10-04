@@ -21,6 +21,19 @@ data class RecoverySeasonState(
 )
 
 object RecoveryManifestDigest {
+    /** 현재 일정 항목과 시즌 이름으로 복구 대조값을 만든다. 이름이 없으면 이름 필드는 `null`이다. */
+    fun seasonState(
+        seasonId: UUID,
+        items: List<RecoveryItemState>,
+        metadata: Pair<Int, String>?,
+    ) = RecoverySeasonState(
+        seasonId = seasonId,
+        itemCount = items.size,
+        itemDigest = items(items),
+        metadataRevision = metadata?.first,
+        metadataDigest = metadata?.let { (revision, displayName) -> metadata(revision, displayName) },
+    )
+
     fun items(items: List<RecoveryItemState>): String = digest { output ->
         output.writeString("baton-cal-recovery-items-v1")
         items.sortedBy { it.sourceItemId.toString() }.forEach { item ->

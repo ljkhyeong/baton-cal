@@ -1,7 +1,6 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.recovery.RecoveryItemState
-import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.recovery.RecoverySeasonState
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
@@ -37,47 +36,26 @@ class RecoveryManifestRepository(
             .single()
     }
 
-    fun currentSeasonState(seasonId: UUID): RecoverySeasonState {
-        val items = jdbcClient.sql(
-            """
-            SELECT item.source_item_id, item.revision, inbox.payload_hash AS payload_digest
-            FROM calendar_item item
-            JOIN LATERAL (
-                SELECT payload_hash
-                FROM source_event_inbox
-                WHERE source_item_id = item.source_item_id
-                  AND source_revision = item.revision
-                ORDER BY received_at, event_id
-                LIMIT 1
-            ) inbox ON TRUE
-            WHERE item.season_id = :seasonId
-            """.trimIndent(),
-        )
-            .param("seasonId", seasonId)
-            .query(RecoveryItemState::class.java)
-            .list()
-            .requireNoNulls()
-        val metadata = jdbcClient.sql(
-            """
-            SELECT revision, display_name
-            FROM season_calendar_metadata
-            WHERE season_id = :seasonId
-            """.trimIndent(),
-        )
-            .param("seasonId", seasonId)
-            .query { resultSet, _ ->
-                resultSet.getInt("revision") to resultSet.getString("display_name")
-            }
-            .optional()
-            .getOrNull()
-        return RecoverySeasonState(
-            seasonId = seasonId,
-            itemCount = items.size,
-            itemDigest = RecoveryManifestDigest.items(items),
-            metadataRevision = metadata?.first,
-            metadataDigest = metadata?.let { RecoveryManifestDigest.metadata(it.first, it.second) },
-        )
-    }
+    /** 시즌의 현재 항목마다 채택한 개정 번호를 처음 수신한 스냅샷 지문과 함께 조회한다. */
+    fun listItemStates(seasonId: UUID): List<RecoveryItemState> = jdbcClient.sql(
+        """
+        SELECT item.source_item_id, item.revision, inbox.payload_hash AS payload_digest
+        FROM calendar_item item
+        JOIN LATERAL (
+            SELECT payload_hash
+            FROM source_event_inbox
+            WHERE source_item_id = item.source_item_id
+              AND source_revision = item.revision
+            ORDER BY received_at, event_id
+            LIMIT 1
+        ) inbox ON TRUE
+        WHERE item.season_id = :seasonId
+        """.trimIndent(),
+    )
+        .param("seasonId", seasonId)
+        .query(RecoveryItemState::class.java)
+        .list()
+        .requireNoNulls()
 
     fun upsertSeasonManifest(recoveryId: UUID, state: RecoverySeasonState, verifiedAt: Instant) {
         jdbcClient.sql(

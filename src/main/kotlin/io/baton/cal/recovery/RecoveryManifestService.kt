@@ -3,6 +3,7 @@ package io.baton.cal.recovery
 import io.baton.cal.config.CalProperties
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.RecoveryRunCompletionRow
+import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.RecoveryConflictException
@@ -23,6 +24,7 @@ import java.util.UUID
 @Service
 class RecoveryManifestService(
     private val repository: RecoveryManifestRepository,
+    private val metadataRepository: SeasonCalendarMetadataRepository,
     private val seasonLockRepository: SeasonProjectionLockRepository,
     private val properties: CalProperties,
     private val clock: Clock,
@@ -45,7 +47,7 @@ class RecoveryManifestService(
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     fun getSeasonState(seasonId: UUID): RecoverySeasonStateResponse {
-        val state = repository.currentSeasonState(seasonId)
+        val state = currentSeasonState(seasonId)
         if (state.itemCount == 0 && state.metadataRevision == null) {
             throw InternalResourceNotFoundException("시즌의 일정과 이름 수신 기록이 없습니다")
         }
@@ -76,7 +78,7 @@ class RecoveryManifestService(
         }
         requireRecoveryMode()
         seasonLockRepository.acquire(seasonId)
-        if (repository.currentSeasonState(seasonId) != expected) {
+        if (currentSeasonState(seasonId) != expected) {
             throw RecoveryConflictException.manifestMismatch()
         }
         repository.upsertSeasonManifest(
@@ -107,7 +109,7 @@ class RecoveryManifestService(
             states.size != request.seasonCount ||
             RecoveryManifestDigest.seasons(states) != request.seasonDigest ||
             repository.currentDataSeasonIds() != verifiedSeasonIds ||
-            states.any { repository.currentSeasonState(it.seasonId) != it }
+            states.any { currentSeasonState(it.seasonId) != it }
         ) {
             throw RecoveryConflictException.manifestMismatch()
         }
@@ -119,6 +121,15 @@ class RecoveryManifestService(
         )
         repository.insertCompletion(completed)
         return completed.toResponse()
+    }
+
+    private fun currentSeasonState(seasonId: UUID): RecoverySeasonState {
+        val metadata = metadataRepository.findBySeasonId(seasonId)
+        return RecoveryManifestDigest.seasonState(
+            seasonId,
+            repository.listItemStates(seasonId),
+            metadata?.let { it.revision to it.displayName },
+        )
     }
 
     private fun requireRecoveryMode() {
