@@ -1,9 +1,6 @@
 package io.baton.cal.projection
 
-import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.IcsCalendarRenderer
-import io.baton.cal.calendar.ScheduleTimeType
-import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
@@ -80,7 +77,7 @@ class SeasonProjectionService(
         existing: SeasonFeedProjectionMetadata?,
     ): ProjectionResult =
         rebuildTimer.record(Supplier {
-            val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toDomain)
+            val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toCalendarItem)
             val metadata = metadataRepository.findBySeasonId(seasonId)
             val rendered = renderer.render(seasonId = seasonId, items = items, displayName = metadata?.displayName)
             val initialLastModified = when {
@@ -119,40 +116,3 @@ class SeasonProjectionService(
         else -> clock.instant().truncatedTo(ChronoUnit.SECONDS)
     }
 }
-
-private fun CalendarItemRow.toDomain(): CalendarItem = CalendarItem(
-    sourceItemId = sourceItemId,
-    revision = revision,
-    status = status,
-    summary = summary,
-    description = description,
-    location = location,
-    schedule = when (timeType) {
-        ScheduleTimeType.UTC_INSTANT -> ScheduleWindow.UtcInstant(
-            start = requireNotNull(startsAtInstant),
-            end = requireNotNull(endsAtInstant),
-        )
-
-        ScheduleTimeType.UTC_POINT -> ScheduleWindow.UtcPoint(
-            at = requireNotNull(startsAtInstant),
-        )
-
-        ScheduleTimeType.ZONED_LOCAL -> ScheduleWindow.ZonedLocal(
-            start = requireNotNull(startsAtLocal),
-            end = requireNotNull(endsAtLocal),
-            zoneId = requireNotNull(zoneId),
-        )
-
-        ScheduleTimeType.ZONED_LOCAL_POINT -> ScheduleWindow.ZonedLocalPoint(
-            at = requireNotNull(startsAtLocal),
-            zoneId = requireNotNull(zoneId),
-        )
-
-        ScheduleTimeType.ALL_DAY -> ScheduleWindow.AllDay(
-            startDate = requireNotNull(startsOnDate),
-            endDate = requireNotNull(endsOnDate),
-        )
-    },
-    sourceUpdatedAt = sourceUpdatedAt,
-    acceptedAt = acceptedAt,
-)

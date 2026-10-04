@@ -1,10 +1,7 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.calendar.ScheduleTimeType
 import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
 import java.util.UUID
 
 data class SourceEventInboxRow(
@@ -15,26 +12,6 @@ data class SourceEventInboxRow(
     val sourceRevision: Int,
     val occurredAt: Instant,
     val receivedAt: Instant,
-)
-
-data class CalendarItemRow(
-    val sourceItemId: UUID,
-    val seasonId: UUID,
-    val revision: Int,
-    val status: CalendarItemStatus,
-    val summary: String,
-    val description: String?,
-    val location: String?,
-    val timeType: ScheduleTimeType,
-    val startsAtInstant: Instant?,
-    val endsAtInstant: Instant?,
-    val startsAtLocal: LocalDateTime?,
-    val endsAtLocal: LocalDateTime?,
-    val zoneId: String?,
-    val startsOnDate: LocalDate?,
-    val endsOnDate: LocalDate?,
-    val sourceUpdatedAt: Instant,
-    val acceptedAt: Instant,
 )
 
 data class CalendarItemStatusRow(

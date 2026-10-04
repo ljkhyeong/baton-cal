@@ -1,7 +1,5 @@
 package io.baton.cal.snapshot
 
-import io.baton.cal.calendar.ScheduleTimeType
-import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.persistence.CalendarItemApplyOutcome
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
@@ -15,9 +13,6 @@ import io.baton.cal.web.SnapshotConflictException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -96,7 +91,7 @@ class SnapshotIngestionService(
         }
 
         val acceptedAt = receivedAt.truncatedTo(ChronoUnit.SECONDS)
-        return when (itemRepository.applyIfNewer(snapshot.toRow(acceptedAt))) {
+        return when (itemRepository.applyIfNewer(CalendarItemRow.from(snapshot, acceptedAt))) {
             CalendarItemApplyOutcome.APPLIED -> SnapshotIngestionResult.APPLIED
 
             CalendarItemApplyOutcome.STALE -> SnapshotIngestionResult.STALE
@@ -114,71 +109,3 @@ class SnapshotIngestionService(
         message = "source revision already represents different content",
     )
 }
-
-private fun ScheduleSnapshot.toRow(
-    acceptedAt: Instant,
-): CalendarItemRow {
-    val scheduleColumns = schedule.toColumns()
-    return CalendarItemRow(
-        sourceItemId = sourceItemId,
-        seasonId = seasonId,
-        revision = revision,
-        status = status,
-        summary = summary,
-        description = description,
-        location = location,
-        timeType = scheduleColumns.timeType,
-        startsAtInstant = scheduleColumns.startsAtInstant,
-        endsAtInstant = scheduleColumns.endsAtInstant,
-        startsAtLocal = scheduleColumns.startsAtLocal,
-        endsAtLocal = scheduleColumns.endsAtLocal,
-        zoneId = scheduleColumns.zoneId,
-        startsOnDate = scheduleColumns.startsOnDate,
-        endsOnDate = scheduleColumns.endsOnDate,
-        sourceUpdatedAt = sourceUpdatedAt,
-        acceptedAt = acceptedAt,
-    )
-}
-
-private fun ScheduleWindow.toColumns(): ScheduleColumns = when (this) {
-    is ScheduleWindow.UtcInstant -> ScheduleColumns(
-        timeType = ScheduleTimeType.UTC_INSTANT,
-        startsAtInstant = start,
-        endsAtInstant = end,
-    )
-
-    is ScheduleWindow.UtcPoint -> ScheduleColumns(
-        timeType = ScheduleTimeType.UTC_POINT,
-        startsAtInstant = at,
-    )
-
-    is ScheduleWindow.ZonedLocal -> ScheduleColumns(
-        timeType = ScheduleTimeType.ZONED_LOCAL,
-        startsAtLocal = start,
-        endsAtLocal = end,
-        zoneId = zoneId,
-    )
-
-    is ScheduleWindow.ZonedLocalPoint -> ScheduleColumns(
-        timeType = ScheduleTimeType.ZONED_LOCAL_POINT,
-        startsAtLocal = at,
-        zoneId = zoneId,
-    )
-
-    is ScheduleWindow.AllDay -> ScheduleColumns(
-        timeType = ScheduleTimeType.ALL_DAY,
-        startsOnDate = startDate,
-        endsOnDate = endDate,
-    )
-}
-
-private data class ScheduleColumns(
-    val timeType: ScheduleTimeType,
-    val startsAtInstant: Instant? = null,
-    val endsAtInstant: Instant? = null,
-    val startsAtLocal: LocalDateTime? = null,
-    val endsAtLocal: LocalDateTime? = null,
-    val zoneId: String? = null,
-    val startsOnDate: LocalDate? = null,
-    val endsOnDate: LocalDate? = null,
-)
