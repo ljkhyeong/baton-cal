@@ -29,6 +29,9 @@
 - 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
   같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유하고, 같은 설정의 HTTP 테스트는
   공용 토큰으로 Spring 컨텍스트를 재사용한다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
+- 일정 시간 열과 `ScheduleWindow`의 양방향 변환은 `persistence/CalendarItemRow.kt`, 복구 대조값 계산은
+  `RecoveryManifestDigest`가 맡는다. 영속성 계층은 SQL·행 변환만 하고 시즌 이름은 기존 저장소로 조회한다.
+  409 공통 예외는 `ConflictException`이다. 서비스가 `web` 예외·DTO를 쓰는 구조는 ADR-0002에 따라 유지한다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
@@ -69,6 +72,10 @@
 
 ## 최근 검증
 
+- 구조 리팩터링은 `ac7953d` 기준 미커밋 상태에서 `./gradlew --no-daemon --max-workers=2 check`로 일반 165개·
+  구조 3개 테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. Java 25 toolchain·PostgreSQL 18.6.
+  로그: `/private/tmp/baton-cal-structure-refactoring-check.log`. HTTP 응답·저장 열·다이제스트가 같아
+  OCI·운영 스모크는 아래 `62fb198` 결과를 재사용했다. 파일·종료 검사 기록: `build/agent-feedback/e5e14abbc7471406/`.
 - Claude Code 스킬 추가는 `817720d` 기준 미커밋 상태에서 검증했다. `.claude/skills/`·지시·개발 문서만 바꿨고
   제품 코드·테스트·의존성·설정은 같아 기존 전체 검증 결과를 재사용한다. Python 3.14.7에서
   `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의

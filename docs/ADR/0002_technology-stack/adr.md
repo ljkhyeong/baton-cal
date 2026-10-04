@@ -158,9 +158,10 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 2. `snapshot`: 지문값, 멱등 수신과 채택한 항목 상태 조회 사용 사례
 3. `subscription`: 토큰 인코딩과 생성/회전/폐기/구독 상태·캘린더 피드 조회 사용 사례
 4. `projection`: 시즌 표시 이름 수신, 투영 재구축과 잠금 조정
-5. `persistence`: JdbcClient SQL 행과 리포지토리
-6. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑
-7. `config`: 타입이 지정된 실행 환경 설정과 `Clock`
+5. `recovery`: 복구 대조값 다이제스트, 시즌 검증·전체 완료와 진단 조회 사용 사례
+6. `persistence`: JdbcClient SQL 행, 행과 도메인 값의 변환, 리포지토리. 다이제스트 같은 도메인 계산은 하지 않는다.
+7. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑
+8. `config`: 타입이 지정된 실행 환경 설정과 `Clock`
 
 별도 Gradle 모듈은 실제 결합도나 빌드 필요가 확인될 때 ADR로 결정한다.
 
