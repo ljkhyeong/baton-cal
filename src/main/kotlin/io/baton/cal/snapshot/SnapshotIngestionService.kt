@@ -92,10 +92,7 @@ class SnapshotIngestionService(
         )
         if (existingRevisionHash != null) {
             if (existingRevisionHash == payloadHash) return SnapshotIngestionResult.DUPLICATE
-            throw SnapshotConflictException(
-                code = "SOURCE_REVISION_CONFLICT",
-                message = "source revision already represents different content",
-            )
+            throw revisionConflict()
         }
 
         val acceptedAt = receivedAt.truncatedTo(ChronoUnit.SECONDS)
@@ -108,12 +105,14 @@ class SnapshotIngestionService(
                 message = "sourceItemId cannot move to another season",
             )
 
-            CalendarItemApplyOutcome.REVISION_CONFLICT -> throw SnapshotConflictException(
-                code = "SOURCE_REVISION_CONFLICT",
-                message = "source revision already represents different content",
-            )
+            CalendarItemApplyOutcome.REVISION_CONFLICT -> throw revisionConflict()
         }
     }
+
+    private fun revisionConflict() = SnapshotConflictException(
+        code = "SOURCE_REVISION_CONFLICT",
+        message = "source revision already represents different content",
+    )
 }
 
 private fun ScheduleSnapshot.toRow(

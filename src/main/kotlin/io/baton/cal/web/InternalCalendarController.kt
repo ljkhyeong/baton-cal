@@ -65,87 +65,57 @@ class InternalCalendarController(
     @GetMapping("/calendar-items/{sourceItemId}")
     fun getCalendarItemStatus(
         @PathVariable sourceItemId: StandardUuidPath,
-    ): ResponseEntity<CalendarItemStatusResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(snapshotIngestionService.getItemStatus(sourceItemId.value))
+    ) = noStore(snapshotIngestionService.getItemStatus(sourceItemId.value))
 
     @GetMapping("/subscriptions/{subscriptionId}")
     fun getSubscriptionStatus(
         @PathVariable subscriptionId: StandardUuidPath,
-    ): ResponseEntity<SubscriptionStatusResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(subscriptionService.getStatus(subscriptionId.value))
+    ) = noStore(subscriptionService.getStatus(subscriptionId.value))
 
     @PutMapping("/seasons/{seasonId}/calendar-metadata")
     fun updateSeasonCalendarMetadata(
         @PathVariable seasonId: StandardUuidPath,
         @Valid @RequestBody request: SeasonCalendarMetadataRequest,
-    ): ResponseEntity<SeasonCalendarMetadataResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(metadataService.update(seasonId.value, request.revision, request.displayName))
+    ) = noStore(metadataService.update(seasonId.value, request.revision, request.displayName))
 
     @GetMapping("/recovery-runs/{recoveryId}")
     fun getRecoveryRunStatus(
         @PathVariable recoveryId: StandardUuidPath,
-    ): ResponseEntity<RecoveryRunStatusResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(recoveryManifestService.getStatus(recoveryId.value))
+    ) = noStore(recoveryManifestService.getStatus(recoveryId.value))
 
     @GetMapping("/seasons/{seasonId}/recovery-state")
     fun getRecoverySeasonState(
         @PathVariable seasonId: StandardUuidPath,
-    ): ResponseEntity<RecoverySeasonStateResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(recoveryManifestService.getSeasonState(seasonId.value))
+    ) = noStore(recoveryManifestService.getSeasonState(seasonId.value))
 
     @PutMapping("/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest")
     fun verifyRecoverySeasonManifest(
         @PathVariable recoveryId: StandardUuidPath,
         @PathVariable seasonId: StandardUuidPath,
         @Valid @RequestBody request: RecoverySeasonManifestRequest,
-    ): ResponseEntity<RecoverySeasonManifestResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(recoveryManifestService.verifySeason(recoveryId.value, seasonId.value, request))
+    ) = noStore(recoveryManifestService.verifySeason(recoveryId.value, seasonId.value, request))
 
     @PutMapping("/recovery-runs/{recoveryId}/completion")
     fun completeRecoveryRun(
         @PathVariable recoveryId: StandardUuidPath,
         @Valid @RequestBody request: RecoveryRunCompletionRequest,
-    ): ResponseEntity<RecoveryRunCompletionResponse> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(recoveryManifestService.complete(recoveryId.value, request))
+    ) = noStore(recoveryManifestService.complete(recoveryId.value, request))
 
     @PostMapping("/subscriptions")
     fun createSubscription(
         @RequestBody request: CreateSubscriptionRequest,
-    ): ResponseEntity<SubscriptionCredential> = ResponseEntity
-        .status(HttpStatus.CREATED)
-        .cacheControl(CacheControl.noStore())
-        .body(subscriptionService.create(request.seasonId))
+    ) = noStore(subscriptionService.create(request.seasonId), HttpStatus.CREATED)
 
     @PostMapping("/subscriptions/{subscriptionId}/rotate")
     fun rotateSubscription(
         @PathVariable subscriptionId: StandardUuidPath,
-    ): ResponseEntity<SubscriptionCredential> = ResponseEntity
-        .ok()
-        .cacheControl(CacheControl.noStore())
-        .body(subscriptionService.rotate(subscriptionId.value))
+    ) = noStore(subscriptionService.rotate(subscriptionId.value))
 
     @PutMapping("/subscriptions/{subscriptionId}")
     fun createSubscriptionWithId(
         @PathVariable subscriptionId: StandardUuidPath,
         @RequestBody request: CreateSubscriptionRequest,
-    ): ResponseEntity<SubscriptionCredential> = ResponseEntity
-        .status(HttpStatus.CREATED)
-        .cacheControl(CacheControl.noStore())
-        .body(subscriptionService.create(request.seasonId, subscriptionId.value))
+    ) = noStore(subscriptionService.create(request.seasonId, subscriptionId.value), HttpStatus.CREATED)
 
     @DeleteMapping("/subscriptions/{subscriptionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -159,6 +129,9 @@ class InternalCalendarController(
     fun rebuildProjection(
         @PathVariable seasonId: StandardUuidPath,
     ) = projectionService.rebuild(seasonId.value)
+
+    private fun <T : Any> noStore(body: T, status: HttpStatus = HttpStatus.OK): ResponseEntity<T> =
+        ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(body)
 
     private companion object {
         const val INGESTION_METRIC = "baton.cal.snapshot.ingestion"

@@ -81,21 +81,10 @@ class SubscriptionService(
         val token = tokenCodec.generate()
         val replacementHash = tokenCodec.hash(token)
 
-        if (
-            repository.rotate(
-                subscriptionId,
-                current.tokenHash,
-                replacementHash,
-                properties.subscriptionGeneration,
-            )
-        ) {
-            return SubscriptionCredential(subscriptionId, token, feedUri(token))
+        if (!repository.rotate(subscriptionId, current.tokenHash, replacementHash, properties.subscriptionGeneration)) {
+            throw concurrentChange()
         }
-
-        throw SnapshotConflictException(
-            code = "SUBSCRIPTION_CONFLICT",
-            message = "subscription was changed concurrently",
-        )
+        return SubscriptionCredential(subscriptionId, token, feedUri(token))
     }
 
     @Transactional
@@ -103,12 +92,7 @@ class SubscriptionService(
         val current = repository.findById(subscriptionId)
             ?: throw InternalResourceNotFoundException("subscription was not found")
         if (current.status == CalendarSubscriptionStatus.REVOKED) return
-        if (!repository.revoke(subscriptionId, current.tokenHash)) {
-            throw SnapshotConflictException(
-                code = "SUBSCRIPTION_CONFLICT",
-                message = "subscription was changed concurrently",
-            )
-        }
+        if (!repository.revoke(subscriptionId, current.tokenHash)) throw concurrentChange()
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +108,11 @@ class SubscriptionService(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,
         )
+
+    private fun concurrentChange() = SnapshotConflictException(
+        code = "SUBSCRIPTION_CONFLICT",
+        message = "subscription was changed concurrently",
+    )
 
     private fun ensureCredentialIssuanceAllowed() {
         if (properties.recoveryMode) throw RecoveryInProgressException()

@@ -21,11 +21,9 @@ class InternalApiAuthenticationFilter(
     private val objectMapper: ObjectMapper,
     meterRegistry: MeterRegistry,
 ) : OncePerRequestFilter() {
-    private val expectedTokens = buildList {
-        add(ExpectedToken(AuthenticationResult.CURRENT, properties.internalToken.encodeToByteArray()))
-        properties.previousInternalToken?.let {
-            add(ExpectedToken(AuthenticationResult.PREVIOUS, it.encodeToByteArray()))
-        }
+    private val expectedTokens = buildMap {
+        put(AuthenticationResult.CURRENT, properties.internalToken.encodeToByteArray())
+        properties.previousInternalToken?.let { put(AuthenticationResult.PREVIOUS, it.encodeToByteArray()) }
     }
     private val authenticationCounters: Map<AuthenticationResult, Counter> =
         AuthenticationResult.entries.associateWith { result ->
@@ -73,20 +71,9 @@ class InternalApiAuthenticationFilter(
         }
     }
 
-    private fun matchingAuthenticationResult(presented: ByteArray): AuthenticationResult? {
-        var matched: AuthenticationResult? = null
-        expectedTokens.forEach { expected ->
-            if (MessageDigest.isEqual(expected.value, presented)) {
-                matched = expected.result
-            }
-        }
-        return matched
-    }
-
-    private data class ExpectedToken(
-        val result: AuthenticationResult,
-        val value: ByteArray,
-    )
+    // 비교 시간이 일치한 토큰에 따라 달라지지 않도록 모든 토큰을 비교한 뒤 결과를 고른다.
+    private fun matchingAuthenticationResult(presented: ByteArray): AuthenticationResult? =
+        expectedTokens.filterValues { MessageDigest.isEqual(it, presented) }.keys.firstOrNull()
 
     private enum class AuthenticationResult(val tagValue: String) {
         CURRENT("current"),

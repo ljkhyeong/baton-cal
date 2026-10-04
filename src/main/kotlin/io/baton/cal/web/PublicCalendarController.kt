@@ -28,11 +28,7 @@ class PublicCalendarController(
         request: WebRequest,
         response: HttpServletResponse,
     ) {
-        val metadata = subscriptionService.findFeedMetadata(token)
-            ?: run {
-                response.status = HttpServletResponse.SC_NOT_FOUND
-                return
-            }
+        val metadata = subscriptionService.findFeedMetadata(token) ?: return response.notFound()
         if (request.respondNotModified(response, metadata.etag, metadata.lastModified)) return
         response.setCalendarHeaders(metadata.contentLength)
     }
@@ -44,22 +40,14 @@ class PublicCalendarController(
         response: HttpServletResponse,
     ) {
         if (request.hasCacheValidator()) {
-            val metadata = subscriptionService.findFeedMetadata(token)
-                ?: run {
-                    response.status = HttpServletResponse.SC_NOT_FOUND
-                    return
-                }
+            val metadata = subscriptionService.findFeedMetadata(token) ?: return response.notFound()
             if (request.respondNotModified(response, metadata.etag, metadata.lastModified)) return
 
             // 본문 조회 사이에 투영이나 구독 상태가 바뀔 수 있으므로 전체 조회에서 다시 판정한다.
             response.reset()
         }
 
-        val projection = subscriptionService.findFeed(token)
-            ?: run {
-                response.status = HttpServletResponse.SC_NOT_FOUND
-                return
-        }
+        val projection = subscriptionService.findFeed(token) ?: return response.notFound()
         if (request.respondNotModified(response, projection.etag, projection.lastModified)) return
 
         response.setCalendarHeaders(projection.representation.size)
@@ -71,6 +59,10 @@ class PublicCalendarController(
 
     private fun WebRequest.hasCacheValidator(): Boolean =
         getHeader(HttpHeaders.IF_NONE_MATCH) != null || getHeader(HttpHeaders.IF_MODIFIED_SINCE) != null
+
+    private fun HttpServletResponse.notFound() {
+        status = HttpServletResponse.SC_NOT_FOUND
+    }
 
     private fun HttpServletResponse.setCalendarHeaders(contentLength: Int) {
         contentType = CALENDAR_MEDIA_TYPE.toString()
