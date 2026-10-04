@@ -9,7 +9,7 @@ import io.baton.cal.persistence.SourceEventInboxRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.web.CalendarItemStatusResponse
 import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.SnapshotConflictException
+import io.baton.cal.web.ConflictException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -74,7 +74,7 @@ class SnapshotIngestionService(
             if (inboxRepository.getPayloadHashByEventId(snapshot.eventId) == payloadHash) {
                 return SnapshotIngestionResult.DUPLICATE
             }
-            throw SnapshotConflictException(
+            throw ConflictException(
                 code = "EVENT_ID_CONFLICT",
                 message = "eventId was already used for another snapshot",
             )
@@ -95,7 +95,7 @@ class SnapshotIngestionService(
             CalendarItemApplyOutcome.APPLIED -> SnapshotIngestionResult.APPLIED
 
             CalendarItemApplyOutcome.STALE -> SnapshotIngestionResult.STALE
-            CalendarItemApplyOutcome.SCOPE_CONFLICT -> throw SnapshotConflictException(
+            CalendarItemApplyOutcome.SCOPE_CONFLICT -> throw ConflictException(
                 code = "SOURCE_ITEM_SCOPE_CONFLICT",
                 message = "sourceItemId cannot move to another season",
             )
@@ -104,7 +104,7 @@ class SnapshotIngestionService(
         }
     }
 
-    private fun revisionConflict() = SnapshotConflictException(
+    private fun revisionConflict() = ConflictException(
         code = "SOURCE_REVISION_CONFLICT",
         message = "source revision already represents different content",
     )

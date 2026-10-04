@@ -9,7 +9,7 @@ import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.RecoveryInProgressException
-import io.baton.cal.web.SnapshotConflictException
+import io.baton.cal.web.ConflictException
 import io.baton.cal.web.SubscriptionCredential
 import io.baton.cal.web.SubscriptionStatusResponse
 import org.springframework.stereotype.Service
@@ -60,12 +60,12 @@ class SubscriptionService(
 
     private fun rejectExistingSubscription(existing: CalendarSubscriptionRow, seasonId: UUID): Nothing {
         if (existing.seasonId != seasonId) {
-            throw SnapshotConflictException(
+            throw ConflictException(
                 code = "SUBSCRIPTION_SCOPE_CONFLICT",
                 message = "같은 구독 ID를 다른 시즌에 사용할 수 없습니다",
             )
         }
-        throw SnapshotConflictException(
+        throw ConflictException(
             code = "SUBSCRIPTION_ALREADY_EXISTS",
             message = "이미 생성된 구독입니다. 상태를 조회한 뒤 필요한 경우 토큰을 다시 발급하세요",
         )
@@ -109,7 +109,7 @@ class SubscriptionService(
             properties.subscriptionGeneration,
         )
 
-    private fun concurrentChange() = SnapshotConflictException(
+    private fun concurrentChange() = ConflictException(
         code = "SUBSCRIPTION_CONFLICT",
         message = "subscription was changed concurrently",
     )

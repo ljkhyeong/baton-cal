@@ -19,7 +19,8 @@ class InvalidApiRequestException(message: String) : ApiException(
     message = message,
 )
 
-class SnapshotConflictException(
+/** 이미 저장된 상태와 맞지 않는 요청이다. 구체적인 원인은 `code`로 구분한다. */
+class ConflictException(
     code: String,
     message: String,
 ) : ApiException(

@@ -8,7 +8,7 @@ import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.runConcurrently
 import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.SnapshotConflictException
+import io.baton.cal.web.ConflictException
 import io.baton.cal.web.SubscriptionCredential
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -72,7 +72,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 
         val winner = outcomes.single { it.isSuccess }.getOrThrow()
         assertThat(outcomes.single { it.isFailure }.exceptionOrNull())
-            .isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+            .isInstanceOfSatisfying(ConflictException::class.java) {
                 assertThat(it.code).isEqualTo(
                     if (differentSeason) "SUBSCRIPTION_SCOPE_CONFLICT" else "SUBSCRIPTION_ALREADY_EXISTS",
                 )
@@ -89,7 +89,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             .`when`(renderer).render(otherSeasonId, emptyList(), null)
 
         assertThatThrownBy { service.create(otherSeasonId, initial.subscriptionId) }
-            .isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+            .isInstanceOfSatisfying(ConflictException::class.java) {
                 assertThat(it.code).isEqualTo("SUBSCRIPTION_SCOPE_CONFLICT")
             }
 
@@ -202,7 +202,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         runCatching(operation).fold(onSuccess = { it }, onFailure = ::Failed)
 
     private fun assertSubscriptionConflict(error: Throwable) {
-        assertThat(error).isInstanceOfSatisfying(SnapshotConflictException::class.java) {
+        assertThat(error).isInstanceOfSatisfying(ConflictException::class.java) {
             assertThat(it.code).isEqualTo("SUBSCRIPTION_CONFLICT")
         }
     }
