@@ -34,19 +34,18 @@ data class RecoverySeasonManifestRequest(
     @field:Pattern(regexp = "[0-9a-f]{64}")
     val metadataDigest: String?,
 ) {
-    fun requireValidMetadataPair() {
+    fun toState(seasonId: UUID): RecoverySeasonState {
         if ((metadataRevision == null) != (metadataDigest == null)) {
             throw InvalidApiRequestException("시즌 이름 개정 번호와 다이제스트는 함께 전달해야 합니다")
         }
+        return RecoverySeasonState(
+            seasonId = seasonId,
+            itemCount = itemCount,
+            itemDigest = itemDigest,
+            metadataRevision = metadataRevision,
+            metadataDigest = metadataDigest,
+        )
     }
-
-    fun toState(seasonId: UUID) = RecoverySeasonState(
-        seasonId = seasonId,
-        itemCount = itemCount,
-        itemDigest = itemDigest,
-        metadataRevision = metadataRevision,
-        metadataDigest = metadataDigest,
-    )
 }
 
 data class RecoverySeasonManifestResponse(

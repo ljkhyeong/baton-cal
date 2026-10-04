@@ -93,13 +93,13 @@ class InternalCalendarController(
         @PathVariable recoveryId: StandardUuidPath,
         @PathVariable seasonId: StandardUuidPath,
         @Valid @RequestBody request: RecoverySeasonManifestRequest,
-    ) = noStore(recoveryManifestService.verifySeason(recoveryId.value, seasonId.value, request))
+    ) = noStore(recoveryManifestService.verifySeason(recoveryId.value, request.toState(seasonId.value)))
 
     @PutMapping("/recovery-runs/{recoveryId}/completion")
     fun completeRecoveryRun(
         @PathVariable recoveryId: StandardUuidPath,
         @Valid @RequestBody request: RecoveryRunCompletionRequest,
-    ) = noStore(recoveryManifestService.complete(recoveryId.value, request))
+    ) = noStore(recoveryManifestService.complete(recoveryId.value, request.seasonCount, request.seasonDigest))
 
     @PostMapping("/subscriptions")
     fun createSubscription(

@@ -7,11 +7,9 @@ import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.RecoveryConflictException
-import io.baton.cal.web.RecoveryRunCompletionRequest
 import io.baton.cal.web.RecoveryRunCompletionResponse
 import io.baton.cal.web.RecoveryRunStatus
 import io.baton.cal.web.RecoveryRunStatusResponse
-import io.baton.cal.web.RecoverySeasonManifestRequest
 import io.baton.cal.web.RecoverySeasonManifestResponse
 import io.baton.cal.web.RecoverySeasonStateResponse
 import org.springframework.stereotype.Service
@@ -61,14 +59,9 @@ class RecoveryManifestService(
     }
 
     @Transactional
-    fun verifySeason(
-        recoveryId: UUID,
-        seasonId: UUID,
-        request: RecoverySeasonManifestRequest,
-    ): RecoverySeasonManifestResponse {
-        request.requireValidMetadataPair()
+    fun verifySeason(recoveryId: UUID, expected: RecoverySeasonState): RecoverySeasonManifestResponse {
+        val seasonId = expected.seasonId
         repository.lockRecoveryRun(recoveryId)
-        val expected = request.toState(seasonId)
         val completion = repository.findCompletion(recoveryId)
         if (completion != null) {
             if (repository.findVerifiedSeasonState(recoveryId, seasonId) != expected) {
@@ -90,13 +83,10 @@ class RecoveryManifestService(
     }
 
     @Transactional
-    fun complete(
-        recoveryId: UUID,
-        request: RecoveryRunCompletionRequest,
-    ): RecoveryRunCompletionResponse {
+    fun complete(recoveryId: UUID, seasonCount: Int, seasonDigest: String): RecoveryRunCompletionResponse {
         repository.lockRecoveryRun(recoveryId)
         repository.findCompletion(recoveryId)?.let { stored ->
-            if (stored.seasonCount != request.seasonCount || stored.seasonDigest != request.seasonDigest) {
+            if (stored.seasonCount != seasonCount || stored.seasonDigest != seasonDigest) {
                 throw RecoveryConflictException.runConflict()
             }
             return stored.toResponse()
@@ -106,8 +96,8 @@ class RecoveryManifestService(
         val states = repository.listVerifiedSeasonStates(recoveryId)
         val verifiedSeasonIds = states.mapTo(mutableSetOf()) { it.seasonId }
         if (
-            states.size != request.seasonCount ||
-            RecoveryManifestDigest.seasons(states) != request.seasonDigest ||
+            states.size != seasonCount ||
+            RecoveryManifestDigest.seasons(states) != seasonDigest ||
             repository.currentDataSeasonIds() != verifiedSeasonIds ||
             states.any { currentSeasonState(it.seasonId) != it }
         ) {
@@ -115,8 +105,8 @@ class RecoveryManifestService(
         }
         val completed = RecoveryRunCompletionRow(
             recoveryId = recoveryId,
-            seasonCount = request.seasonCount,
-            seasonDigest = request.seasonDigest,
+            seasonCount = seasonCount,
+            seasonDigest = seasonDigest,
             completedAt = clock.instant().truncatedTo(ChronoUnit.MICROS),
         )
         repository.insertCompletion(completed)
