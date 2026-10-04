@@ -28,9 +28,9 @@ class PublicCalendarController(
         request: WebRequest,
         response: HttpServletResponse,
     ) {
-        val metadata = subscriptionService.findFeedMetadata(token) ?: return response.notFound()
-        if (request.respondNotModified(response, metadata.etag, metadata.lastModified)) return
-        response.setCalendarHeaders(metadata.contentLength)
+        val headers = subscriptionService.findFeedHeaders(token) ?: return response.notFound()
+        if (request.respondNotModified(response, headers.etag, headers.lastModified)) return
+        response.setCalendarHeaders(headers.contentLength)
     }
 
     @GetMapping("/calendars/v1/{token}.ics")
@@ -40,8 +40,8 @@ class PublicCalendarController(
         response: HttpServletResponse,
     ) {
         if (request.hasCacheValidator()) {
-            val metadata = subscriptionService.findFeedMetadata(token) ?: return response.notFound()
-            if (request.respondNotModified(response, metadata.etag, metadata.lastModified)) return
+            val headers = subscriptionService.findFeedHeaders(token) ?: return response.notFound()
+            if (request.respondNotModified(response, headers.etag, headers.lastModified)) return
 
             // 본문 조회 사이에 투영이나 구독 상태가 바뀔 수 있으므로 전체 조회에서 다시 판정한다.
             response.reset()

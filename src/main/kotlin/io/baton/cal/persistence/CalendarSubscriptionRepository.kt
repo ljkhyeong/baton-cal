@@ -57,10 +57,10 @@ class CalendarSubscriptionRepository(
         expectedCredentialGeneration,
     )
 
-    fun findProjectionMetadataByActiveTokenHash(
+    fun findProjectionHeadersByActiveTokenHash(
         tokenHash: String,
         expectedCredentialGeneration: UUID,
-    ): SeasonFeedProjectionMetadata? = findByActiveTokenHash(
+    ): SeasonFeedHeaders? = findByActiveTokenHash(
         "projection.etag, projection.last_modified, octet_length(projection.representation) AS content_length",
         tokenHash,
         expectedCredentialGeneration,

@@ -8,7 +8,7 @@ import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRow
-import io.baton.cal.persistence.SeasonFeedProjectionMetadata
+import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
@@ -46,8 +46,8 @@ class SeasonProjectionServiceTest {
 
     @Test
     fun `기존 투영이 있으면 시즌 잠금을 잡지 않는다`() {
-        doReturn(metadata(lastModified = NOW))
-            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        doReturn(feedHeaders(lastModified = NOW))
+            .`when`(projectionRepository).findHeadersBySeasonId(SEASON_ID)
 
         service.ensureProjection(SEASON_ID)
 
@@ -56,22 +56,22 @@ class SeasonProjectionServiceTest {
 
     @Test
     fun `투영이 없으면 시즌 잠금 뒤 다시 확인한다`() {
-        doReturn(null, metadata(lastModified = NOW))
-            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        doReturn(null, feedHeaders(lastModified = NOW))
+            .`when`(projectionRepository).findHeadersBySeasonId(SEASON_ID)
 
         service.ensureProjection(SEASON_ID)
 
         val calls = inOrder(projectionRepository, lockRepository)
-        calls.verify(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        calls.verify(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         calls.verify(lockRepository).acquire(SEASON_ID)
-        calls.verify(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        calls.verify(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         verifyNoInteractions(itemRepository, renderer)
     }
 
     @Test
     fun `표현이 같으면 기존 Last-Modified를 유지한다`() {
-        val existing = metadata(lastModified = Instant.parse("2026-08-14T03:04:05Z"))
-        doReturn(existing).`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        val existing = feedHeaders(lastModified = Instant.parse("2026-08-14T03:04:05Z"))
+        doReturn(existing).`when`(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         stubRendering(etag = existing.etag)
 
         service.rebuildWhileLocked(SEASON_ID)
@@ -85,8 +85,8 @@ class SeasonProjectionServiceTest {
 
     @Test
     fun `표현이 바뀌면 현재 시각까지 Last-Modified를 전진한다`() {
-        doReturn(metadata(lastModified = NOW.minusSeconds(30)))
-            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        doReturn(feedHeaders(lastModified = NOW.minusSeconds(30)))
+            .`when`(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         stubRendering(etag = "\"changed\"")
 
         service.rebuildWhileLocked(SEASON_ID)
@@ -97,8 +97,8 @@ class SeasonProjectionServiceTest {
     @Test
     fun `표현이 바뀌고 시계가 뒤에 있어도 Last-Modified는 현재 시각을 넘지 않는다`() {
         val existingLastModified = NOW.plusSeconds(30)
-        doReturn(metadata(lastModified = existingLastModified))
-            .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
+        doReturn(feedHeaders(lastModified = existingLastModified))
+            .`when`(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         stubRendering(etag = "\"changed\"")
 
         service.rebuildWhileLocked(SEASON_ID)
@@ -181,8 +181,8 @@ class SeasonProjectionServiceTest {
         return captor.value
     }
 
-    private fun metadata(lastModified: Instant) =
-        SeasonFeedProjectionMetadata(etag = "\"same\"", lastModified = lastModified, contentLength = 8)
+    private fun feedHeaders(lastModified: Instant) =
+        SeasonFeedHeaders(etag = "\"same\"", lastModified = lastModified, contentLength = 8)
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")

@@ -36,7 +36,7 @@ data class SeasonFeedProjectionRow(
     val lastModified: Instant,
 )
 
-data class SeasonFeedProjectionMetadata(
+data class SeasonFeedHeaders(
     val etag: String,
     val lastModified: Instant,
     val contentLength: Int,

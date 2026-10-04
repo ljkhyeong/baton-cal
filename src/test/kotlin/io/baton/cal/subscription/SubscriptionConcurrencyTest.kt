@@ -94,7 +94,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             }
 
         assertThat(service.findFeed(initial.token)).isNotNull()
-        assertThat(projectionRepository.findMetadataBySeasonId(otherSeasonId)).isNull()
+        assertThat(projectionRepository.findHeadersBySeasonId(otherSeasonId)).isNull()
     }
 
     @Test
@@ -105,7 +105,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 
         assertThatThrownBy { service.create(SEASON_ID, subscriptionId) }.isSameAs(failure)
         assertThat(repository.findById(subscriptionId)).isNull()
-        assertThat(projectionRepository.findMetadataBySeasonId(SEASON_ID)).isNull()
+        assertThat(projectionRepository.findHeadersBySeasonId(SEASON_ID)).isNull()
 
         doCallRealMethod().`when`(renderer).render(SEASON_ID, emptyList(), null)
         val credential = service.create(SEASON_ID, subscriptionId)

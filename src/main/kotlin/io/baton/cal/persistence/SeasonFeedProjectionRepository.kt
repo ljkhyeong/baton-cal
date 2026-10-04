@@ -40,7 +40,7 @@ class SeasonFeedProjectionRepository(
             .update()
     }
 
-    fun findMetadataBySeasonId(seasonId: UUID): SeasonFeedProjectionMetadata? =
+    fun findHeadersBySeasonId(seasonId: UUID): SeasonFeedHeaders? =
         jdbcClient.sql(
             """
             SELECT etag, last_modified, octet_length(representation) AS content_length
@@ -49,7 +49,7 @@ class SeasonFeedProjectionRepository(
             """.trimIndent(),
         )
             .param("seasonId", seasonId)
-            .query(SeasonFeedProjectionMetadata::class.java)
+            .query(SeasonFeedHeaders::class.java)
             .optional()
             .getOrNull()
 }

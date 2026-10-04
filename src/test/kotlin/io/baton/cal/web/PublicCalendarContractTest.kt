@@ -298,7 +298,7 @@ class PublicCalendarContractTest @Autowired constructor(
 
     private fun verifyBodyNotRead(metadataReads: Int) {
         verify(subscriptionRepository, times(metadataReads))
-            .findProjectionMetadataByActiveTokenHash(ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION))
+            .findProjectionHeadersByActiveTokenHash(ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION))
         verify(subscriptionRepository, never())
             .findProjectionByActiveTokenHash(ArgumentMatchers.anyString(), eqArg(CREDENTIAL_GENERATION))
     }

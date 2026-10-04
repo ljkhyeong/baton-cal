@@ -5,7 +5,7 @@ import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
-import io.baton.cal.persistence.SeasonFeedProjectionMetadata
+import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
@@ -59,23 +59,23 @@ class SeasonProjectionService(
 
     @Transactional
     fun ensureProjection(seasonId: UUID) {
-        if (projectionRepository.findMetadataBySeasonId(seasonId) != null) {
+        if (projectionRepository.findHeadersBySeasonId(seasonId) != null) {
             return
         }
 
         lockRepository.acquire(seasonId)
-        if (projectionRepository.findMetadataBySeasonId(seasonId) == null) {
+        if (projectionRepository.findHeadersBySeasonId(seasonId) == null) {
             rebuildWhileLocked(seasonId, existing = null)
         }
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
     fun rebuildWhileLocked(seasonId: UUID): ProjectionResult =
-        rebuildWhileLocked(seasonId, projectionRepository.findMetadataBySeasonId(seasonId))
+        rebuildWhileLocked(seasonId, projectionRepository.findHeadersBySeasonId(seasonId))
 
     private fun rebuildWhileLocked(
         seasonId: UUID,
-        existing: SeasonFeedProjectionMetadata?,
+        existing: SeasonFeedHeaders?,
     ): ProjectionResult =
         rebuildTimer.record(Supplier {
             val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toCalendarItem)
@@ -108,7 +108,7 @@ class SeasonProjectionService(
         })
 
     private fun resolveLastModified(
-        existing: SeasonFeedProjectionMetadata?,
+        existing: SeasonFeedHeaders?,
         etag: String,
         renderedLastModified: Instant,
     ): Instant = when {
