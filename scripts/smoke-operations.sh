@@ -60,7 +60,6 @@ printf '%s' acme-smoke > "$CAL_ACME_DIRECTORY/.well-known/acme-challenge/smoke"
 
 address() { "${compose[@]}" port "$1" "$2"; }
 internal_url="http://$(address app 8080)"
-management_url="http://$(address app 8081)"
 prometheus_url="http://$(address prometheus 9090)"
 receiver_url="http://$(address alert-receiver 8080)"
 alertmanager_url="http://$(address alertmanager 9093)"

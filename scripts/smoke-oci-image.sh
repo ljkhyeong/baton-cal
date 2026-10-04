@@ -8,15 +8,10 @@ if [[ $# -ne 1 || -z "$1" ]]; then
 fi
 
 image_name=$1
-script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-project_directory=$(cd "$script_directory/.." && pwd)
+project_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 compose_file="$project_directory/compose.smoke.yml"
 project_name="baton-cal-smoke-$(date +%s)-$$"
-readiness_file=$(mktemp "${TMPDIR:-/tmp}/baton-cal-readiness.XXXXXX")
-response_header_file=$(mktemp "${TMPDIR:-/tmp}/baton-cal-response-headers.XXXXXX")
-response_body_file=$(mktemp "${TMPDIR:-/tmp}/baton-cal-response-body.XXXXXX")
-feed_file=$(mktemp "${TMPDIR:-/tmp}/baton-cal-feed.XXXXXX")
-dump_file=$(mktemp "${TMPDIR:-/tmp}/baton-cal-backup.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/baton-cal-smoke.XXXXXX")
 database_name=baton_cal_smoke
 database_user=baton_cal_smoke
 internal_token=smoke-only-internal-token-00000000000000000000000000000000
@@ -38,10 +33,18 @@ compose=(
   --file "$compose_file"
 )
 http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
+bearer=(--header "Authorization: Bearer $internal_token")
 
 fail() {
   echo "오류: $*" >&2
   return 1
+}
+
+# 응답 본문은 첫 인자의 파일에 저장하고 HTTP 상태 코드만 출력한다.
+http_status() {
+  local output=$1
+  shift
+  "${http_request[@]}" --output "$output" --write-out '%{http_code}' "$@"
 }
 
 cleanup() {
@@ -54,12 +57,7 @@ cleanup() {
     "${compose[@]}" logs --no-color >&2 || true
   fi
 
-  rm -f \
-    "$readiness_file" \
-    "$response_header_file" \
-    "$response_body_file" \
-    "$feed_file" \
-    "$dump_file"
+  rm -rf "$scratch"
   echo "격리된 Compose project '$project_name'의 컨테이너와 볼륨을 정리합니다."
   if ! "${compose[@]}" down --volumes --remove-orphans; then
     echo "오류: 격리된 스모크 자원을 완전히 정리하지 못했습니다." >&2
@@ -83,19 +81,9 @@ wait_for_readiness() {
   container_id=$("${compose[@]}" ps --all --quiet app)
   [[ -n "$container_id" ]] || fail "애플리케이션 컨테이너 ID를 찾을 수 없습니다."
 
-  local application_address
-  application_address=$("${compose[@]}" port app 8080)
-  application_port=${application_address##*:}
-  [[ "$application_port" =~ ^[0-9]+$ ]] \
-    || fail "동적으로 할당된 애플리케이션 포트를 확인할 수 없습니다: '$application_address'"
-  base_url="http://127.0.0.1:$application_port"
-
-  local management_address
-  management_address=$("${compose[@]}" port app 8081)
-  management_port=${management_address##*:}
-  [[ "$management_port" =~ ^[0-9]+$ ]] \
-    || fail "동적으로 할당된 관리 포트를 확인할 수 없습니다: '$management_address'"
-  management_url="http://127.0.0.1:$management_port"
+  # 강제 재생성하면 포트가 바뀌므로 매번 다시 조회한다. compose.smoke.yml은 127.0.0.1에만 연결한다.
+  base_url="http://$("${compose[@]}" port app 8080)"
+  management_url="http://$("${compose[@]}" port app 8081)"
   readiness_url="$management_url/actuator/health/readiness"
 
   local readiness_status=000
@@ -104,7 +92,7 @@ wait_for_readiness() {
   for ((attempt = 1; attempt <= 60; attempt++)); do
     readiness_status=$(
       curl --silent \
-        --output "$readiness_file" \
+        --output "$scratch/readiness" \
         --write-out '%{http_code}' \
         --connect-timeout 1 \
         --max-time 2 \
@@ -112,7 +100,7 @@ wait_for_readiness() {
     )
 
     if [[ "$readiness_status" == 200 ]] \
-      && jq --exit-status '.status == "UP"' "$readiness_file" >/dev/null 2>&1; then
+      && jq --exit-status '.status == "UP"' "$scratch/readiness" >/dev/null 2>&1; then
       ready=true
       break
     fi
@@ -124,9 +112,9 @@ wait_for_readiness() {
 
   if [[ "$ready" != true ]]; then
     echo "마지막 readiness HTTP 상태: $readiness_status" >&2
-    if [[ -s "$readiness_file" ]]; then
+    if [[ -s "$scratch/readiness" ]]; then
       echo "마지막 readiness 응답:" >&2
-      sed -n '1,40p' "$readiness_file" >&2
+      sed -n '1,40p' "$scratch/readiness" >&2
     fi
     fail "readiness가 제한 시간 안에 HTTP 200과 UP을 반환하지 않았습니다."
   fi
@@ -135,14 +123,9 @@ wait_for_readiness() {
 
 assert_prometheus_metrics() {
   local status
-  status=$(
-    "${http_request[@]}" \
-      --output "$readiness_file" \
-      --write-out '%{http_code}' \
-      "$management_url/actuator/prometheus"
-  )
+  status=$(http_status "$scratch/readiness" "$management_url/actuator/prometheus")
   [[ "$status" == 200 ]] || fail "Prometheus 메트릭이 HTTP 200이 아닌 $status를 반환했습니다."
-  grep --quiet '^jvm_info' "$readiness_file" \
+  grep --quiet '^jvm_info' "$scratch/readiness" \
     || fail "Prometheus 메트릭에서 JVM 런타임 정보를 찾을 수 없습니다."
   echo "Prometheus 메트릭 HTTP 200과 JVM 런타임 정보를 확인했습니다."
 }
@@ -171,8 +154,7 @@ post_snapshot() {
   local fixture_name=$1
   local response
   if ! response=$(
-    "${http_request[@]}" --fail \
-      --header "Authorization: Bearer $internal_token" \
+    "${http_request[@]}" "${bearer[@]}" --fail \
       --header 'Content-Type: application/json' \
       --data-binary "@$project_directory/contracts/examples/$fixture_name" \
       "$base_url/internal/api/v1/schedule-snapshots"
@@ -189,8 +171,7 @@ put_season_metadata() {
   local fixture_name=$1
   local response
   response=$(
-    "${http_request[@]}" --fail --request PUT \
-      --header "Authorization: Bearer $internal_token" \
+    "${http_request[@]}" "${bearer[@]}" --fail --request PUT \
       --header 'Content-Type: application/json' \
       --data-binary "@$project_directory/contracts/examples/$fixture_name" \
       "$base_url/internal/api/v1/seasons/$season_id/calendar-metadata"
@@ -205,16 +186,9 @@ put_season_metadata() {
 
 assert_recovery_blocked() {
   local status
-  status=$(
-    "${http_request[@]}" \
-      --request POST \
-      --header "Authorization: Bearer $internal_token" \
-      --output "$response_body_file" \
-      --write-out '%{http_code}' \
-      "$@"
-  )
+  status=$(http_status "$scratch/response-body" "${bearer[@]}" --request POST "$@")
   [[ "$status" == 503 ]] || fail "복구 중 구독 발급이 HTTP 503이 아닌 $status를 반환했습니다."
-  jq --exit-status '.code == "RECOVERY_IN_PROGRESS"' "$response_body_file" >/dev/null \
+  jq --exit-status '.code == "RECOVERY_IN_PROGRESS"' "$scratch/response-body" >/dev/null \
     || fail "복구 중 구독 발급 차단 오류 코드가 올바르지 않습니다."
 }
 
@@ -225,29 +199,22 @@ assert_recovery_result() {
   local expected_result=$4
   local status
   status=$(
-    "${http_request[@]}" --request PUT \
-      --header "Authorization: Bearer $internal_token" \
+    http_status "$scratch/response-body" "${bearer[@]}" --request PUT \
       --header 'Content-Type: application/json' \
       --data-binary "@$project_directory/contracts/examples/$fixture" \
-      --output "$response_body_file" --write-out '%{http_code}' \
       "$base_url/internal/api/v1/recovery-runs/$recovery_id/$path"
   )
   [[ "$status" == "$expected_status" ]] \
     || fail "복구 $path 요청이 HTTP $expected_status 대신 $status를 반환했습니다."
   jq --exit-status --arg expected "$expected_result" \
-    '(.result // .code) == $expected' "$response_body_file" >/dev/null \
+    '(.result // .code) == $expected' "$scratch/response-body" >/dev/null \
     || fail "복구 $path 요청 결과가 $expected_result가 아닙니다."
 }
 
 assert_public_ok() {
   local token=$1
   local status
-  status=$(
-    "${http_request[@]}" \
-      --output /dev/null \
-      --write-out '%{http_code}' \
-      "$base_url/calendars/v1/$token.ics"
-  )
+  status=$(http_status /dev/null "$base_url/calendars/v1/$token.ics")
   [[ "$status" == 200 ]] || fail "현재 세대 공개 피드가 HTTP 200이 아닌 $status를 반환했습니다."
 }
 
@@ -255,15 +222,11 @@ assert_public_not_found() {
   local token=$1
   local status
   status=$(
-    "${http_request[@]}" \
-      --dump-header "$response_header_file" \
-      --output "$response_body_file" \
-      --write-out '%{http_code}' \
-      "$base_url/calendars/v1/$token.ics"
+    http_status "$scratch/response-body" --dump-header "$scratch/response-headers" "$base_url/calendars/v1/$token.ics"
   )
   [[ "$status" == 404 ]] || fail "이전 세대 공개 피드가 HTTP 404가 아닌 $status를 반환했습니다."
-  [[ ! -s "$response_body_file" ]] || fail "이전 세대 공개 피드의 404 응답 본문이 비어 있지 않습니다."
-  if grep --ignore-case --quiet '^content-type:' "$response_header_file"; then
+  [[ ! -s "$scratch/response-body" ]] || fail "이전 세대 공개 피드의 404 응답 본문이 비어 있지 않습니다."
+  if grep --ignore-case --quiet '^content-type:' "$scratch/response-headers"; then
     fail "이전 세대 공개 피드의 404 응답에 Content-Type이 포함되었습니다."
   fi
 }
@@ -318,8 +281,7 @@ post_snapshot schedule-snapshot.zoned-active-r0.json
 put_season_metadata season-calendar-metadata.r0.json
 
 if ! initial_credential=$(
-  "${http_request[@]}" --fail \
-    --header "Authorization: Bearer $internal_token" \
+  "${http_request[@]}" "${bearer[@]}" --fail \
     --header 'Content-Type: application/json' \
     --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
     "$base_url/internal/api/v1/subscriptions"
@@ -343,9 +305,9 @@ echo "같은 세대 A 재시작 뒤 기존 공개 피드 HTTP 200 유지를 확�
 
 echo "PostgreSQL 사용자 지정 형식 논리 백업을 생성하고 아카이브를 검증합니다."
 "${compose[@]}" exec --no-TTY postgres \
-  pg_dump -Fc --username="$database_user" --dbname="$database_name" >"$dump_file"
-[[ -s "$dump_file" ]] || fail "PostgreSQL 논리 백업 아카이브가 비어 있습니다."
-"${compose[@]}" exec --no-TTY postgres pg_restore --list <"$dump_file" >/dev/null
+  pg_dump -Fc --username="$database_user" --dbname="$database_name" >"$scratch/backup.dump"
+[[ -s "$scratch/backup.dump" ]] || fail "PostgreSQL 논리 백업 아카이브가 비어 있습니다."
+"${compose[@]}" exec --no-TTY postgres pg_restore --list <"$scratch/backup.dump" >/dev/null
 echo "pg_dump -Fc 아카이브 생성과 pg_restore 목록 검증을 완료했습니다."
 
 post_snapshot schedule-snapshot.zoned-active-r2.json
@@ -369,7 +331,7 @@ echo "pg_restore --clean --create --exit-on-error로 논리 백업을 실제 복
     --create \
     --exit-on-error \
     --username="$database_user" \
-    --dbname=postgres <"$dump_file"
+    --dbname=postgres <"$scratch/backup.dump"
 
 echo "세대 B 설정으로 애플리케이션을 강제 재생성합니다."
 "${compose[@]}" up --detach --force-recreate app
@@ -410,9 +372,9 @@ echo "스냅샷 재전달 뒤에도 복구 모드가 자동 해제되지 않는�
 
 assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 200 VERIFIED
 assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 200 COMPLETED
-completed_at=$(jq --exit-status --raw-output '.completedAt' "$response_body_file")
+completed_at=$(jq --exit-status --raw-output '.completedAt' "$scratch/response-body")
 assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 200 COMPLETED
-jq --exit-status --arg expected "$completed_at" '.completedAt == $expected' "$response_body_file" >/dev/null \
+jq --exit-status --arg expected "$completed_at" '.completedAt == $expected' "$scratch/response-body" >/dev/null \
   || fail "같은 완료 요청을 재시도했을 때 최초 완료 시각이 바뀌었습니다."
 assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 echo "COMPLETED 응답과 재시도 시각을 확인한 뒤 세대 B를 유지하고 복구 모드만 해제합니다."
@@ -422,9 +384,7 @@ wait_for_readiness
 assert_public_not_found "$token_t1"
 
 if ! rotated_credential=$(
-  "${http_request[@]}" --fail \
-    --request POST \
-    --header "Authorization: Bearer $internal_token" \
+  "${http_request[@]}" "${bearer[@]}" --fail --request POST \
     "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 ); then
   fail "복원된 구독을 현재 세대로 회전하지 못했습니다."
@@ -432,18 +392,13 @@ fi
 token_t2=$(printf '%s' "$rotated_credential" | jq --exit-status --raw-output '.token')
 rotated_credential=
 
-final_feed_status=$(
-  "${http_request[@]}" \
-    --output "$feed_file" \
-    --write-out '%{http_code}' \
-    "$base_url/calendars/v1/$token_t2.ics"
-)
+final_feed_status=$(http_status "$scratch/feed" "$base_url/calendars/v1/$token_t2.ics")
 [[ "$final_feed_status" == 200 ]] \
   || fail "현재 세대로 회전한 공개 피드가 HTTP 200이 아닌 $final_feed_status를 반환했습니다."
 awk '{ sub(/\r$/, ""); if ($0 == "SEQUENCE:3") sequence = 1; if ($0 == "STATUS:CANCELLED") cancelled = 1 } END { exit !(sequence && cancelled) }' \
-  "$feed_file" \
+  "$scratch/feed" \
   || fail "회전한 공개 피드에 SEQUENCE:3과 STATUS:CANCELLED가 모두 없습니다."
-grep --quiet '^X-WR-CALNAME:BATON 가을' "$feed_file" \
+grep --quiet '^X-WR-CALNAME:BATON 가을' "$scratch/feed" \
   || fail "회전한 공개 피드에 최신 시즌 표시 이름이 없습니다."
 echo "동일 구독의 세대 B 전환과 새 피드의 SEQUENCE 3, CANCELLED 상태, 최신 시즌 이름을 확인했습니다."
 
