@@ -16,14 +16,6 @@ enum class CalendarItemStatus {
     CANCELLED,
 }
 
-enum class ScheduleTimeType {
-    UTC_INSTANT,
-    UTC_POINT,
-    ZONED_LOCAL,
-    ZONED_LOCAL_POINT,
-    ALL_DAY,
-}
-
 sealed interface ScheduleWindow {
     data class UtcInstant(
         val start: Instant,

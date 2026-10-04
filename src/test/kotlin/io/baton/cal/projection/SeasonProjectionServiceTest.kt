@@ -2,10 +2,10 @@ package io.baton.cal.projection
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
-import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.RenderedCalendar
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
+import io.baton.cal.persistence.ScheduleTimeType
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRow
 import io.baton.cal.persistence.SeasonFeedHeaders

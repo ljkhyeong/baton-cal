@@ -1,7 +1,6 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.micrometer.core.instrument.MeterRegistry
 import java.time.Instant

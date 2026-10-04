@@ -2,7 +2,6 @@ package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.snapshot.ScheduleSnapshot
 import java.time.Instant
@@ -95,6 +94,15 @@ data class CalendarItemRow(
             )
         }
     }
+}
+
+/** `calendar_item.time_type` 열의 값이다. 도메인의 시간 형태는 [ScheduleWindow]로 표현한다. */
+enum class ScheduleTimeType {
+    UTC_INSTANT,
+    UTC_POINT,
+    ZONED_LOCAL,
+    ZONED_LOCAL_POINT,
+    ALL_DAY,
 }
 
 private fun ScheduleWindow.toColumns(): ScheduleColumns = when (this) {
