@@ -1,7 +1,10 @@
 package io.baton.cal.web
 
-import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.andReturnValid
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
+import io.baton.cal.support.bearer
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
@@ -10,10 +13,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -26,7 +29,9 @@ import java.util.UUID
 @Sql("/reset-database.sql")
 @SpringBootTest(
     properties = [
-        "baton.cal.internal-token=test-internal-token-that-is-long-enough",
+        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
+        // MvpHttpFlowTest와 같은 속성으로 Spring 테스트 컨텍스트를 재사용한다.
+        "baton.cal.previous-internal-token=$TEST_PREVIOUS_INTERNAL_TOKEN",
         "baton.cal.public-base-url=https://calendar.example.test",
     ],
 )
@@ -117,12 +122,7 @@ class SnapshotInputContractTest @Autowired constructor(
     @Test
     fun `timestamp errors do not reflect the rejected value`() {
         val sensitiveValue = "https://calendar.example.test/calendars/v1/secret.ics"
-        mockMvc.perform(
-            post(SNAPSHOT_PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(utcSnapshot(occurredAt = quoted(sensitiveValue))),
-        )
+        postSnapshot(utcSnapshot(occurredAt = quoted(sensitiveValue)))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.message").value("snapshot contains an invalid timestamp"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(sensitiveValue))))
@@ -217,27 +217,19 @@ class SnapshotInputContractTest @Autowired constructor(
         ).forEach(::assertInvalid)
     }
 
+    private fun postSnapshot(payload: String): ResultActions =
+        mockMvc.perform(post(SNAPSHOT_PATH).bearer().contentType(MediaType.APPLICATION_JSON).content(payload))
+
     private fun assertInvalid(payload: String) {
-        val response = mockMvc.perform(
-            post(SNAPSHOT_PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(payload),
-        )
+        postSnapshot(payload)
             .andExpect(status().isBadRequest)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            .andReturn().response.contentAsString
-        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "스냅샷 입력 오류 응답")
+            .andReturnValid("api-error.v1.schema.json", "스냅샷 입력 오류 응답")
     }
 
     private fun assertApplied(payload: String) {
-        mockMvc.perform(
-            post(SNAPSHOT_PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(payload),
-        )
+        postSnapshot(payload)
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.result").value("APPLIED"))
     }
@@ -276,27 +268,9 @@ class SnapshotInputContractTest @Autowired constructor(
         startLocal: String = "2026-08-31T23:30:00",
         endLocal: String = "2026-09-01T00:30:00",
         zoneId: String = "Asia/Seoul",
-    ): String =
-        """
-        {
-          "eventId": "${UUID.randomUUID()}",
-          "occurredAt": "2026-08-11T01:00:05Z",
-          "sourceItemId": "${UUID.randomUUID()}",
-          "seasonId": "$SEASON_ID",
-          "revision": 0,
-          "status": "ACTIVE",
-          "summary": "자정 경계 일정",
-          "description": null,
-          "location": null,
-          "sourceUpdatedAt": "2026-08-11T01:00:00Z",
-          "time": {
-            "type": "ZONED_LOCAL",
-            "startLocal": "$startLocal",
-            "endLocal": "$endLocal",
-            "zoneId": "$zoneId"
-          }
-        }
-        """.trimIndent()
+    ): String = snapshotWithTime(
+        """{"type":"ZONED_LOCAL","startLocal":"$startLocal","endLocal":"$endLocal","zoneId":"$zoneId"}""",
+    )
 
     private fun snapshotWithTime(time: String): String =
         """
@@ -319,7 +293,6 @@ class SnapshotInputContractTest @Autowired constructor(
 
     private companion object {
         const val SNAPSHOT_PATH = "/internal/api/v1/schedule-snapshots"
-        const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
     }
 }

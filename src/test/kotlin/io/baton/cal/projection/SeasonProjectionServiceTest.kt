@@ -145,10 +145,8 @@ class SeasonProjectionServiceTest {
         return captor.value
     }
 
-    private fun metadata(
-        etag: String = "\"same\"",
-        lastModified: Instant,
-    ) = SeasonFeedProjectionMetadata(etag = etag, lastModified = lastModified, contentLength = 8)
+    private fun metadata(lastModified: Instant) =
+        SeasonFeedProjectionMetadata(etag = "\"same\"", lastModified = lastModified, contentLength = 8)
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")

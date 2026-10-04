@@ -3,6 +3,10 @@ package io.baton.cal.web
 import com.jayway.jsonpath.JsonPath
 import com.zaxxer.hikari.HikariDataSource
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedPost
+import io.baton.cal.support.bearer
+import io.baton.cal.support.createSubscription
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -15,9 +19,9 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -36,7 +40,7 @@ import org.hamcrest.Matchers.containsString
 @SpringBootTest(
     properties = [
         "spring.profiles.active=prod",
-        "baton.cal.internal-token=test-internal-token-that-is-long-enough",
+        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
         "baton.cal.public-base-url=https://calendar.example.test",
         "baton.cal.subscription-generation=30000000-0000-0000-0000-000000000003",
         "management.server.port=8080",
@@ -52,17 +56,10 @@ class OperationalHttpTest @Autowired constructor(
 ) {
     @Test
     fun `연결 풀이 고갈되면 503을 반환하고 연결 반환 후 구독을 정상 처리한다`() {
-        val created = mockMvc.perform(
-            authorizedPost("/internal/api/v1/subscriptions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"seasonId":"$SEASON_ID"}"""),
-        )
-            .andExpect(status().isCreated)
-            .andReturn().response.contentAsString
-        val token: String = JsonPath.read(created, "$.token")
+        val token: String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.token")
         val subscriptionId = "cccccccc-cccc-cccc-cccc-cccccccccccc"
         fun createRequest() = put("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId)
-            .header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
+            .bearer()
             .contentType(MediaType.APPLICATION_JSON)
             .content("""{"seasonId":"$SEASON_ID"}""")
 
@@ -86,8 +83,7 @@ class OperationalHttpTest @Autowired constructor(
         mockMvc.perform(createRequest())
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.subscriptionId").value(subscriptionId))
-        assertThat(jdbcClient.sql("SELECT count(*) FROM calendar_subscription").query(Int::class.java).single())
-            .isEqualTo(2)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_subscription")).isEqualTo(2)
     }
 
     @Test
@@ -99,20 +95,10 @@ class OperationalHttpTest @Autowired constructor(
 
     @Test
     fun `one-time subscription credentials cannot be stored by clients`() {
-        val created = mockMvc.perform(
-            authorizedPost("/internal/api/v1/subscriptions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"seasonId":"$SEASON_ID"}"""),
-        )
-            .andExpect(status().isCreated)
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-            .andReturn()
+        // 구독 생성 응답의 no-store는 createSubscription에서 확인한다.
+        val subscriptionId: String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.subscriptionId")
 
-        val subscriptionId: String = JsonPath.read(created.response.contentAsString, "$.subscriptionId")
-
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId),
-        )
+        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
             .andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
     }
@@ -222,16 +208,12 @@ class OperationalHttpTest @Autowired constructor(
             .doesNotContain("%r", "%U", "%q")
     }
 
-    private fun authorizedPost(path: String, vararg uriVariables: Any) =
-        post(path, *uriVariables).header(HttpHeaders.AUTHORIZATION, "Bearer $INTERNAL_TOKEN")
-
     private fun snapshotDocumentOfSize(size: Int): ByteArray {
         val snapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readBytes()
         return ByteArray(size - snapshot.size) { ' '.code.toByte() } + snapshot
     }
 
     companion object {
-        const val INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
         const val SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val MAX_JSON_DOCUMENT_LENGTH = 131_072
         const val MAX_JSON_NAME_LENGTH = 64

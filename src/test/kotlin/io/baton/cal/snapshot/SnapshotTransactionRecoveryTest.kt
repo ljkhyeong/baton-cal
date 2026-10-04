@@ -8,6 +8,7 @@ import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.feedProjection
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -54,13 +55,7 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThat(ingestionService.ingest(SNAPSHOT)).isEqualTo(SnapshotIngestionResult.APPLIED)
         assertDurableRowCounts(expected = 1)
 
-        val projection = jdbcClient.sql(
-            "SELECT representation FROM season_feed_projection WHERE season_id = :seasonId",
-        )
-            .param("seasonId", SEASON_ID)
-            .query(ByteArray::class.java)
-            .single()
-        val event = projection.parseIcalendar().requiredEvent()
+        val event = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar().requiredEvent()
         assertThat(event.requiredPropertyValue(Property.UID)).isEqualTo("$SOURCE_ITEM_ID@cal.baton")
         assertThat(event.requiredPropertyValue(Property.SUMMARY)).isEqualTo("Recovery fixture")
     }
@@ -80,11 +75,7 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         val result = metadataService.update(SEASON_ID, 2, "가을 시즌")
         assertThat(result.revision).isEqualTo(2)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_calendar_metadata")).isEqualTo(1)
-        val calendar = jdbcClient.sql("SELECT representation FROM season_feed_projection WHERE season_id = :seasonId")
-            .param("seasonId", SEASON_ID)
-            .query(ByteArray::class.java)
-            .single()
-            .parseIcalendar()
+        val calendar = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar()
         assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
     }
 

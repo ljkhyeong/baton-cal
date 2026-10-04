@@ -4,12 +4,16 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.config.CalProperties
-import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.andReturnValid
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.subscription.SubscriptionTokenCodec
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedGet
+import io.baton.cal.support.authorizedPost
+import io.baton.cal.support.bearer
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -25,7 +29,6 @@ import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -39,7 +42,8 @@ import kotlin.io.path.readText
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
-        "baton.cal.internal-token=recovery-test-internal-token-that-is-long-enough",
+        // RecoveryManifestHttpTest와 같은 속성으로 Spring 테스트 컨텍스트를 재사용한다.
+        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
         "baton.cal.recovery-mode=true",
     ],
 )
@@ -71,21 +75,16 @@ class RecoveryModeHttpTest @Autowired constructor(
                 .content("""{"seasonId":"${UUID.randomUUID()}"}"""),
             authorizedPost("/internal/api/v1/subscriptions/${subscription.id}/rotate"),
             put("/internal/api/v1/subscriptions/{subscriptionId}", UUID.randomUUID())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}")
+                .bearer()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"seasonId":"${UUID.randomUUID()}"}"""),
         ).forEach { request ->
-            val response = mockMvc.perform(request)
+            mockMvc.perform(request)
                 .andExpect(status().isServiceUnavailable)
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(content().json(expectedError))
                 .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
-                .andReturn().response
-            ContractSchemaSupport.assertValid(
-                "api-error.v1.schema.json",
-                response.contentAsString,
-                "복구 중 구독 발급 차단 응답",
-            )
+                .andReturnValid("api-error.v1.schema.json", "복구 중 구독 발급 차단 응답")
         }
         assertThat(repository.findById(subscription.id)).isEqualTo(subscription)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_subscription")).isEqualTo(1)
@@ -95,23 +94,17 @@ class RecoveryModeHttpTest @Autowired constructor(
         ingest("schedule-snapshot.zoned-cancelled.json")
         mockMvc.perform(
             put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}")
+                .bearer()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(Path("contracts/examples/season-calendar-metadata.r2.json").readText()),
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.revision").value(2))
-        mockMvc.perform(
-            get("/internal/api/v1/calendar-items/b8ca471a-b228-42fa-8d41-28f05ee90d40")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),
-        )
+        mockMvc.perform(authorizedGet("/internal/api/v1/calendar-items/b8ca471a-b228-42fa-8d41-28f05ee90d40"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.revision").value(3))
             .andExpect(jsonPath("$.status").value("CANCELLED"))
-        mockMvc.perform(
-            get("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),
-        )
+        mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.status").value("ACTIVE"))
             .andExpect(jsonPath("$.generationMatches").value(true))
@@ -131,10 +124,7 @@ class RecoveryModeHttpTest @Autowired constructor(
         )
             .andExpect(status().isNotModified)
 
-        mockMvc.perform(
-            delete("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}"),
-        )
+        mockMvc.perform(delete("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id).bearer())
             .andExpect(status().isNoContent)
         mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isNotFound)
@@ -149,9 +139,6 @@ class RecoveryModeHttpTest @Autowired constructor(
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.result").value("APPLIED"))
     }
-
-    private fun authorizedPost(path: String) = post(path)
-        .header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.internalToken}")
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")

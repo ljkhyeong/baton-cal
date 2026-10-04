@@ -117,12 +117,9 @@ class SnapshotFingerprintTest {
     private fun scheduleFingerprint(schedule: ScheduleWindow): String =
         SnapshotFingerprint.sha256(snapshot().copy(schedule = schedule))
 
-    private fun snapshot(
-        eventId: UUID = UUID.fromString("11111111-1111-1111-1111-111111111111"),
-        occurredAt: Instant = Instant.parse("2026-08-11T01:00:00Z"),
-    ): ScheduleSnapshot = ScheduleSnapshot(
-        eventId = eventId,
-        occurredAt = occurredAt,
+    private fun snapshot(): ScheduleSnapshot = ScheduleSnapshot(
+        eventId = UUID.fromString("11111111-1111-1111-1111-111111111111"),
+        occurredAt = Instant.parse("2026-08-11T01:00:00Z"),
         sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         seasonId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         revision = 3,

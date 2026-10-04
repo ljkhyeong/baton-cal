@@ -6,13 +6,12 @@ import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.runConcurrently
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.SnapshotConflictException
 import io.baton.cal.web.SubscriptionCredential
 import java.util.UUID
-import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
@@ -198,15 +197,6 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             row
         }.`when`(repository).findById(subscriptionId)
     }
-
-    private fun <T> runConcurrently(first: () -> T, second: () -> T): List<T> =
-        Executors.newFixedThreadPool(2).use { executor ->
-            executor.invokeAll(
-                listOf(Callable(first), Callable(second)),
-                TIMEOUT_SECONDS,
-                TimeUnit.SECONDS,
-            ).map { it.get() }
-        }
 
     private fun attempt(operation: () -> OperationOutcome): OperationOutcome =
         runCatching(operation).fold(onSuccess = { it }, onFailure = ::Failed)

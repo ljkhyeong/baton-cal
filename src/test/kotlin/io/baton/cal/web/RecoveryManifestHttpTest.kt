@@ -2,10 +2,16 @@ package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.andReturnValid
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
+import io.baton.cal.recovery.RecoverySeasonState
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedGet
+import io.baton.cal.support.authorizedPost
+import io.baton.cal.support.bearer
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
@@ -19,9 +25,9 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -40,7 +46,7 @@ import kotlin.io.path.readText
 @AutoConfigureMockMvc
 @SpringBootTest(
     properties = [
-        "baton.cal.internal-token=recovery-manifest-test-token-that-is-long-enough",
+        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
         "baton.cal.recovery-mode=true",
     ],
 )
@@ -66,12 +72,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val completedAt: String = JsonPath.read(completed, "$.completedAt")
         ingest("schedule-snapshot.zoned-cancelled.json")
         assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
-        mockMvc.perform(
-            put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, SEASON_ID)
-                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(Path("contracts/examples/recovery-season-manifest.json").readText()),
-        )
+        mockMvc.perform(manifestRequest(Path("contracts/examples/recovery-season-manifest.json").readText()))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
         val status = readRunStatus("COMPLETED", 1)
@@ -103,13 +104,10 @@ class RecoveryManifestHttpTest @Autowired constructor(
             "itemCount" -> payload.replace("\"itemCount\": 0", "\"itemCount\": 0.5")
             else -> payload.replace("\"metadataRevision\": 2", "\"metadataRevision\": 2.5")
         }
-        val response = mockMvc.perform(
-            seasonManifestRequest(0, state.itemDigest, 2, state.metadataDigest).content(invalid),
-        )
+        mockMvc.perform(manifestRequest(invalid))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            .andReturn().response.contentAsString
-        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 정수 입력 오류 응답")
+            .andReturnValid("api-error.v1.schema.json", "복구 정수 입력 오류 응답")
         assertThat(repository.listVerifiedSeasonStates(UUID.fromString(RECOVERY_ID))).isEmpty()
         verifySeason(0, state.itemDigest, 2, state.metadataDigest)
     }
@@ -117,13 +115,10 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @Test
     fun `소수인 시즌 수는 복구 완료 기록을 남기지 않는다`() {
         val payload = completionPayload(emptyList())
-        val response = mockMvc.perform(
-            completionRequest(payload.replace("\"seasonCount\": 0", "\"seasonCount\": 0.5")),
-        )
+        mockMvc.perform(completionRequest(payload.replace("\"seasonCount\": 0", "\"seasonCount\": 0.5")))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            .andReturn().response.contentAsString
-        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 완료 정수 입력 오류 응답")
+            .andReturnValid("api-error.v1.schema.json", "복구 완료 정수 입력 오류 응답")
         assertThat(repository.findCompletion(UUID.fromString(RECOVERY_ID))).isNull()
         complete(payload)
     }
@@ -140,10 +135,8 @@ class RecoveryManifestHttpTest @Autowired constructor(
             .isEqualTo(JsonPath.read<String>(initial, "$.itemDigest"))
         assertThat(JsonPath.read<Int>(named, "$.metadataRevision")).isEqualTo(2)
         assertThat(JsonPath.read<String>(named, "$.metadataDigest")).hasSize(64)
-        assertThat(jdbcClient.sql("SELECT count(*) FROM recovery_season_manifest").query(Int::class.java).single())
-            .isZero()
-        assertThat(jdbcClient.sql("SELECT count(*) FROM recovery_run_completion").query(Int::class.java).single())
-            .isZero()
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_season_manifest")).isZero()
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_run_completion")).isZero()
     }
 
     @Test
@@ -153,13 +146,11 @@ class RecoveryManifestHttpTest @Autowired constructor(
             "/internal/api/v1/seasons/$SEASON_ID/recovery-state",
         ).forEach { path ->
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
-            mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, AUTHORIZATION))
+            mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-            mockMvc.perform(
-                get(path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid"))
-                    .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
-            ).andExpect(status().isBadRequest)
+            val invalidPath = path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid")
+            mockMvc.perform(authorizedGet(invalidPath)).andExpect(status().isBadRequest)
         }
         updateMetadata()
         val metadataOnly = readSeasonState()
@@ -170,19 +161,12 @@ class RecoveryManifestHttpTest @Autowired constructor(
     fun `복원 스모크의 고정 매니페스트는 최신 취소와 시즌 이름을 모두 요구한다`() {
         val manifest = Path("contracts/examples/recovery-season-manifest.zoned-cancelled.json").readText()
         val completion = Path("contracts/examples/recovery-run-completion.zoned-cancelled.json").readText()
-        fun manifestRequest() = put(
-            "/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, SEASON_ID,
-        )
-            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(manifest)
-
         ingest("schedule-snapshot.zoned-active-r2.json")
         updateMetadata()
-        mockMvc.perform(manifestRequest()).andExpect(status().isConflict)
+        mockMvc.perform(manifestRequest(manifest)).andExpect(status().isConflict)
         mockMvc.perform(completionRequest(completion)).andExpect(status().isConflict)
         ingest("schedule-snapshot.zoned-cancelled.json")
-        mockMvc.perform(manifestRequest())
+        mockMvc.perform(manifestRequest(manifest))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.result").value("VERIFIED"))
         val first = complete(completion)
@@ -221,26 +205,20 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @ValueSource(strings = ["run", "state"])
     fun `복구 잠금 대기가 끝나면 503과 재시도 간격을 반환한다`(lock: String) {
         val payload = completionPayload(emptyList())
-        Executors.newSingleThreadExecutor().use { executor ->
-            transaction.executeWithoutResult {
+        whileLocked(
+            lock = {
                 if (lock == "run") {
                     repository.lockRecoveryRun(UUID.fromString(RECOVERY_ID))
                 } else {
                     jdbcClient.sql("LOCK TABLE calendar_item IN ROW EXCLUSIVE MODE").update()
                 }
-                executor.submit {
-                    transaction.executeWithoutResult { rollback ->
-                        rollback.setRollbackOnly()
-                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
-                        val response = mockMvc.perform(completionRequest(payload))
-                            .andExpect(status().isServiceUnavailable)
-                            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
-                            .andExpect(content().json(Path("contracts/examples/api-error.service-busy.json").readText()))
-                            .andReturn().response.contentAsString
-                        ContractSchemaSupport.assertValid("api-error.v1.schema.json", response, "복구 잠금 시간 초과")
-                    }
-                }.get(5, TimeUnit.SECONDS)
-            }
+            },
+        ) {
+            mockMvc.perform(completionRequest(payload))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                .andExpect(content().json(Path("contracts/examples/api-error.service-busy.json").readText()))
+                .andReturnValid("api-error.v1.schema.json", "복구 잠금 시간 초과")
         }
         assertThat(repository.findCompletion(UUID.fromString(RECOVERY_ID))).isNull()
         complete(payload)
@@ -254,26 +232,17 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         if (completed) complete(completionPayload(listOf(state)))
 
-        Executors.newSingleThreadExecutor().use { executor ->
-            transaction.executeWithoutResult {
-                seasonLockRepository.acquire(SEASON_ID)
-                executor.submit {
-                    transaction.executeWithoutResult { rollback ->
-                        rollback.setRollbackOnly()
-                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
-                        if (completed) {
-                            assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
-                            mockMvc.perform(seasonManifestRequest(state.itemCount, "0".repeat(64), null, null))
-                                .andExpect(status().isConflict)
-                                .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
-                        } else {
-                            mockMvc.perform(seasonManifestRequest(state.itemCount, state.itemDigest, null, null))
-                                .andExpect(status().isServiceUnavailable)
-                                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
-                                .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
-                        }
-                    }
-                }.get(5, TimeUnit.SECONDS)
+        whileLocked(lock = { seasonLockRepository.acquire(SEASON_ID) }) {
+            if (completed) {
+                assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
+                mockMvc.perform(seasonManifestRequest(state.itemCount, "0".repeat(64), null, null))
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
+            } else {
+                mockMvc.perform(seasonManifestRequest(state.itemCount, state.itemDigest, null, null))
+                    .andExpect(status().isServiceUnavailable)
+                    .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                    .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
             }
         }
     }
@@ -311,9 +280,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         verifySeason(initial.itemCount, initial.itemDigest, null, null)
 
         ingest("schedule-snapshot.zoned-active-r2.json")
-        mockMvc.perform(completionRequest(completionPayload(listOf(initial))))
-            .andExpect(status().isConflict)
-            .andExpect(content().json(Path("contracts/examples/api-error.recovery-manifest-mismatch.json").readText()))
+        assertCompletionMismatch(listOf(initial))
 
         val current = repository.currentSeasonState(SEASON_ID)
         verifySeason(current.itemCount, current.itemDigest, null, null)
@@ -332,9 +299,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
             extraSeasonId,
         )
 
-        mockMvc.perform(completionRequest(completionPayload(listOf(extra))))
-            .andExpect(status().isConflict)
-            .andExpect(content().json(Path("contracts/examples/api-error.recovery-manifest-mismatch.json").readText()))
+        assertCompletionMismatch(listOf(extra))
     }
 
     private fun storedManifests() = jdbcClient.sql(
@@ -346,40 +311,31 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     private fun ingest(fileName: String) {
         mockMvc.perform(
-            post("/internal/api/v1/schedule-snapshots")
-                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+            authorizedPost("/internal/api/v1/schedule-snapshots")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(Path("contracts/examples", fileName).readText()),
         ).andExpect(status().isOk)
     }
 
-    private fun readRunStatus(expectedStatus: String, seasonCount: Int): String = mockMvc.perform(
-        get("/internal/api/v1/recovery-runs/{recoveryId}", RECOVERY_ID)
-            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
-    )
+    private fun readRunStatus(expectedStatus: String, seasonCount: Int): String = mockMvc
+        .perform(authorizedGet("/internal/api/v1/recovery-runs/{recoveryId}", RECOVERY_ID))
         .andExpect(status().isOk)
         .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.status").value(expectedStatus))
         .andExpect(jsonPath("$.verifiedSeasonCount").value(seasonCount))
         .andExpect(jsonPath("$.recoveryMode").value(true))
-        .andReturn().response.contentAsString.also {
-            ContractSchemaSupport.assertValid("recovery-run-status.v1.schema.json", it, "복구 실행 조회 응답")
-        }
+        .andReturnValid("recovery-run-status.v1.schema.json", "복구 실행 조회 응답")
 
-    private fun readSeasonState(): String = mockMvc.perform(
-        get("/internal/api/v1/seasons/{seasonId}/recovery-state", SEASON_ID)
-            .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION),
-    )
+    private fun readSeasonState(): String = mockMvc
+        .perform(authorizedGet("/internal/api/v1/seasons/{seasonId}/recovery-state", SEASON_ID))
         .andExpect(status().isOk)
         .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-        .andReturn().response.contentAsString.also {
-            ContractSchemaSupport.assertValid("recovery-season-state.v1.schema.json", it, "시즌 복구 진단 응답")
-        }
+        .andReturnValid("recovery-season-state.v1.schema.json", "시즌 복구 진단 응답")
 
     private fun updateMetadata() {
         mockMvc.perform(
             put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
-                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .bearer()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(Path("contracts/examples/season-calendar-metadata.r2.json").readText()),
         ).andExpect(status().isOk)
@@ -405,21 +361,25 @@ class RecoveryManifestHttpTest @Autowired constructor(
         metadataRevision: Int?,
         metadataDigest: String?,
         seasonId: UUID = SEASON_ID,
-    ) = put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
-        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(
-            """
-            {
-              "itemCount": $itemCount,
-              "itemDigest": "$itemDigest",
-              "metadataRevision": ${metadataRevision ?: "null"},
-              "metadataDigest": ${metadataDigest?.let { "\"$it\"" } ?: "null"}
-            }
-            """.trimIndent(),
-        )
+    ) = manifestRequest(
+        """
+        {
+          "itemCount": $itemCount,
+          "itemDigest": "$itemDigest",
+          "metadataRevision": ${metadataRevision ?: "null"},
+          "metadataDigest": ${metadataDigest?.let { "\"$it\"" } ?: "null"}
+        }
+        """.trimIndent(),
+        seasonId,
+    )
 
-    private fun completionPayload(states: List<io.baton.cal.recovery.RecoverySeasonState>): String =
+    private fun manifestRequest(body: String, seasonId: UUID = SEASON_ID) =
+        put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
+            .bearer()
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(body)
+
+    private fun completionPayload(states: List<RecoverySeasonState>): String =
         """
         {
           "seasonCount": ${states.size},
@@ -433,17 +393,36 @@ class RecoveryManifestHttpTest @Autowired constructor(
         .andExpect(jsonPath("$.result").value("COMPLETED"))
         .andReturn().response.contentAsString
 
-    private fun completionRequest(payload: String) = put(
-        "/internal/api/v1/recovery-runs/{recoveryId}/completion",
-        RECOVERY_ID,
-    )
-        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(payload)
+    private fun completionRequest(payload: String) =
+        put("/internal/api/v1/recovery-runs/{recoveryId}/completion", RECOVERY_ID)
+            .bearer()
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(payload)
+
+    private fun assertCompletionMismatch(states: List<RecoverySeasonState>) {
+        mockMvc.perform(completionRequest(completionPayload(states)))
+            .andExpect(status().isConflict)
+            .andExpect(content().json(Path("contracts/examples/api-error.recovery-manifest-mismatch.json").readText()))
+    }
+
+    // 다른 트랜잭션이 잠금을 잡은 동안 짧은 lock_timeout으로 요청을 실행하고 그 트랜잭션은 롤백한다.
+    private fun whileLocked(lock: () -> Unit, request: () -> Unit) {
+        Executors.newSingleThreadExecutor().use { executor ->
+            transaction.executeWithoutResult {
+                lock()
+                executor.submit {
+                    transaction.executeWithoutResult { rollback ->
+                        rollback.setRollbackOnly()
+                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
+                        request()
+                    }
+                }.get(5, TimeUnit.SECONDS)
+            }
+        }
+    }
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         const val RECOVERY_ID = "92490d0d-b82e-4f94-a041-308b184aaef9"
-        const val AUTHORIZATION = "Bearer recovery-manifest-test-token-that-is-long-enough"
     }
 }

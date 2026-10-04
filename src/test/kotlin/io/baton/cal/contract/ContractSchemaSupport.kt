@@ -6,6 +6,7 @@ import com.networknt.schema.SchemaRegistry
 import com.networknt.schema.SchemaRegistryConfig
 import com.networknt.schema.SpecificationVersion
 import org.assertj.core.api.Assertions.assertThat
+import org.springframework.test.web.servlet.ResultActions
 import kotlin.io.path.inputStream
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
@@ -50,3 +51,7 @@ internal object ContractSchemaSupport {
 
     private val schemas = ConcurrentHashMap<String, Schema>()
 }
+
+/** 응답 본문이 계약 스키마를 통과하는지 확인하고 본문을 반환한다. */
+internal fun ResultActions.andReturnValid(schemaFileName: String, description: String): String =
+    andReturn().response.contentAsString.also { ContractSchemaSupport.assertValid(schemaFileName, it, description) }

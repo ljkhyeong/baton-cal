@@ -4,7 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import io.baton.cal.config.JdbcConfiguration
-import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.andReturnValid
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -35,20 +35,14 @@ class ApiExceptionHandlerTest {
     @ParameterizedTest(name = "{0} 데이터베이스 실패")
     @ValueSource(strings = ["lock", "query", "transaction", "connection", "transaction-start"])
     fun `데이터베이스 연결 실패와 제한 시간 초과는 재시도 가능한 503을 반환한다`(failureType: String) {
-        val result = mockMvc
+        mockMvc
             .perform(get("/internal/api/v1/temporary-database-contention/{failureType}", failureType))
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
             .andExpect(jsonPath("$.message").value("service is temporarily busy"))
-            .andReturn()
-
-        ContractSchemaSupport.assertValid(
-            "api-error.v1.schema.json",
-            result.response.contentAsString,
-            "데이터베이스 실패 응답",
-        )
+            .andReturnValid("api-error.v1.schema.json", "데이터베이스 실패 응답")
     }
 
     @ParameterizedTest(name = "PostgreSQL {0} → HTTP {1}")
@@ -77,8 +71,7 @@ class ApiExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value("an unexpected error occurred"))
         }
 
-        val body = result.andReturn().response.contentAsString
-        ContractSchemaSupport.assertValid("api-error.v1.schema.json", body, "PostgreSQL 오류 응답")
+        val body = result.andReturnValid("api-error.v1.schema.json", "PostgreSQL 오류 응답")
         assertThat(body).doesNotContain(SENSITIVE_VALUE, sqlState)
     }
 
@@ -89,18 +82,12 @@ class ApiExceptionHandlerTest {
         logger.addAppender(appender)
 
         try {
-            val result = mockMvc.perform(get("/internal/api/v1/failure"))
+            val body = mockMvc.perform(get("/internal/api/v1/failure"))
                 .andExpect(status().isInternalServerError)
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.message").value("an unexpected error occurred"))
-                .andReturn()
-
-            ContractSchemaSupport.assertValid(
-                "api-error.v1.schema.json",
-                result.response.contentAsString,
-                "예상 밖 오류의 실제 응답",
-            )
-            assertThat(result.response.contentAsString).doesNotContain(SENSITIVE_VALUE)
+                .andReturnValid("api-error.v1.schema.json", "예상 밖 오류의 실제 응답")
+            assertThat(body).doesNotContain(SENSITIVE_VALUE)
             assertThat(appender.list).isNotEmpty
             assertThat(appender.list).allSatisfy { event ->
                 assertThat(event.formattedMessage).doesNotContain(SENSITIVE_VALUE)

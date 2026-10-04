@@ -7,6 +7,7 @@ import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.feedProjection
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -155,9 +156,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
         assertEmptyDatabase()
     }
 
-    private fun projection(season: UUID): SeasonFeedProjectionRow = jdbc
-        .sql("SELECT season_id, representation, etag, last_modified FROM season_feed_projection WHERE season_id = :season")
-        .param("season", season).query(SeasonFeedProjectionRow::class.java).single()
+    private fun projection(season: UUID): SeasonFeedProjectionRow = jdbc.feedProjection(season)
 
     private fun assertEmptyDatabase() {
         for (table in listOf("source_event_inbox", "calendar_item", "season_feed_projection")) {

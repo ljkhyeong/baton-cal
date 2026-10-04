@@ -9,6 +9,8 @@ import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.feedProjection
+import io.baton.cal.support.runConcurrently
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -19,12 +21,11 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.util.AopTestUtils
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -50,59 +51,30 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
         val firstSnapshot = snapshot(number = 1)
         val secondSnapshot = snapshot(number = 2)
 
-        val results = Executors.newFixedThreadPool(2).use { executor ->
-            executor.invokeAll(
-                listOf(firstSnapshot, secondSnapshot).map { snapshot ->
-                    Callable { ingestionService.ingest(snapshot) }
-                },
-                TIMEOUT_SECONDS,
-                TimeUnit.SECONDS,
-            ).map { it.get() }
-        }
+        val results = runConcurrently(
+            { ingestionService.ingest(firstSnapshot) },
+            { ingestionService.ingest(secondSnapshot) },
+        )
 
         assertThat(results).containsOnly(SnapshotIngestionResult.APPLIED)
         assertThat(itemRepository.listBySeasonId(SEASON_ID).map { it.sourceItemId })
             .containsExactlyInAnyOrder(firstSnapshot.sourceItemId, secondSnapshot.sourceItemId)
 
-        val events = jdbcClient.sql(
-            "SELECT representation FROM season_feed_projection WHERE season_id = :seasonId",
-        )
-            .param("seasonId", SEASON_ID)
-            .query(ByteArray::class.java)
-            .single()
-            .parseIcalendar()
-            .events()
+        val events = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar().events()
         assertThat(events.map { it.requiredPropertyValue(Property.UID) })
             .containsExactlyInAnyOrder(
                 "${firstSnapshot.sourceItemId}@cal.baton",
                 "${secondSnapshot.sourceItemId}@cal.baton",
             )
-        assertThat(
-            jdbcClient.sql("SELECT count(*) FROM source_event_inbox")
-                .query(Int::class.java)
-                .single(),
-        ).isEqualTo(2)
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "source_event_inbox")).isEqualTo(2)
     }
 
     @Test
     fun `시즌 이름과 일정을 동시에 갱신해도 피드에 두 변경이 모두 남는다`() {
         synchronizeSeasonLockAcquisition()
         val snapshot = snapshot(number = 1)
-        Executors.newFixedThreadPool(2).use { executor ->
-            executor.invokeAll(
-                listOf(
-                    Callable<Unit> { metadataService.update(SEASON_ID, 2, "가을 시즌") },
-                    Callable<Unit> { ingestionService.ingest(snapshot) },
-                ),
-                TIMEOUT_SECONDS,
-                TimeUnit.SECONDS,
-            ).forEach { it.get() }
-        }
-        val calendar = jdbcClient.sql("SELECT representation FROM season_feed_projection WHERE season_id = :seasonId")
-            .param("seasonId", SEASON_ID)
-            .query(ByteArray::class.java)
-            .single()
-            .parseIcalendar()
+        runConcurrently<Unit>({ metadataService.update(SEASON_ID, 2, "가을 시즌") }, { ingestionService.ingest(snapshot) })
+        val calendar = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar()
         assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
         assertThat(calendar.events().map { it.requiredPropertyValue(Property.UID) })
             .containsExactly("${snapshot.sourceItemId}@cal.baton")
