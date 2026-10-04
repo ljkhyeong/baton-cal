@@ -9,6 +9,7 @@ import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.web.ProjectionRebuildResponse
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
@@ -20,12 +21,6 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.function.Supplier
-
-data class ProjectionResult(
-    val seasonId: UUID,
-    val etag: String,
-    val itemCount: Int,
-)
 
 @Service
 class SeasonProjectionService(
@@ -52,7 +47,7 @@ class SeasonProjectionService(
         .register(meterRegistry)
 
     @Transactional
-    fun rebuild(seasonId: UUID): ProjectionResult {
+    fun rebuild(seasonId: UUID): ProjectionRebuildResponse {
         lockRepository.acquire(seasonId)
         return rebuildWhileLocked(seasonId)
     }
@@ -70,13 +65,13 @@ class SeasonProjectionService(
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    fun rebuildWhileLocked(seasonId: UUID): ProjectionResult =
+    fun rebuildWhileLocked(seasonId: UUID): ProjectionRebuildResponse =
         rebuildWhileLocked(seasonId, projectionRepository.findHeadersBySeasonId(seasonId))
 
     private fun rebuildWhileLocked(
         seasonId: UUID,
         existing: SeasonFeedHeaders?,
-    ): ProjectionResult =
+    ): ProjectionRebuildResponse =
         rebuildTimer.record(Supplier {
             val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toCalendarItem)
             val metadata = metadataRepository.findBySeasonId(seasonId)
@@ -100,7 +95,7 @@ class SeasonProjectionService(
             )
             itemCountSummary.record(items.size.toDouble())
             byteSizeSummary.record(rendered.bytes.size.toDouble())
-            ProjectionResult(
+            ProjectionRebuildResponse(
                 seasonId = seasonId,
                 etag = rendered.etag,
                 itemCount = items.size,
