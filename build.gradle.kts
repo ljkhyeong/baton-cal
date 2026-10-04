@@ -1,14 +1,3 @@
-import org.gradle.api.DefaultTask
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.bundling.Zip
 import java.util.zip.ZipFile
 
 abstract class VerifyContractsZip : DefaultTask() {
@@ -116,7 +105,8 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
 }
 
 tasks.named<Test>("test") {
@@ -128,8 +118,6 @@ tasks.named<Test>("test") {
 tasks.register<Test>("architectureTest") {
     group = "verification"
     description = "Controller·도메인·Service의 의존성 규칙을 검증합니다."
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("architecture") }
 }
 
@@ -150,8 +138,6 @@ tasks.register<Exec>("feedbackLoopTest") {
 tasks.register<Test>("projectionLoadTest") {
     group = "verification"
     description = "시즌 항목 수에 따른 전체 투영 재구축 시간을 측정합니다."
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform {
         includeTags("load")
     }
@@ -161,8 +147,6 @@ tasks.register<Test>("projectionLoadTest") {
 tasks.register<Test>("ingestionLoadTest") {
     group = "verification"
     description = "실제 HTTP 수신과 동시 조건부 조회의 처리량 및 지연을 측정합니다."
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("ingestion-load") }
     systemProperty("baton.cal.load.item-count", providers.gradleProperty("loadItemCount").getOrElse("1000"))
     systemProperty("baton.cal.load.batch-size", providers.gradleProperty("loadBatchSize").getOrElse("1"))
