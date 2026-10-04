@@ -26,6 +26,9 @@
 - Claude Code용 프로젝트 스킬 8개를 `.claude/skills/`에 추가했다. Codex 전역 `baton-cal-flows`를 저장소 기준으로
   옮기고, 범용 검토·CI 실패·커밋 스킬을 CAL 규칙에 맞게 다시 작성했다. 문서·운영·의존성·계약 릴리스 스킬과
   문서 링크 검사기도 추가했다. [스킬 목록](docs/development.md#claude-code-스킬)
+- 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
+  같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유하고, 같은 설정의 HTTP 테스트는
+  공용 토큰으로 Spring 컨텍스트를 재사용한다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
@@ -76,16 +79,14 @@
   수정하고 `bash scripts/smoke-alert-channels.sh`로 로컬 4개 조합의 오류 후 재전송·알림 발생과 해제를
   확인했다. 로그: `/private/tmp/baton-cal-alert-readiness-smoke.log`. 제품 코드·의존성·설정은 같아
   기존 CI의 전체 테스트와 이미지 검증 결과를 재사용했다.
-- 최신 검증은 `f67745e`에 복구 모델 정리를 더한 미커밋 상태에서 실행했다. `RecoverySeasonState`로
-  저장·조회·비교를 통일하고 중간 행 모델과 필드 복사를 제거해 운영 코드 2개 파일에서 26줄을 줄였다.
-  저장 열·검증 시각·잠금·해시·HTTP 응답은 유지한다. 완료 재요청 테스트는 DB 전체 열을 비교한다.
-  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.web.RecoveryManifestHttpTest'
-  --tests 'io.baton.cal.web.RecoveryModeHttpTest' --tests 'io.baton.cal.recovery.RecoveryManifestDigestTest'
-  verifyContractsZip bootJar`로 테스트 18개·계약 검사·JAR 빌드가 통과했다. 실패·제외는 없다.
-  Java 25.0.3·PostgreSQL 18.6, Gradle 작업 4개 실행·6개 결과 재사용이다.
-  로그: `/private/tmp/baton-cal-recovery-model-cleanup.log`. 복구 외 코드·의존성·설정은 `cbc4ab8`의
-  전체 검증(일반 165개·구조 3개, `/private/tmp/baton-cal-code-cleanup-check.log`)과 같아 재실행하지 않았다.
-  웹훅 스모크·이미지 빌드·실제 운영 검증은 실행하지 않았다.
+- 코드 정리는 `62fb198` 커밋 상태에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 165개·
+  구조 3개 테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. Java 25 toolchain·PostgreSQL 18.6이며
+  Spring 테스트 컨텍스트는 11개에서 9개로 줄었다. 로그: `/private/tmp/baton-cal-code-reduction-check-final.log`.
+  같은 운영 코드·스크립트로 `bootBuildImage --imageName=baton-cal:code-reduction` 뒤
+  `./scripts/smoke-oci-image.sh`와 `./scripts/smoke-operations.sh`가 통과했다. 백업 복원·복구 완료·세대 전환,
+  HTTPS·요청 제한·알림 발생과 해제·토큰 비노출을 확인했고 임시 자원은 정리했다.
+  로그: `/private/tmp/baton-cal-code-reduction-smoke.log`. 알림 채널 스모크는 입력이 같아 실행하지 않았다.
+  파일·종료 검사와 전체 `review.diff` 검토 기록: `build/agent-feedback/24baddff6f360927/`.
 - 웹훅 실패 검증 기준은 `b0369f0`다. 웹훅 스모크·모의 수신기와 문서만 변경했다.
   `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개가 통과했다.
   각 메시지에 `429`·`503`을 순서대로 반환한 뒤 장애·복구 메시지 각 1건의 수신, 정상 신호 분리와
@@ -107,8 +108,6 @@
 - `bash scripts/smoke-alert-channels.sh`가 통과했다. 외부 통신 차단 네트워크에서 Slack·Discord의
   장애·복구 메시지와 웹훅 주소 비노출을 확인하고 임시 컨테이너를 정리했다.
   로그: `/private/tmp/baton-cal-integration-webhooks.log`. 실제 수신 채널에는 발송하지 않았다.
-- 파일·종료 검사와 전체 `review.diff` 검토를 마쳤다. ArchUnit 3개를 실행해 통과했고 검사 스크립트의
-  기존 성공 결과를 재사용했다. 기록: `build/agent-feedback/0cb1831a1bec612d/`.
 - CAL 제품 기준 `81cd46a`, 병합 커밋 `3ba5889`의 제품·테스트·계약 입력은 같다.
   `./gradlew --no-daemon --max-workers=2 check`로 일반 164개·구조 3개 테스트와 계약 ZIP이 통과했다.
   최초 전체 실행의 입력 테스트 29건은 공유 PostgreSQL 연결 한도로 시작하지 못했다.
@@ -146,7 +145,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 코드 정리는 복구 관련 테스트를 실행했으며, 나머지 검증은 위 기준으로 재사용했다.
+이번 코드 정리는 전체 `check`와 OCI·운영 스모크를 실행했고 알림 채널 스모크는 기존 결과를 재사용했다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
