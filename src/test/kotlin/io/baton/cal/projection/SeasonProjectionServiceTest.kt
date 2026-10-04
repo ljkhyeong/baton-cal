@@ -1,6 +1,8 @@
 package io.baton.cal.projection
 
+import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
+import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.RenderedCalendar
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
@@ -70,7 +72,7 @@ class SeasonProjectionServiceTest {
     fun `표현이 같으면 기존 Last-Modified를 유지한다`() {
         val existing = metadata(lastModified = Instant.parse("2026-08-14T03:04:05Z"))
         doReturn(existing).`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
-        stubRendering(etag = existing.etag, lastModified = NOW.plusSeconds(30))
+        stubRendering(etag = existing.etag)
 
         service.rebuildWhileLocked(SEASON_ID)
 
@@ -85,7 +87,7 @@ class SeasonProjectionServiceTest {
     fun `표현이 바뀌면 현재 시각까지 Last-Modified를 전진한다`() {
         doReturn(metadata(lastModified = NOW.minusSeconds(30)))
             .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
-        stubRendering(etag = "\"changed\"", lastModified = NOW.minusSeconds(20))
+        stubRendering(etag = "\"changed\"")
 
         service.rebuildWhileLocked(SEASON_ID)
 
@@ -97,7 +99,7 @@ class SeasonProjectionServiceTest {
         val existingLastModified = NOW.plusSeconds(30)
         doReturn(metadata(lastModified = existingLastModified))
             .`when`(projectionRepository).findMetadataBySeasonId(SEASON_ID)
-        stubRendering(etag = "\"changed\"", lastModified = NOW.minusSeconds(20))
+        stubRendering(etag = "\"changed\"")
 
         service.rebuildWhileLocked(SEASON_ID)
 
@@ -110,7 +112,7 @@ class SeasonProjectionServiceTest {
         doReturn(SeasonCalendarMetadataRow(SEASON_ID, 0, "가을 시즌", acceptedAt))
             .`when`(metadataRepository).findBySeasonId(SEASON_ID)
         doReturn(emptyList<CalendarItemRow>()).`when`(itemRepository).listBySeasonId(SEASON_ID)
-        doReturn(RenderedCalendar("calendar".encodeToByteArray(), "\"named\"", Instant.EPOCH))
+        doReturn(RenderedCalendar("calendar".encodeToByteArray(), "\"named\""))
             .`when`(renderer).render(SEASON_ID, emptyList(), "가을 시즌")
 
         service.rebuildWhileLocked(SEASON_ID)
@@ -118,19 +120,53 @@ class SeasonProjectionServiceTest {
         assertThat(savedProjection().lastModified).isEqualTo(acceptedAt)
     }
 
-    private fun stubRendering(
-        etag: String,
-        lastModified: Instant,
-    ) {
-        doReturn(emptyList<CalendarItemRow>()).`when`(itemRepository).listBySeasonId(SEASON_ID)
-        doReturn(
-            RenderedCalendar(
-                bytes = "calendar".encodeToByteArray(),
-                etag = etag,
-                lastModified = lastModified,
-            ),
-        ).`when`(renderer).render(SEASON_ID, emptyList())
+    @Test
+    fun `첫 투영은 항목과 이름 중 가장 늦은 채택 시각을 초 단위로 사용한다`() {
+        val items = listOf(itemRow("2026-08-20T01:00:00Z"), itemRow("2026-08-20T03:00:00.987Z"))
+        doReturn(items).`when`(itemRepository).listBySeasonId(SEASON_ID)
+        doReturn(SeasonCalendarMetadataRow(SEASON_ID, 0, "가을 시즌", Instant.parse("2026-08-20T02:00:00Z")))
+            .`when`(metadataRepository).findBySeasonId(SEASON_ID)
+        doReturn(RenderedCalendar("calendar".encodeToByteArray(), "\"items\""))
+            .`when`(renderer).render(SEASON_ID, items.map(CalendarItemRow::toCalendarItem), "가을 시즌")
+
+        service.rebuildWhileLocked(SEASON_ID)
+
+        assertThat(savedProjection().lastModified).isEqualTo(Instant.parse("2026-08-20T03:00:00Z"))
     }
+
+    @Test
+    fun `항목과 이름이 없는 첫 투영은 Unix epoch를 Last-Modified로 사용한다`() {
+        stubRendering(etag = "\"empty\"")
+
+        service.rebuildWhileLocked(SEASON_ID)
+
+        assertThat(savedProjection().lastModified).isEqualTo(Instant.EPOCH)
+    }
+
+    private fun stubRendering(etag: String) {
+        doReturn(emptyList<CalendarItemRow>()).`when`(itemRepository).listBySeasonId(SEASON_ID)
+        doReturn(RenderedCalendar("calendar".encodeToByteArray(), etag)).`when`(renderer).render(SEASON_ID, emptyList())
+    }
+
+    private fun itemRow(acceptedAt: String) = CalendarItemRow(
+        sourceItemId = UUID.randomUUID(),
+        seasonId = SEASON_ID,
+        revision = 0,
+        status = CalendarItemStatus.ACTIVE,
+        summary = "일정",
+        description = null,
+        location = null,
+        timeType = ScheduleTimeType.UTC_INSTANT,
+        startsAtInstant = Instant.parse("2026-09-01T01:00:00Z"),
+        endsAtInstant = Instant.parse("2026-09-01T02:00:00Z"),
+        startsAtLocal = null,
+        endsAtLocal = null,
+        zoneId = null,
+        startsOnDate = null,
+        endsOnDate = null,
+        sourceUpdatedAt = Instant.parse("2026-08-20T00:00:00Z"),
+        acceptedAt = Instant.parse(acceptedAt),
+    )
 
     private fun savedProjection(): SeasonFeedProjectionRow {
         val captor = ArgumentCaptor.forClass(SeasonFeedProjectionRow::class.java)

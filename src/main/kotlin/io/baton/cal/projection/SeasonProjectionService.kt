@@ -1,5 +1,6 @@
 package io.baton.cal.projection
 
+import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
@@ -80,11 +81,11 @@ class SeasonProjectionService(
             val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toCalendarItem)
             val metadata = metadataRepository.findBySeasonId(seasonId)
             val rendered = renderer.render(seasonId = seasonId, items = items, displayName = metadata?.displayName)
-            val initialLastModified = when {
-                metadata == null -> rendered.lastModified
-                items.isEmpty() -> metadata.acceptedAt
-                else -> maxOf(rendered.lastModified, metadata.acceptedAt)
-            }
+            // 처음 만드는 투영은 항목과 시즌 이름 중 가장 늦은 채택 시각을 초 단위로 쓰고, 둘 다 없으면 Unix epoch를 쓴다.
+            val initialLastModified = (items.map(CalendarItem::acceptedAt) + listOfNotNull(metadata?.acceptedAt))
+                .maxOrNull()
+                ?.truncatedTo(ChronoUnit.SECONDS)
+                ?: Instant.EPOCH
             projectionRepository.upsert(
                 SeasonFeedProjectionRow(
                     seasonId = seasonId,

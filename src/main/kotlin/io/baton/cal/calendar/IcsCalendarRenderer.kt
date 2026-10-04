@@ -26,15 +26,12 @@ import net.fortuna.ical4j.model.property.immutable.ImmutableVersion
 import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.uuid.toKotlinUuid
 
 data class RenderedCalendar(
     val bytes: ByteArray,
     val etag: String,
-    val lastModified: Instant,
 )
 
 @Component
@@ -61,13 +58,7 @@ class IcsCalendarRenderer {
         }.toByteArray()
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes).toHexString()
 
-        return RenderedCalendar(
-            bytes = bytes,
-            etag = "\"$digest\"",
-            lastModified = sortedItems.maxOfOrNull(CalendarItem::acceptedAt)
-                ?.truncatedTo(ChronoUnit.SECONDS)
-                ?: Instant.EPOCH,
-        )
+        return RenderedCalendar(bytes = bytes, etag = "\"$digest\"")
     }
 
     private fun timeZones(items: List<CalendarItem>): List<CalendarComponent> = items

@@ -21,7 +21,6 @@ class IcsCalendarRendererTest {
         val calendar = rendered.bytes.parseIcalendar()
 
         assertThat(rendered.bytes).isEqualTo(goldenIcalendarFixture("season-empty.ics.b64"))
-        assertThat(rendered.lastModified).isEqualTo(Instant.EPOCH)
         assertThat(calendar.events()).isEmpty()
         assertThat(calendar.timeZones()).isEmpty()
         assertCanonicalCrLf(rendered.bytes)
@@ -67,7 +66,6 @@ class IcsCalendarRendererTest {
         assertThat(first.bytes).isEqualTo(goldenIcalendarFixture("season-utc.ics.b64"))
         assertThat(first.bytes).isEqualTo(rebuilt.bytes)
         assertThat(first.etag).isEqualTo(rebuilt.etag)
-        assertThat(first.lastModified).isEqualTo(Instant.parse("2026-08-11T12:34:56Z"))
         assertThat(event.requiredPropertyValue(Property.UID))
             .isEqualTo("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@cal.baton")
         assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("7")
@@ -141,7 +139,6 @@ class IcsCalendarRendererTest {
 
         assertThat(rendered.bytes)
             .isEqualTo(goldenIcalendarFixture("season-zoned-midnight-cancellation.ics.b64"))
-        assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-10-31T12:34:56Z"))
         assertThat(timeZone.timeZoneId.value).isEqualTo("America/New_York")
         assertThat(timeZone.observances.map { it.name }).contains("DAYLIGHT", "STANDARD")
         assertThat(event.requiredPropertyValue(Property.UID))
@@ -222,7 +219,6 @@ class IcsCalendarRendererTest {
                 .getRequiredParameter<Value>(Parameter.VALUE)
                 .value,
         ).isEqualTo("DATE")
-        assertThat(rendered.lastModified).isEqualTo(Instant.parse("2026-08-20T03:00:00Z"))
         assertCanonicalCrLf(rendered.bytes)
     }
 
