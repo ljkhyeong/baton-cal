@@ -8,7 +8,7 @@ import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.recovery.RecoverySeasonState
-import io.baton.cal.support.RecoveryModeInternalHttpTest
+import io.baton.cal.support.RecoveryModeIntegrationTest
 import io.baton.cal.support.authorizedGet
 import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.ingestSnapshotExample
@@ -37,7 +37,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
-@RecoveryModeInternalHttpTest
+@RecoveryModeIntegrationTest
 class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,

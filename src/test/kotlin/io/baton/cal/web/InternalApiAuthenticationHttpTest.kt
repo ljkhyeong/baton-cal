@@ -1,7 +1,7 @@
 package io.baton.cal.web
 
 import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
-import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
 import io.baton.cal.support.jsonContent
@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 // 내부 API Bearer 필터의 경로·자격 증명 판정.
-@InternalHttpTest
+@CalIntegrationTest
 class InternalApiAuthenticationHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val meterRegistry: MeterRegistry,

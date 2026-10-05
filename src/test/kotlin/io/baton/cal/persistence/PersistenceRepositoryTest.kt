@@ -1,7 +1,7 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.micrometer.core.instrument.MeterRegistry
 import java.time.Instant
 import java.time.LocalDate
@@ -14,23 +14,14 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=persistence-test-internal-token-0001",
-    ],
-)
-@Sql("/reset-database.sql")
+@CalIntegrationTest
 class PersistenceRepositoryTest @Autowired constructor(
     private val inboxRepository: SourceEventInboxRepository,
     private val seasonLockRepository: SeasonProjectionLockRepository,

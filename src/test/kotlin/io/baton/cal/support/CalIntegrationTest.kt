@@ -7,8 +7,8 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.jdbc.Sql
 
 /**
- * 내부 API와 공개 피드를 MockMvc로 검증하는 테스트 설정이다. 이 어노테이션을 쓰는 클래스는 Spring 테스트
- * 컨텍스트와 DB 연결 풀을 공유한다. 다른 속성이나 빈 교체가 필요하면 별도 설정을 쓴다.
+ * PostgreSQL과 MockMvc를 쓰는 통합 테스트 설정이다. 이 어노테이션을 쓰는 클래스는 Spring 테스트 컨텍스트와
+ * DB 연결 풀을 공유한다. 다른 속성이나 빈 교체가 필요하면 별도 설정을 쓴다.
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
@@ -22,11 +22,11 @@ import org.springframework.test.context.jdbc.Sql
     ],
 )
 @Sql("/reset-database.sql")
-annotation class InternalHttpTest
+annotation class CalIntegrationTest
 
-/** [InternalHttpTest]에 런타임 복구 모드를 켠 설정이다. 이 어노테이션을 쓰는 클래스끼리 컨텍스트를 공유한다. */
+/** [CalIntegrationTest]에 런타임 복구 모드를 켠 설정이다. 이 어노테이션을 쓰는 클래스끼리 컨텍스트를 공유한다. */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
-@InternalHttpTest
+@CalIntegrationTest
 @TestPropertySource(properties = ["baton.cal.recovery-mode=true"])
-annotation class RecoveryModeInternalHttpTest
+annotation class RecoveryModeIntegrationTest

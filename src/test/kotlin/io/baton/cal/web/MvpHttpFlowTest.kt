@@ -8,7 +8,7 @@ import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
 import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
-import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.SNAPSHOT_PATH
 import io.baton.cal.support.TEST_PUBLIC_BASE_URL
 import io.baton.cal.support.authorizedDelete
@@ -39,7 +39,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.jdbc.JdbcTestUtils
 import java.util.UUID
 
-@InternalHttpTest
+@CalIntegrationTest
 class MvpHttpFlowTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,

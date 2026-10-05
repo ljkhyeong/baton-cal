@@ -30,8 +30,8 @@
   옮기고, 범용 검토·CI 실패·커밋 스킬을 CAL 규칙에 맞게 다시 작성했다. 문서·운영·의존성·계약 릴리스 스킬과
   문서 링크 검사기도 추가했다. [스킬 목록](docs/development.md#claude-code-스킬)
 - 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
-  같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유한다. 같은 설정의 내부 HTTP
-  테스트는 `@InternalHttpTest`·`@RecoveryModeInternalHttpTest`로 Spring 컨텍스트를 재사용하고, 요청·계약 예시 보조
+  같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유한다. 같은 설정의 PostgreSQL
+  통합 테스트는 `@CalIntegrationTest`·`@RecoveryModeIntegrationTest`로 Spring 컨텍스트를 재사용하고, 요청·계약 예시 보조
   함수는 `support`·`contract` 테스트 패키지에 둔다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
 - 일정 시간 열과 `ScheduleWindow`의 양방향 변환·`ScheduleTimeType`은 `persistence/CalendarItemRow.kt`, 복구
   대조값 계산은 `RecoveryManifestDigest`, 첫 투영의 Last-Modified는 `SeasonProjectionService`가 맡는다. 복구 서비스는

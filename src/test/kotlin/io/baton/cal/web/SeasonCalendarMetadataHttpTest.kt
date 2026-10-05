@@ -7,7 +7,7 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
-import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.createSubscription
@@ -30,7 +30,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-@InternalHttpTest
+@CalIntegrationTest
 class SeasonCalendarMetadataHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val meterRegistry: MeterRegistry,

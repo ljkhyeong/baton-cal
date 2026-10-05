@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-// [InternalHttpTest]의 속성 값이다. 다른 테스트도 요청 헤더와 기대값에 같은 값을 쓴다.
+// [CalIntegrationTest]의 속성 값이다. 다른 테스트도 요청 헤더와 기대값에 같은 값을 쓴다.
 const val TEST_INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
 const val TEST_PREVIOUS_INTERNAL_TOKEN = "test-previous-internal-token-that-is-long-enough"
 const val TEST_PUBLIC_BASE_URL = "https://calendar.example.test"

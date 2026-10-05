@@ -11,7 +11,7 @@ import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.subscription.SubscriptionTokenCodec
-import io.baton.cal.support.RecoveryModeInternalHttpTest
+import io.baton.cal.support.RecoveryModeIntegrationTest
 import io.baton.cal.support.authorizedDelete
 import io.baton.cal.support.authorizedGet
 import io.baton.cal.support.authorizedPost
@@ -34,7 +34,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.UUID
 
-@RecoveryModeInternalHttpTest
+@RecoveryModeIntegrationTest
 class RecoveryModeHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: CalendarSubscriptionRepository,

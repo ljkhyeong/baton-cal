@@ -1,7 +1,7 @@
 package io.baton.cal.web
 
 import io.baton.cal.contract.andReturnValid
-import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.ingestSnapshot
 import io.baton.cal.support.postSnapshot
 import org.junit.jupiter.api.Test
@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.text.Normalizer
 import java.util.UUID
 
-@InternalHttpTest
+@CalIntegrationTest
 class SnapshotInputContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
 ) {

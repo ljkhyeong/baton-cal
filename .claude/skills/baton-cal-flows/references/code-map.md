@@ -2,7 +2,7 @@
 
 운영 코드는 `src/main/kotlin/io/baton/cal/`, 테스트는 `src/test/kotlin/io/baton/cal/` 아래에 있다.
 테스트 이름은 `io.baton.cal.<패키지>.<클래스>`로 지정한다. 표시한 `DB` 테스트는 Docker의 PostgreSQL을 사용한다.
-내부 HTTP 테스트는 `support/InternalHttpTest.kt`의 `@InternalHttpTest`(복구 모드는 `@RecoveryModeInternalHttpTest`)로
+PostgreSQL 통합 테스트는 `support/CalIntegrationTest.kt`의 `@CalIntegrationTest`(복구 모드는 `@RecoveryModeIntegrationTest`)로
 Spring 컨텍스트를 공유한다. 속성이나 빈 교체가 다르면 컨텍스트와 DB 연결 풀이 늘어나므로 필요할 때만 별도 설정을 둔다.
 요청 보조 함수는 `support/InternalApiTestSupport.kt`, 계약 예시·스키마 검증은 `contract/ContractSchemaSupport.kt`에 있다.
 
