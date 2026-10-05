@@ -11,6 +11,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+UNTRACKED = ("ls-files", "--others", "--exclude-standard", "-z")
+CHECK_ERRORS = (OSError, ValueError, SyntaxError, RuntimeError, subprocess.CalledProcessError)
+
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
@@ -27,6 +30,9 @@ class Feedback:
     def git(self, *args):
         return subprocess.check_output(["git", *args], cwd=self.root)
 
+    def names(self, *args):
+        return [os.fsdecode(raw) for raw in self.git(*args).split(b"\0") if raw]
+
     def start(self, base=None):
         revision = self.git("rev-parse", "--verify", f"{base or 'HEAD'}^{{commit}}").decode().strip()
         return {"base": revision}
@@ -34,9 +40,8 @@ class Feedback:
     def snapshot(self, state):
         paths = set()
         for args in (("diff", "--name-only", "-z", state["base"]),
-                     ("diff", "--cached", "--name-only", "-z"),
-                     ("ls-files", "--others", "--exclude-standard", "-z")):
-            paths.update(os.fsdecode(p) for p in self.git(*args).split(b"\0") if p)
+                     ("diff", "--cached", "--name-only", "-z"), UNTRACKED):
+            paths.update(self.names(*args))
         files = {}
         for name in sorted(paths):
             path = self.root / name
@@ -84,10 +89,10 @@ class Feedback:
             except (ValueError, SyntaxError) as error:
                 raise RuntimeError(f"{name}: {error}") from None
         # --no-index의 정상 차이는 1, 공백 오류는 2번 비트로 구분한다.
-        for raw in self.git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0"):
-            if raw and os.fsdecode(raw) in changed:
+        for name in self.names(*UNTRACKED):
+            if name in changed:
                 self.command("untracked-check", ["git", "diff", "--no-index", "--check",
-                                                  "--", "/dev/null", os.fsdecode(raw)], accepted=(0, 1))
+                                                  "--", "/dev/null", name], accepted=(0, 1))
         if any(name.endswith((".kt", ".kts", ".java")) or name.startswith("gradle/") or
                name in {"gradle.properties", "gradle.lockfile"} for name in changed):
             task = "testClasses" if any(name.startswith("src/test/") for name in changed) else "classes"
@@ -102,13 +107,12 @@ class Feedback:
             output.write(b"\n--- staged changes ---\n")
             output.write(self.git("diff", "--no-ext-diff", "--no-color", "--cached", "--"))
             output.flush()
-            for raw in self.git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0"):
-                if raw:
-                    result = subprocess.run(["git", "diff", "--no-index", "--no-ext-diff", "--no-color",
-                                             "--", "/dev/null", os.fsdecode(raw)], cwd=self.root,
-                                            stdout=output, stderr=subprocess.PIPE)
-                    if result.returncode not in (0, 1):
-                        raise RuntimeError(result.stderr.decode(errors="replace"))
+            for name in self.names(*UNTRACKED):
+                result = subprocess.run(["git", "diff", "--no-index", "--no-ext-diff", "--no-color",
+                                         "--", "/dev/null", name], cwd=self.root,
+                                        stdout=output, stderr=subprocess.PIPE)
+                if result.returncode not in (0, 1):
+                    raise RuntimeError(result.stderr.decode(errors="replace"))
         if snapshot["files"]:
             self.gradle("architectureTest", "feedbackLoopTest")
         return f"파일·구조 검사 통과. 전체 변경 검토: {report}"
@@ -145,7 +149,7 @@ class Feedback:
                             state.pop("final", None)
                             state["completed"] = False
                         state.pop("failed", None)
-                    except (OSError, ValueError, SyntaxError, RuntimeError, subprocess.CalledProcessError) as error:
+                    except CHECK_ERRORS as error:
                         state.pop("final", None)
                         state["failed"] = {"snapshot": snapshot, "error": str(error)}
                         self.state_file.write_text(json.dumps(state, ensure_ascii=False))
@@ -177,7 +181,7 @@ def main():
                 print("{}")
         else:
             print(message or "파일 변경 없음: 검사 생략.")
-    except (OSError, ValueError, SyntaxError, RuntimeError, subprocess.CalledProcessError) as error:
+    except CHECK_ERRORS as error:
         message = f"검사 실패: {error}\n파일 수정은 이미 반영됐을 수 있습니다. 같은 편집을 반복하지 말고 원인을 수정하세요."
         if payload:
             print(json.dumps({"decision": "block", "reason": message}, ensure_ascii=False))
