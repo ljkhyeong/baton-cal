@@ -1,20 +1,14 @@
 package io.baton.cal.web
 
 import io.baton.cal.contract.andReturnValid
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
-import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
+import io.baton.cal.support.InternalHttpTest
 import io.baton.cal.support.bearer
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -24,17 +18,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.text.Normalizer
 import java.util.UUID
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@Sql("/reset-database.sql")
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        // MvpHttpFlowTest와 같은 속성으로 Spring 테스트 컨텍스트를 재사용한다.
-        "baton.cal.previous-internal-token=$TEST_PREVIOUS_INTERNAL_TOKEN",
-        "baton.cal.public-base-url=https://calendar.example.test",
-    ],
-)
+@InternalHttpTest
 class SnapshotInputContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
 ) {

@@ -10,9 +10,10 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-// 같은 값을 쓰는 HTTP 테스트는 Spring 테스트 컨텍스트를 재사용한다.
+// [InternalHttpTest]의 속성 값이다. 다른 테스트도 요청 헤더와 기대값에 같은 값을 쓴다.
 const val TEST_INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
 const val TEST_PREVIOUS_INTERNAL_TOKEN = "test-previous-internal-token-that-is-long-enough"
+const val TEST_PUBLIC_BASE_URL = "https://calendar.example.test"
 const val INTERNAL_BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
 
 fun MockHttpServletRequestBuilder.bearer(): MockHttpServletRequestBuilder =

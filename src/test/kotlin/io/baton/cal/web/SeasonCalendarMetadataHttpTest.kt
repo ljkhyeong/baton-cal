@@ -5,9 +5,7 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.contract.andReturnValid
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
-import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
+import io.baton.cal.support.InternalHttpTest
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.bearer
 import io.baton.cal.support.createSubscription
@@ -18,12 +16,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
@@ -34,16 +28,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import kotlin.io.path.Path
 import kotlin.io.path.readText
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.previous-internal-token=$TEST_PREVIOUS_INTERNAL_TOKEN",
-        "baton.cal.public-base-url=https://calendar.example.test",
-    ],
-)
-@Sql("/reset-database.sql")
+@InternalHttpTest
 class SeasonCalendarMetadataHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val meterRegistry: MeterRegistry,

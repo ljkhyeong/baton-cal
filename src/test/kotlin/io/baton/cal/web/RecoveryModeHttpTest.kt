@@ -9,8 +9,7 @@ import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.subscription.SubscriptionTokenCodec
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.RecoveryModeInternalHttpTest
 import io.baton.cal.support.authorizedGet
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.bearer
@@ -18,13 +17,9 @@ import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -38,16 +33,7 @@ import java.util.UUID
 import kotlin.io.path.Path
 import kotlin.io.path.readText
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@SpringBootTest(
-    properties = [
-        // RecoveryManifestHttpTest와 같은 속성으로 Spring 테스트 컨텍스트를 재사용한다.
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.recovery-mode=true",
-    ],
-)
-@Sql("/reset-database.sql")
+@RecoveryModeInternalHttpTest
 class RecoveryModeHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: CalendarSubscriptionRepository,

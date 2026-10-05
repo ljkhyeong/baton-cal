@@ -7,9 +7,8 @@ import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
-import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
+import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.TEST_PUBLIC_BASE_URL
 import io.baton.cal.support.authorizedGet
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.bearer
@@ -20,13 +19,9 @@ import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -42,18 +37,7 @@ import kotlin.io.path.readText
 import java.nio.file.Path
 import java.util.UUID
 
-private const val PUBLIC_BASE_URL = "https://calendar.example.test"
-
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.previous-internal-token=$TEST_PREVIOUS_INTERNAL_TOKEN",
-        "baton.cal.public-base-url=$PUBLIC_BASE_URL",
-    ],
-)
-@Sql("/reset-database.sql")
+@InternalHttpTest
 class MvpHttpFlowTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,
@@ -469,7 +453,7 @@ class MvpHttpFlowTest @Autowired constructor(
         val token: String = JsonPath.read(json, "$.token")
         val feedUrl: String = JsonPath.read(json, "$.feedUrl")
 
-        assertThat(feedUrl).isEqualTo("$PUBLIC_BASE_URL/calendars/v1/$token.ics")
+        assertThat(feedUrl).isEqualTo("$TEST_PUBLIC_BASE_URL/calendars/v1/$token.ics")
         return token
     }
 
