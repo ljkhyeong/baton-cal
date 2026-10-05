@@ -94,6 +94,9 @@
   `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했고 Spring 테스트 컨텍스트 8개(TLS 직접 기동 제외)를 유지했다. 검사 스크립트
   회귀 테스트는 입력이 같아 재사용했다. Java 25 toolchain·PostgreSQL 18.6. 로그: `/private/tmp/baton-cal-round7-check.log`.
   `9d26d60` 이후 운영 코드는 같은 조회 결과 재사용과 같은 지표 태그 생성만 바뀌어 아래 스모크 결과를 재사용한다.
+  이후 `1de9883`의 테스트 정리는 `SnapshotBatchHttpTest` 10개·`PersistenceRepositoryTest` 9개와
+  `ingestionLoadTest -PloadItemCount=40 -PloadBatchSize=10`으로 확인했다. 일반 테스트는 166개가 된다.
+  로그: `/private/tmp/baton-cal-round9-tests.log`, `/private/tmp/baton-cal-round9-load.log`.
   `9d26d60`으로 `bootBuildImage --imageName=baton-cal:round6` 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
   버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 최종 스크립트로 `./scripts/smoke-operations.sh`와
   `bash scripts/smoke-alert-channels.sh`(4개 조합)도 통과했다. Docker 29.8.1·Compose v5.5.1. 로그:
