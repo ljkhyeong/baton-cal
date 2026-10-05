@@ -41,7 +41,7 @@ class SnapshotInputContractTest @Autowired constructor(
     fun `개정 번호의 소수와 지수 표기는 저장하지 않고 정수로 수정한 요청은 처리한다`(revision: String) {
         val payload = utcSnapshot()
         assertInvalid(payload.replace("\"revision\": 0", "\"revision\": $revision"))
-        assertApplied(payload)
+        mockMvc.ingestSnapshot(payload)
     }
 
     @ParameterizedTest(name = "{0} = {1}")
@@ -53,12 +53,12 @@ class SnapshotInputContractTest @Autowired constructor(
     fun `TEXT의 숫자와 불리언은 저장하지 않고 따옴표로 감싼 문자열은 처리한다`(field: String, value: String) {
         val payload = utcSnapshot(summary = value, description = value, location = value)
         assertInvalid(payload.replace("\"$field\": \"$value\"", "\"$field\": $value"))
-        assertApplied(payload)
+        mockMvc.ingestSnapshot(payload)
     }
 
     @Test
     fun `UUID 필드는 대소문자를 구분하지 않는 36자 표준 문자열만 허용한다`() {
-        assertApplied(utcSnapshot(eventId = "01234567-89AB-CDEF-0123-456789ABCDEF"))
+        mockMvc.ingestSnapshot(utcSnapshot(eventId = "01234567-89AB-CDEF-0123-456789ABCDEF"))
 
         listOf(
             "AAAAAAAAAAAAAAAAAAAAAA",
@@ -114,8 +114,8 @@ class SnapshotInputContractTest @Autowired constructor(
     @Test
     fun `TEXT 길이는 Unicode 코드 포인트로 세고 NFC를 요구한다`() {
         val emoji = "😀"
-        assertApplied(utcSnapshot(summary = emoji.repeat(512)))
-        assertApplied(
+        mockMvc.ingestSnapshot(utcSnapshot(summary = emoji.repeat(512)))
+        mockMvc.ingestSnapshot(
             utcSnapshot(
                 description = emoji.repeat(4096),
                 location = emoji.repeat(512),
@@ -132,7 +132,7 @@ class SnapshotInputContractTest @Autowired constructor(
 
     @Test
     fun `TEXT는 LF와 HTAB 및 보조 평면 Unicode를 허용한다`() {
-        assertApplied(
+        mockMvc.ingestSnapshot(
             utcSnapshot(
                 summary = "요약\\n다음 줄\\t😀\\uD83D\\uDE00",
                 description = "설명\\n다음 줄\\t😀\\uD83D\\uDE00",
@@ -165,7 +165,7 @@ class SnapshotInputContractTest @Autowired constructor(
 
     @Test
     fun `RFC3339 offset instants and fractional local seconds are accepted`() {
-        assertApplied(
+        mockMvc.ingestSnapshot(
             utcSnapshot(
                 occurredAt = quoted("2026-08-11T10:00:05+09:00"),
                 sourceUpdatedAt = quoted("2026-08-11T10:00:00+09:00"),
@@ -173,7 +173,7 @@ class SnapshotInputContractTest @Autowired constructor(
                 endInstant = quoted("2026-08-16T19:30:00+09:00"),
             ),
         )
-        assertApplied(
+        mockMvc.ingestSnapshot(
             zonedSnapshot(
                 startLocal = "2026-08-31T23:30:00.1",
                 endLocal = "2026-09-01T00:30:00.987654321",
@@ -218,10 +218,6 @@ class SnapshotInputContractTest @Autowired constructor(
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             .andReturnValid("api-error.v1.schema.json", "스냅샷 입력 오류 응답")
-    }
-
-    private fun assertApplied(payload: String) {
-        mockMvc.ingestSnapshot(payload)
     }
 
     private fun utcSnapshot(

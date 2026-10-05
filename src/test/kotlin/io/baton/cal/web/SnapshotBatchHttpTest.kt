@@ -5,7 +5,6 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.contract.contractExample
-import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
@@ -62,13 +61,13 @@ class SnapshotBatchHttpTest @Autowired constructor(
         ContractSchemaSupport.assertValid("schedule-snapshot-batch.v1.schema.json", body, "100건 요청")
         assertResults(body, List(100) { "APPLIED" }, snapshots)
         verify(projectionService, times(1)).rebuildWhileLocked(SEASON)
-        val projection = projection(SEASON)
+        val projection = jdbc.feedProjection(SEASON)
         assertThat(projection.representation.parseIcalendar().events()).hasSize(100)
 
         clearInvocations(projectionService)
         assertResults(body, List(100) { "DUPLICATE" }, snapshots)
         verifyNoInteractions(projectionService)
-        assertThat(projection(SEASON)).usingRecursiveComparison().isEqualTo(projection)
+        assertThat(jdbc.feedProjection(SEASON)).usingRecursiveComparison().isEqualTo(projection)
     }
 
     @Test
@@ -80,7 +79,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
         assertResults(batch(snapshots), listOf("DUPLICATE", "STALE", "APPLIED", "APPLIED"), snapshots)
         verify(projectionService, times(1)).rebuildWhileLocked(SEASON)
         verify(projectionService, times(1)).rebuildWhileLocked(OTHER_SEASON)
-        val event = projection(SEASON).representation.parseIcalendar().events().single()
+        val event = jdbc.feedProjection(SEASON).representation.parseIcalendar().events().single()
         assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("3")
         assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CANCELLED")
     }
@@ -140,13 +139,11 @@ class SnapshotBatchHttpTest @Autowired constructor(
         }
         runConcurrently(submit(batches[0]), submit(batches[1]))
         for (season in listOf(SEASON, OTHER_SEASON)) {
-            val projection = projection(season)
+            val projection = jdbc.feedProjection(season)
             assertThat(projection.representation.parseIcalendar().events()).hasSize(2)
             assertThat(projectionService.rebuild(season).etag).isEqualTo(projection.etag)
         }
     }
-
-    private fun projection(season: UUID): SeasonFeedProjectionRow = jdbc.feedProjection(season)
 
     private fun assertEmptyDatabase() {
         for (table in listOf("source_event_inbox", "calendar_item", "season_feed_projection")) {

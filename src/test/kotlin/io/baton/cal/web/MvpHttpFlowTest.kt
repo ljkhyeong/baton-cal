@@ -426,10 +426,8 @@ class MvpHttpFlowTest @Autowired constructor(
         return token
     }
 
-    private fun ingestionCount(result: String) = counterValue("baton.cal.snapshot.ingestion", result)
-
-    private fun counterValue(name: String, result: String): Double =
-        meterRegistry.get(name).tag("result", result).counter().count()
+    private fun ingestionCount(result: String): Double =
+        meterRegistry.get("baton.cal.snapshot.ingestion").tag("result", result).counter().count()
 
     private fun utcSnapshot(
         eventId: String,

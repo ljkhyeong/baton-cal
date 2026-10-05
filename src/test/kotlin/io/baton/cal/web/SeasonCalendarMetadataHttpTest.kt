@@ -67,7 +67,7 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
         assertThat(renamed.requiredEvent().toString())
             .isEqualTo(before.contentAsByteArray.parseIcalendar().requiredEvent().toString())
 
-        mockMvc.perform(metadataRequest(updated.replace("가을", "겨울")))
+        mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, updated.replace("가을", "겨울")))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("SEASON_METADATA_REVISION_CONFLICT"))
             .andReturnValid("api-error.v1.schema.json", "시즌 정보 개정 번호 충돌")
@@ -104,7 +104,7 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
             valid.replace("BATON 개발 시즌", "이름\\r주입"),
             valid.replace("BATON 개발 시즌", "가"),
         ).forEach { payload ->
-            mockMvc.perform(metadataRequest(payload))
+            mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, payload))
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
@@ -115,7 +115,8 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
     fun `시즌 이름의 숫자와 불리언은 거부하고 같은 내용의 문자열은 처리한다`(value: String) {
         val payload = contractExample("season-calendar-metadata.r0.json")
             .replace("BATON 개발 시즌", value)
-        mockMvc.perform(metadataRequest(payload.replace("\"displayName\": \"$value\"", "\"displayName\": $value")))
+        val unquoted = payload.replace("\"displayName\": \"$value\"", "\"displayName\": $value")
+        mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, unquoted))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             .andReturnValid("api-error.v1.schema.json", "시즌 이름 타입 오류 응답")
@@ -123,9 +124,6 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
     }
 
     private fun update(payload: String): String = mockMvc.updateSeasonCalendarMetadata(SEASON_ID, payload)
-
-    private fun metadataRequest(payload: String, seasonId: String = SEASON_ID) =
-        seasonCalendarMetadataRequest(seasonId, payload)
 
     private companion object {
         const val SEASON_ID = "f5316f93-d49e-4230-b1d0-9e9c2d079819"

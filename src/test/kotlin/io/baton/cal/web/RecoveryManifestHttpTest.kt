@@ -14,6 +14,7 @@ import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.jsonContent
 import io.baton.cal.support.updateSeasonCalendarMetadata
+import org.springframework.test.json.JsonContent
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
@@ -31,7 +32,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -122,8 +122,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         assertThat(JsonPath.read<String>(named, "$.itemDigest"))
             .isEqualTo(JsonPath.read<String>(initial, "$.itemDigest"))
         // 복원 스모크와 BATON이 쓰는 진단 예시와 실제 응답이 같아야 한다.
-        assertThat(JSON.readTree(named))
-            .isEqualTo(JSON.readTree(contractExample("recovery-season-state.zoned-cancelled.json")))
+        assertThat(JsonContent(named)).isStrictlyEqualTo(contractExample("recovery-season-state.zoned-cancelled.json"))
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_season_manifest")).isZero()
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_run_completion")).isZero()
     }
@@ -388,6 +387,5 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         const val RECOVERY_ID = "92490d0d-b82e-4f94-a041-308b184aaef9"
-        val JSON = JsonMapper()
     }
 }

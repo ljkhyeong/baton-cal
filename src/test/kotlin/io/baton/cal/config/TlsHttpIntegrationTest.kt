@@ -65,13 +65,20 @@ class TlsHttpIntegrationTest {
             ).use { context ->
                 val baseUrl = "https://localhost:${context.environment.getRequiredProperty("local.server.port")}"
                 val managementUrl = "http://localhost:${context.environment.getRequiredProperty("local.management.port")}"
-                HttpClient.newBuilder().sslContext(sslContext(initialStore, renewedStore))
-                    .connectTimeout(Duration.ofSeconds(5)).build().use { client ->
-                    fun request(url: String, method: String = "GET", body: String? = null, authorized: Boolean = false): HttpResponse<String> {
+                fun newClient() = HttpClient.newBuilder().sslContext(sslContext(initialStore, renewedStore))
+                    .connectTimeout(Duration.ofSeconds(5)).build()
+                newClient().use { client ->
+                    fun request(
+                        url: String,
+                        method: String = "GET",
+                        body: String? = null,
+                        authorized: Boolean = false,
+                        httpClient: HttpClient = client,
+                    ): HttpResponse<String> {
                         val builder = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5))
                         if (authorized) builder.header("Authorization", "Bearer $INTERNAL_TOKEN")
                         if (body != null) builder.header("Content-Type", "application/json")
-                        return client.send(
+                        return httpClient.send(
                             builder.method(method, body?.let(HttpRequest.BodyPublishers::ofString)
                                 ?: HttpRequest.BodyPublishers.noBody()).build(),
                             HttpResponse.BodyHandlers.ofString(),
@@ -94,19 +101,14 @@ class TlsHttpIntegrationTest {
                     Files.move(directory.resolve("..data_tmp"), directory.resolve("..data"), ATOMIC_MOVE, REPLACE_EXISTING)
                     await().atMost(Duration.ofSeconds(15)).untilAsserted {
                         // 새 TLS 세션에서 제공되는 인증서를 확인한다.
-                        HttpClient.newBuilder().sslContext(sslContext(initialStore, renewedStore))
-                            .connectTimeout(Duration.ofSeconds(5)).build().use { freshClient ->
-                                val renewedFeed = freshClient.send(
-                                    HttpRequest.newBuilder(URI.create("$baseUrl${feedUrl.rawPath}"))
-                                        .timeout(Duration.ofSeconds(5)).GET().build(),
-                                    HttpResponse.BodyHandlers.ofString(),
-                                )
-                                assertThat(renewedFeed.statusCode()).isEqualTo(200)
-                                assertThat(renewedFeed.sslSession().orElseThrow().peerCertificates.first())
-                                    .isEqualTo(renewedStore.getCertificate("cal"))
-                                assertThat(renewedFeed.body()).isEqualTo(feed.body())
-                                assertThat(renewedFeed.headers().firstValue("ETag")).isEqualTo(feed.headers().firstValue("ETag"))
-                            }
+                        newClient().use { freshClient ->
+                            val renewedFeed = request("$baseUrl${feedUrl.rawPath}", httpClient = freshClient)
+                            assertThat(renewedFeed.statusCode()).isEqualTo(200)
+                            assertThat(renewedFeed.sslSession().orElseThrow().peerCertificates.first())
+                                .isEqualTo(renewedStore.getCertificate("cal"))
+                            assertThat(renewedFeed.body()).isEqualTo(feed.body())
+                            assertThat(renewedFeed.headers().firstValue("ETag")).isEqualTo(feed.headers().firstValue("ETag"))
+                        }
                     }
                     assertThat(request(subscriptionUrl, "DELETE", authorized = true).statusCode()).isEqualTo(204)
                     assertThat(request("$baseUrl${feedUrl.rawPath}").statusCode()).isEqualTo(404)
