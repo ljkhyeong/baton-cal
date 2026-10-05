@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 // 같은 값을 쓰는 HTTP 테스트는 Spring 테스트 컨텍스트를 재사용한다.
 const val TEST_INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
 const val TEST_PREVIOUS_INTERNAL_TOKEN = "test-previous-internal-token-that-is-long-enough"
+const val INTERNAL_BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
 
 fun MockHttpServletRequestBuilder.bearer(): MockHttpServletRequestBuilder =
     header(HttpHeaders.AUTHORIZATION, "Bearer $TEST_INTERNAL_TOKEN")

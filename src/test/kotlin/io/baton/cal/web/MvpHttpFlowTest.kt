@@ -6,6 +6,7 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.andReturnValid
+import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
@@ -297,57 +298,6 @@ class MvpHttpFlowTest @Autowired constructor(
     }
 
     @Test
-    fun `행렬 매개변수 형태의 내부 경로도 인증을 요구한다`() {
-        listOf(
-            "/internal/api/v1;ignored/subscriptions",
-            "/internal;ignored/api/v1/subscriptions",
-        ).forEach { path ->
-            mockMvc.perform(
-                post(path)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content("""{"seasonId":"$SEASON_ID"}"""),
-            )
-                .andExpect(status().isUnauthorized)
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-        }
-    }
-
-    @Test
-    fun `내부 베어러 회전 창에서는 현재 값과 이전 값만 허용한다`() {
-        val currentBefore = authenticationCount("current")
-        val previousBefore = authenticationCount("previous")
-        val unauthorizedBefore = authenticationCount("unauthorized")
-
-        listOf(
-            "bearer $TEST_INTERNAL_TOKEN",
-            "BEARER   $TEST_PREVIOUS_INTERNAL_TOKEN",
-        ).forEach { authorization ->
-            mockMvc.perform(
-                post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
-                    .header(HttpHeaders.AUTHORIZATION, authorization),
-            )
-                .andExpect(status().isOk)
-        }
-
-        listOf(
-            "Basic $TEST_INTERNAL_TOKEN",
-            "Bearer unregistered-internal-token-that-is-long-enough",
-        ).forEach { authorization ->
-            mockMvc.perform(
-                post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID)
-                    .header(HttpHeaders.AUTHORIZATION, authorization),
-            )
-                .andExpect(status().isUnauthorized)
-                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-        }
-
-        assertThat(authenticationCount("current")).isEqualTo(currentBefore + 1)
-        assertThat(authenticationCount("previous")).isEqualTo(previousBefore + 1)
-        assertThat(authenticationCount("unauthorized")).isEqualTo(unauthorizedBefore + 2)
-    }
-
-    @Test
     fun `내부 경로 UUID는 36자 표준 문자열만 허용한다`() {
         listOf(
             authorizedGet("/internal/api/v1/calendar-items/1-1-1-1-1"),
@@ -504,23 +454,6 @@ class MvpHttpFlowTest @Autowired constructor(
         assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CONFIRMED")
     }
 
-    @Test
-    fun `알 수 없는 필드와 DST 공백의 현지 시각은 거부한다`() {
-        val payload = utcSnapshot(EVENT_1, revision = 0, summary = "Unknown field")
-        val withUnknownField = payload.dropLast(1) + ",\n\"unexpected\":true\n}"
-        postSnapshot(withUnknownField)
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-
-        val dstGap = zonedSnapshot(
-            startLocal = "2026-03-08T02:30:00",
-            endLocal = "2026-03-08T03:30:00",
-        )
-        postSnapshot(dstGap)
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-    }
-
     private fun postSnapshot(payload: String): ResultActions = mockMvc.perform(
         authorizedPost("/internal/api/v1/schedule-snapshots").contentType(MediaType.APPLICATION_JSON).content(payload),
     )
@@ -541,8 +474,6 @@ class MvpHttpFlowTest @Autowired constructor(
     }
 
     private fun ingestionCount(result: String) = counterValue("baton.cal.snapshot.ingestion", result)
-
-    private fun authenticationCount(result: String) = counterValue("baton.cal.internal.authentication", result)
 
     private fun counterValue(name: String, result: String): Double =
         meterRegistry.get(name).tag("result", result).counter().count()
@@ -581,10 +512,7 @@ class MvpHttpFlowTest @Autowired constructor(
         """.trimIndent()
     }
 
-    private fun zonedSnapshot(
-        startLocal: String = "2026-11-01T01:30:00",
-        endLocal: String = "2026-11-01T02:30:00",
-    ): String =
+    private fun zonedSnapshot(): String =
         """
         {
           "eventId": "$ZONED_EVENT_ID",
@@ -598,8 +526,8 @@ class MvpHttpFlowTest @Autowired constructor(
           "location": "New York",
           "time": {
             "type": "ZONED_LOCAL",
-            "startLocal": "$startLocal",
-            "endLocal": "$endLocal",
+            "startLocal": "2026-11-01T01:30:00",
+            "endLocal": "2026-11-01T02:30:00",
             "zoneId": "America/New_York"
           },
           "sourceUpdatedAt": "2026-10-01T00:30:00Z"
@@ -607,7 +535,6 @@ class MvpHttpFlowTest @Autowired constructor(
         """.trimIndent()
 
     companion object {
-        const val INTERNAL_BEARER_CHALLENGE = "Bearer realm=\"baton-cal-internal\""
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         const val OTHER_SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

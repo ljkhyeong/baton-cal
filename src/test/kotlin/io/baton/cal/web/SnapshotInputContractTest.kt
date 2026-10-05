@@ -217,6 +217,18 @@ class SnapshotInputContractTest @Autowired constructor(
         ).forEach(::assertInvalid)
     }
 
+    @Test
+    fun `알 수 없는 필드와 DST 공백의 현지 시각은 거부한다`() {
+        assertInvalid(utcSnapshot().dropLast(1) + ",\n\"unexpected\": true\n}")
+        assertInvalid(
+            zonedSnapshot(
+                startLocal = "2026-03-08T02:30:00",
+                endLocal = "2026-03-08T03:30:00",
+                zoneId = "America/New_York",
+            ),
+        )
+    }
+
     private fun postSnapshot(payload: String): ResultActions =
         mockMvc.perform(post(SNAPSHOT_PATH).bearer().contentType(MediaType.APPLICATION_JSON).content(payload))
 
