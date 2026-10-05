@@ -12,7 +12,8 @@ import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.jsonContent
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import io.baton.cal.support.runConcurrently
+import java.util.concurrent.CyclicBarrier
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.jdbc.JdbcTestUtils
 import net.fortuna.ical4j.model.Property
@@ -41,9 +42,6 @@ import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.ObjectNode
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.Callable
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
@@ -133,17 +131,14 @@ class SnapshotBatchHttpTest @Autowired constructor(
             listOf(snapshot(1), snapshot(2, OTHER_SEASON)),
             listOf(snapshot(3, OTHER_SEASON), snapshot(4)),
         )
-        val ready = CountDownLatch(2)
-        Executors.newFixedThreadPool(2).use { executor ->
-            val tasks = batches.map { snapshots ->
-                Callable {
-                    ready.countDown()
-                    check(ready.await(10, TimeUnit.SECONDS))
-                    assertResults(batch(snapshots), listOf("APPLIED", "APPLIED"))
-                }
+        val bothReady = CyclicBarrier(2)
+        val submit = { snapshots: List<JsonNode> ->
+            {
+                bothReady.await(10, TimeUnit.SECONDS)
+                assertResults(batch(snapshots), listOf("APPLIED", "APPLIED"))
             }
-            executor.invokeAll(tasks, 20, TimeUnit.SECONDS).forEach { it.get() }
         }
+        runConcurrently(submit(batches[0]), submit(batches[1]))
         for (season in listOf(SEASON, OTHER_SEASON)) {
             val projection = projection(season)
             assertThat(projection.representation.parseIcalendar().events()).hasSize(2)
