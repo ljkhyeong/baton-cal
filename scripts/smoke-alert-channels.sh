@@ -20,10 +20,20 @@ trap cleanup EXIT
 for required in docker jq python3; do command -v "$required" >/dev/null; done
 
 # 이미지 고정값은 Dependabot이 갱신하는 Compose 정의에서 읽어 운영 스모크와 같은 버전을 검증한다.
-compose_definition=$(docker compose --file "$project_directory/compose.operations.yml" \
-  --file "$project_directory/compose.operations-smoke.yml" config --no-interpolate --format json)
-alertmanager_image=$(jq -er '.services.alertmanager.image' <<< "$compose_definition")
-receiver_image=$(jq -er '.services["alert-receiver"].image' <<< "$compose_definition")
+# 보간 없는 `docker compose config`는 Compose 버전에 따라 `${VAR:?}` 볼륨을 해석하지 못하므로 image 줄을 직접 읽는다.
+compose_image() {
+  local image
+  image=$(awk -v service="  $2:" '$0 == service { found = 1; next }
+    found && /^  [^ ]/ { exit }
+    found && $1 == "image:" { print $2; exit }' "$1")
+  [[ "$image" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || {
+    echo "$1의 $2 이미지 고정값을 읽지 못했습니다: '${image:-<없음>}'" >&2
+    return 1
+  }
+  printf '%s\n' "$image"
+}
+alertmanager_image=$(compose_image "$project_directory/compose.operations.yml" alertmanager)
+receiver_image=$(compose_image "$project_directory/compose.operations-smoke.yml" alert-receiver)
 
 # 실제 메시지를 보내지 않도록 외부 통신이 차단된 검증 네트워크를 사용한다.
 docker network create --internal "$project_name" > /dev/null
