@@ -2,10 +2,6 @@ package io.baton.cal.snapshot
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
-import java.io.DataOutputStream
-import java.io.OutputStream
-import java.security.DigestOutputStream
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -30,66 +26,47 @@ enum class SnapshotIngestionResult {
 }
 
 object SnapshotFingerprint {
-    fun sha256(snapshot: ScheduleSnapshot): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        DataOutputStream(DigestOutputStream(OutputStream.nullOutputStream(), digest)).use { output ->
-            output.writeString("baton-cal-snapshot-v1")
-            output.writeString(snapshot.sourceItemId.toString())
-            output.writeString(snapshot.seasonId.toString())
-            output.writeInt(snapshot.revision)
-            output.writeString(snapshot.status.name)
-            output.writeString(snapshot.summary)
-            output.writeNullableString(snapshot.description)
-            output.writeNullableString(snapshot.location)
-            output.writeString(snapshot.sourceUpdatedAt.toString())
+    fun sha256(snapshot: ScheduleSnapshot): String = DigestWriter.sha256 {
+        string("baton-cal-snapshot-v1")
+        string(snapshot.sourceItemId.toString())
+        string(snapshot.seasonId.toString())
+        int(snapshot.revision)
+        string(snapshot.status.name)
+        string(snapshot.summary)
+        nullableString(snapshot.description)
+        nullableString(snapshot.location)
+        string(snapshot.sourceUpdatedAt.toString())
 
-            when (val schedule = snapshot.schedule) {
-                is ScheduleWindow.UtcInstant -> {
-                    output.writeString("UTC_INSTANT")
-                    output.writeString(schedule.start.toString())
-                    output.writeString(schedule.end.toString())
-                }
-
-                is ScheduleWindow.UtcPoint -> {
-                    output.writeString("UTC_POINT")
-                    output.writeString(schedule.at.toString())
-                }
-
-                is ScheduleWindow.ZonedLocal -> {
-                    output.writeString("ZONED_LOCAL")
-                    output.writeString(schedule.start.toString())
-                    output.writeString(schedule.end.toString())
-                    output.writeString(schedule.zoneId)
-                }
-
-                is ScheduleWindow.ZonedLocalPoint -> {
-                    output.writeString("ZONED_LOCAL_POINT")
-                    output.writeString(schedule.at.toString())
-                    output.writeString(schedule.zoneId)
-                }
-
-                is ScheduleWindow.AllDay -> {
-                    output.writeString("ALL_DAY")
-                    output.writeString(schedule.startDate.toString())
-                    output.writeString(schedule.endDate.toString())
-                }
+        when (val schedule = snapshot.schedule) {
+            is ScheduleWindow.UtcInstant -> {
+                string("UTC_INSTANT")
+                string(schedule.start.toString())
+                string(schedule.end.toString())
             }
-        }
 
-        return digest.digest().toHexString()
-    }
+            is ScheduleWindow.UtcPoint -> {
+                string("UTC_POINT")
+                string(schedule.at.toString())
+            }
 
-    private fun DataOutputStream.writeString(value: String) {
-        val bytes = value.encodeToByteArray()
-        writeInt(bytes.size)
-        write(bytes)
-    }
+            is ScheduleWindow.ZonedLocal -> {
+                string("ZONED_LOCAL")
+                string(schedule.start.toString())
+                string(schedule.end.toString())
+                string(schedule.zoneId)
+            }
 
-    private fun DataOutputStream.writeNullableString(value: String?) {
-        if (value == null) {
-            writeInt(-1)
-        } else {
-            writeString(value)
+            is ScheduleWindow.ZonedLocalPoint -> {
+                string("ZONED_LOCAL_POINT")
+                string(schedule.at.toString())
+                string(schedule.zoneId)
+            }
+
+            is ScheduleWindow.AllDay -> {
+                string("ALL_DAY")
+                string(schedule.startDate.toString())
+                string(schedule.endDate.toString())
+            }
         }
     }
 }

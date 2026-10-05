@@ -1,9 +1,6 @@
 package io.baton.cal.recovery
 
-import java.io.DataOutputStream
-import java.io.OutputStream
-import java.security.DigestOutputStream
-import java.security.MessageDigest
+import io.baton.cal.snapshot.DigestWriter
 import java.util.UUID
 
 data class RecoveryItemState(
@@ -34,54 +31,29 @@ object RecoveryManifestDigest {
         metadataDigest = metadata?.let { (revision, displayName) -> metadata(revision, displayName) },
     )
 
-    fun items(items: List<RecoveryItemState>): String = digest { output ->
-        output.writeString("baton-cal-recovery-items-v1")
+    fun items(items: List<RecoveryItemState>): String = DigestWriter.sha256 {
+        string("baton-cal-recovery-items-v1")
         items.sortedBy { it.sourceItemId.toString() }.forEach { item ->
-            output.writeString(item.sourceItemId.toString())
-            output.writeInt(item.revision)
-            output.writeString(item.payloadDigest)
+            string(item.sourceItemId.toString())
+            int(item.revision)
+            string(item.payloadDigest)
         }
     }
 
-    fun metadata(revision: Int, displayName: String): String = digest { output ->
-        output.writeString("baton-cal-recovery-metadata-v1")
-        output.writeInt(revision)
-        output.writeString(displayName)
+    fun metadata(revision: Int, displayName: String): String = DigestWriter.sha256 {
+        string("baton-cal-recovery-metadata-v1")
+        int(revision)
+        string(displayName)
     }
 
-    fun seasons(seasons: List<RecoverySeasonState>): String = digest { output ->
-        output.writeString("baton-cal-recovery-seasons-v1")
+    fun seasons(seasons: List<RecoverySeasonState>): String = DigestWriter.sha256 {
+        string("baton-cal-recovery-seasons-v1")
         seasons.sortedBy { it.seasonId.toString() }.forEach { season ->
-            output.writeString(season.seasonId.toString())
-            output.writeInt(season.itemCount)
-            output.writeString(season.itemDigest)
-            output.writeNullableInt(season.metadataRevision)
-            output.writeNullableString(season.metadataDigest)
-        }
-    }
-
-    private fun digest(write: (DataOutputStream) -> Unit): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        DataOutputStream(DigestOutputStream(OutputStream.nullOutputStream(), digest)).use(write)
-        return digest.digest().toHexString()
-    }
-
-    private fun DataOutputStream.writeString(value: String) {
-        val bytes = value.encodeToByteArray()
-        writeInt(bytes.size)
-        write(bytes)
-    }
-
-    private fun DataOutputStream.writeNullableString(value: String?) {
-        if (value == null) writeInt(-1) else writeString(value)
-    }
-
-    private fun DataOutputStream.writeNullableInt(value: Int?) {
-        if (value == null) {
-            writeBoolean(false)
-        } else {
-            writeBoolean(true)
-            writeInt(value)
+            string(season.seasonId.toString())
+            int(season.itemCount)
+            string(season.itemDigest)
+            nullableInt(season.metadataRevision)
+            nullableString(season.metadataDigest)
         }
     }
 }
