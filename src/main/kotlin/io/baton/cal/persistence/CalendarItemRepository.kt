@@ -22,7 +22,7 @@ class CalendarItemRepository(
     fun applyIfNewer(candidate: CalendarItemRow): CalendarItemApplyOutcome {
         if (upsert(candidate)) return CalendarItemApplyOutcome.APPLIED
 
-        val current = findRevisionState(candidate.sourceItemId)
+        val current = checkNotNull(findStatusBySourceItemId(candidate.sourceItemId))
         return when {
             candidate.seasonId != current.seasonId -> CalendarItemApplyOutcome.SCOPE_CONFLICT
             candidate.revision < current.revision -> CalendarItemApplyOutcome.STALE
@@ -160,21 +160,4 @@ class CalendarItemRepository(
             .param("sourceUpdatedAt", candidate.sourceUpdatedAt.atOffset(ZoneOffset.UTC))
             .param("acceptedAt", candidate.acceptedAt.atOffset(ZoneOffset.UTC))
             .update() == 1
-
-    private fun findRevisionState(sourceItemId: UUID): RevisionState =
-        jdbcClient.sql(
-            """
-            SELECT season_id, revision
-            FROM calendar_item
-            WHERE source_item_id = :sourceItemId
-            """.trimIndent(),
-        )
-            .param("sourceItemId", sourceItemId)
-            .query(RevisionState::class.java)
-            .single()
-
-    private data class RevisionState(
-        val seasonId: UUID,
-        val revision: Int,
-    )
 }
