@@ -27,14 +27,16 @@
   옮기고, 범용 검토·CI 실패·커밋 스킬을 CAL 규칙에 맞게 다시 작성했다. 문서·운영·의존성·계약 릴리스 스킬과
   문서 링크 검사기도 추가했다. [스킬 목록](docs/development.md#claude-code-스킬)
 - 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
-  같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유하고, 같은 설정의 HTTP 테스트는
-  공용 토큰으로 Spring 컨텍스트를 재사용한다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
+  같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유한다. 같은 설정의 내부 HTTP
+  테스트는 `@InternalHttpTest`·`@RecoveryModeInternalHttpTest`로 Spring 컨텍스트를 재사용하고, 요청·계약 예시 보조
+  함수는 `support`·`contract` 테스트 패키지에 둔다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
 - 일정 시간 열과 `ScheduleWindow`의 양방향 변환·`ScheduleTimeType`은 `persistence/CalendarItemRow.kt`, 복구
   대조값 계산은 `RecoveryManifestDigest`, 첫 투영의 Last-Modified는 `SeasonProjectionService`가 맡는다. 복구 서비스는
   도메인 값만 받고 409는 모두 `ConflictException`이다. 피드 헤더 값 타입은 `SeasonFeedHeaders`이며 계약 TEXT·
   다이제스트 입력 패턴은 `web/ContractInputPatterns.kt`에서 공유한다. 서비스가 `web` 예외·DTO를 쓰는 구조는
   ADR-0002에 따라 유지한다.
-- BATON과 공유하는 복구 다이제스트는 계약 예시를 벡터로 삼아 DB 없이 검증한다. 알림 채널 스모크는 이미지 고정값을
+- 스냅샷 지문과 복구 다이제스트는 PRD-0002의 같은 필드 인코딩을 `snapshot/DigestWriter.kt` 하나로 구현한다.
+  BATON과 공유하는 복구 다이제스트는 계약 예시를 벡터로 삼아 DB 없이 검증한다. 알림 채널 스모크는 이미지 고정값을
   Compose 정의에서 읽고, 이미지 스모크는 Flyway 기대 버전을 마이그레이션 파일에서 만든다.
 - 일정 전달이 조용히 멈추는 경우를 알리는 `CalInternalAuthenticationFailed`(내부 Bearer 인증 실패 반복)와
   `CalIngestionRejected`(일정·묶음·시즌 이름 수신의 `400`·`409`·`413`)를 추가했다. 4xx는 기존 5xx 알림에 잡히지
@@ -79,16 +81,24 @@
 
 ## 최근 검증
 
+- 4차 리팩터링은 `7b7d6b6` 커밋 상태에서 검증했다. 운영 코드는 다이제스트 인코딩 공유만 바꿨고 나머지는 테스트다.
+  `./gradlew --no-daemon --max-workers=2 check`로 일반 169개·구조 3개 테스트와 계약 ZIP 검증이 실패·제외 없이
+  통과했다. 검사 스크립트 회귀 테스트는 입력이 같아 기존 결과를 재사용했다. Spring 테스트 컨텍스트는 9개를 유지했다
+  (Hikari 풀 번호가 3차 로그와 같이 `TlsHttpIntegrationTest` 포함 10에서 끝난다). Java 25 toolchain·PostgreSQL 18.6.
+  로그: `/private/tmp/baton-cal-round4-check.log`. 그 뒤 `ContractArtifactsTest`의 빈 줄 하나만 지웠고 컴파일과
+  파일·종료 검사를 다시 통과했다. 지문 고정값 5개와 계약 예시 복구 다이제스트가 바이트 변화 없이 통과했고, 합성
+  어노테이션을 쓴 6개 클래스 64개 테스트가 컨텍스트 2개로 실행됐다. 로그: `/private/tmp/baton-cal-round4-focused.log`.
+  다이제스트 출력이 고정 벡터로 같음을 확인해 OCI·운영·알림 채널 스모크는 실행하지 않았다. 스크립트 중복 정리는 이득이
+  몇 줄이고 Docker 스모크 재실행이 필요해 보류했다. 파일·종료 검사와 전체 `review.diff` 검토 기록:
+  `build/agent-feedback/2f0b097ee5ac8bb7/`.
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
   해석하지 못했다(`too many colons`). 로컬 Compose v5.5.1에서는 재현되지 않았다. Compose 해석 없이 서비스의
   `image` 줄을 읽고 digest 고정 형식이 아니면 실패하도록 고쳤으며 `bash scripts/smoke-alert-channels.sh` 4개 조합이
   통과했다. 로그: `/private/tmp/baton-cal-ci-c4c3055-failed.log`, `/private/tmp/baton-cal-alert-smoke-fix.log`.
-- 3차 리팩터링은 `30800e3`에 스크립트 변경을 더한 미커밋 상태에서 검증했다. 2차 리팩터링과 수신 알림을 포함한다.
-  `./gradlew --no-daemon --max-workers=2 check`로 일반 169개·구조 3개 테스트, 검사 스크립트, 계약 ZIP이
-  실패·제외 없이 통과했고 Spring 테스트 컨텍스트는 9개를 유지했다. 로그: `/private/tmp/baton-cal-round3-check.log`.
-  같은 코드로 `bash scripts/smoke-alert-channels.sh`(4개 조합), `bootBuildImage --imageName=baton-cal:refactoring-round3`,
+- 3차 리팩터링 커밋 `63455fe`에서 `bash scripts/smoke-alert-channels.sh`(4개 조합),
+  `bootBuildImage --imageName=baton-cal:refactoring-round3`,
   `./scripts/smoke-oci-image.sh`, `./scripts/smoke-operations.sh`가 통과했다. 운영 스모크의 `promtool test rules`가
   새 알림 규칙을 포함한다. 로그: `/private/tmp/baton-cal-round3-smoke.log`. Java 25 toolchain·PostgreSQL 18.6.
   알림 규칙의 임계값·경로 변형은 `promtool` 테스트가 잡는 것을 따로 확인했다.
@@ -100,14 +110,6 @@
   `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의
   링크 검사가 통과했다. 파일·종료 검사는 ArchUnit·검사 스크립트의 기존 성공 결과를 재사용해 통과했다.
   기록: `build/agent-feedback/f8327a0187405a2d/`.
-- 코드 정리는 `62fb198` 커밋 상태에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 165개·
-  구조 3개 테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. Java 25 toolchain·PostgreSQL 18.6이며
-  Spring 테스트 컨텍스트는 11개에서 9개로 줄었다. 로그: `/private/tmp/baton-cal-code-reduction-check-final.log`.
-  같은 운영 코드·스크립트로 `bootBuildImage --imageName=baton-cal:code-reduction` 뒤
-  `./scripts/smoke-oci-image.sh`와 `./scripts/smoke-operations.sh`가 통과했다. 백업 복원·복구 완료·세대 전환,
-  HTTPS·요청 제한·알림 발생과 해제·토큰 비노출을 확인했고 임시 자원은 정리했다.
-  로그: `/private/tmp/baton-cal-code-reduction-smoke.log`. 알림 채널 스모크는 입력이 같아 실행하지 않았다.
-  파일·종료 검사와 전체 `review.diff` 검토 기록: `build/agent-feedback/24baddff6f360927/`.
 - 웹훅 실패 검증 기준은 `b0369f0`다. 웹훅 스모크·모의 수신기와 문서만 변경했다.
   `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개가 통과했다.
   각 메시지에 `429`·`503`을 순서대로 반환한 뒤 장애·복구 메시지 각 1건의 수신, 정상 신호 분리와
@@ -129,13 +131,7 @@
 - `bash scripts/smoke-alert-channels.sh`가 통과했다. 외부 통신 차단 네트워크에서 Slack·Discord의
   장애·복구 메시지와 웹훅 주소 비노출을 확인하고 임시 컨테이너를 정리했다.
   로그: `/private/tmp/baton-cal-integration-webhooks.log`. 실제 수신 채널에는 발송하지 않았다.
-- CAL 제품 기준 `81cd46a`, 병합 커밋 `3ba5889`의 제품·테스트·계약 입력은 같다.
-  `./gradlew --no-daemon --max-workers=2 check`로 일반 164개·구조 3개 테스트와 계약 ZIP이 통과했다.
-  최초 전체 실행의 입력 테스트 29건은 공유 PostgreSQL 연결 한도로 시작하지 못했다.
-  테스트 전용 `minimum-idle=0`(`a8d2ac0`)으로 수정한 뒤 해당 29건부터 재시도하고 전체 검증을 통과했다.
-  로그: `/private/tmp/baton-cal-batch-db-retry.log`, `/private/tmp/baton-cal-batch-check-final.log`.
-  Java 25.0.3·PostgreSQL 18.6, 최종 `check`는 3개 작업 실행·7개 기존 결과 재사용이다.
-- 같은 코드에서 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
+- CAL 제품 기준 `81cd46a`에서 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
   두 실행 모두 최종 1,000개 UID·개정 2·취소 500개·동일 ETag를 확인했다. 최초 적재는 82.589초와
   1.843초였다. 로컬 단회 비교이며 운영 성능 보장은 아니다. [측정 조건과 결과](docs/performance-baseline.md)
   로그와 XML: `/private/tmp/baton-cal-batch-load-single.{log,xml}`, `/private/tmp/baton-cal-batch-load-100.log`.
@@ -166,7 +162,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 코드 정리는 전체 `check`와 OCI·운영 스모크를 실행했고 알림 채널 스모크는 기존 결과를 재사용했다.
+이번 4차 리팩터링은 전체 `check`만 실행했고 OCI·운영·알림 채널 스모크는 3차 결과 이후 실행하지 않았다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
