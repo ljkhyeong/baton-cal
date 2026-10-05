@@ -139,26 +139,6 @@ class CalPropertiesTest {
     }
 
     @Test
-    fun `운영 프로필은 HTTPS 스킴의 대소문자를 구분하지 않고 HTTP를 거부한다`() {
-        val token = "secret-internal-token-that-is-long-enough"
-
-        assertThatCode {
-            ProductionConfiguration(
-                CalProperties(token, URI.create("HTTPS://calendar.example.test")),
-            )
-        }.doesNotThrowAnyException()
-
-        assertThatIllegalArgumentException()
-            .isThrownBy {
-                ProductionConfiguration(
-                    CalProperties(token, URI.create("http://localhost:8080")),
-                )
-            }
-            .withMessageContaining("prod")
-            .withMessageContaining("HTTPS")
-    }
-
-    @Test
     fun `설정 바인딩 실패 출력은 거부된 내부 토큰을 노출하지 않는다`(output: CapturedOutput) {
         val rejectedSecret = "leaky-short-secret"
         val application = propertiesBindingApplication()

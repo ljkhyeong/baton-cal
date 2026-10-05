@@ -27,7 +27,6 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpHeaders
 import org.springframework.http.server.observation.ServerRequestObservationContext
@@ -58,7 +57,6 @@ import java.util.UUID
         "baton.cal.subscription-generation=20000000-0000-0000-0000-000000000002",
     ],
 )
-@Import(TestObservationRegistryConfiguration::class)
 @Sql("/reset-database.sql")
 class PublicCalendarContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
@@ -340,14 +338,15 @@ class PublicCalendarContractTest @Autowired constructor(
         val CREDENTIAL_GENERATION: UUID =
             UUID.fromString("20000000-0000-0000-0000-000000000002")
     }
-}
 
-@TestConfiguration(proxyBeanMethods = false)
-class TestObservationRegistryConfiguration {
-    @Bean
-    fun testObservationRegistry(): TestObservationRegistry = TestObservationRegistry.create()
+    // 관측 기록 확인용 레지스트리와 Last-Modified 상한 검증용 고정 시계로 바꾼다. 중첩 클래스라 이 테스트에만 적용된다.
+    @TestConfiguration(proxyBeanMethods = false)
+    class PublicCalendarTestConfiguration {
+        @Bean
+        fun testObservationRegistry(): TestObservationRegistry = TestObservationRegistry.create()
 
-    @Bean
-    @Primary
-    fun testClock(): Clock = Clock.fixed(PublicCalendarContractTest.FIXED_NOW, ZoneOffset.UTC)
+        @Bean
+        @Primary
+        fun testClock(): Clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC)
+    }
 }

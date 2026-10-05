@@ -115,7 +115,7 @@ Healthchecks 성공 URL은 `/run/secrets/healthchecks-ping-url` 파일로 전달
 ```shell
 ./gradlew --no-daemon --max-workers=2 test \
   --tests 'io.baton.cal.config.TlsHttpIntegrationTest' \
-  --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest' bootJar
+  --tests 'io.baton.cal.config.ProductionProfileConfigurationTest' bootJar
 bash scripts/smoke-alert-channels.sh
 ```
 

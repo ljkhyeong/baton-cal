@@ -33,7 +33,8 @@ import java.util.UUID
     ],
 )
 @Sql("/reset-database.sql")
-class SnapshotTransactionRecoveryTest @Autowired constructor(
+// 투영 렌더링이 실패하면 일정 수신과 시즌 이름 저장을 함께 롤백하고 같은 요청을 다시 처리할 수 있다.
+class RenderFailureRollbackTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
     private val metadataService: SeasonCalendarMetadataService,
     private val jdbcClient: JdbcClient,

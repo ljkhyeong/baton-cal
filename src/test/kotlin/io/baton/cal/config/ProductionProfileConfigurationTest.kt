@@ -1,6 +1,8 @@
 package io.baton.cal.config
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
+import org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -24,9 +26,29 @@ import java.util.UUID
 import kotlin.io.path.writeText
 
 @ExtendWith(OutputCaptureExtension::class)
-class ProductionDatasourceConfigurationTest {
+class ProductionProfileConfigurationTest {
     @TempDir
     lateinit var secrets: Path
+
+    @Test
+    fun `운영 프로필은 HTTPS 스킴의 대소문자를 구분하지 않고 HTTP를 거부한다`() {
+        val token = "secret-internal-token-that-is-long-enough"
+
+        assertThatCode {
+            ProductionConfiguration(
+                CalProperties(token, URI.create("HTTPS://calendar.example.test")),
+            )
+        }.doesNotThrowAnyException()
+
+        assertThatIllegalArgumentException()
+            .isThrownBy {
+                ProductionConfiguration(
+                    CalProperties(token, URI.create("http://localhost:8080")),
+                )
+            }
+            .withMessageContaining("prod")
+            .withMessageContaining("HTTPS")
+    }
 
     @Test
     fun `운영 필수 설정은 외부에서 받고 관리 포트를 분리한다`() {
