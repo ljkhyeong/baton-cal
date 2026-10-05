@@ -69,53 +69,43 @@ https_port=${https_address##*:}
 public_url="https://cal.b4ton.com:$https_port"
 tls=(--cacert "$CAL_TLS_DIRECTORY/live/cal.b4ton.com/fullchain.pem" --resolve "cal.b4ton.com:$https_port:127.0.0.1" --noproxy '*')
 
+# readiness 그룹은 DB 점검을 포함하므로 200이면 준비된 상태다. 연결 거부와 503은 1초 간격으로 다시 묻고,
+# 시작 중의 중간 오류는 출력하지 않는다.
 wait_ready() {
   management_url="http://$(address app 8081)"
-  for ((attempt=0; attempt<90; attempt++)); do
-    if "${request[@]}" --fail "$management_url/actuator/health/readiness" > "$scratch/readiness.json" 2>/dev/null; then
-      jq -e '.status == "UP"' "$scratch/readiness.json" >/dev/null && return 0
-    fi
-    sleep 1
-  done
-  echo "준비 상태 대기 시간을 넘었습니다." >&2
-  return 1
+  "${request[@]}" --fail --retry 90 --retry-delay 1 --retry-all-errors \
+    "$management_url/actuator/health/readiness" 2>/dev/null | jq -e '.status == "UP"' > /dev/null \
+    || { echo "준비 상태 대기 시간을 넘었습니다." >&2; return 1; }
 }
 wait_ready
 
-"${request[@]}" --fail --get --data-urlencode module=cal_tls --data-urlencode target=gateway:443 \
-  "$blackbox_url/probe" > "$scratch/tls-probe"
-grep -q '^probe_success 1$' "$scratch/tls-probe"
-grep -q '^probe_ssl_earliest_cert_expiry ' "$scratch/tls-probe"
-"${request[@]}" --fail --get --data-urlencode module=cal_tls --data-urlencode target=alert-receiver:8080 \
-  "$blackbox_url/probe" > "$scratch/tls-rejected"
-grep -q '^probe_success 0$' "$scratch/tls-rejected"
+# Blackbox 점검 결과에 기대한 지표 줄이 모두 있는지 확인한다.
+assert_probe() {
+  local module=$1 target=$2 pattern
+  shift 2
+  "${request[@]}" --fail --get --data-urlencode "module=$module" --data-urlencode "target=$target" \
+    "$blackbox_url/probe" > "$scratch/probe"
+  for pattern in "$@"; do grep -q "$pattern" "$scratch/probe"; done
+}
+assert_probe cal_tls gateway:443 '^probe_success 1$' '^probe_ssl_earliest_cert_expiry '
+assert_probe cal_tls alert-receiver:8080 '^probe_success 0$'
 echo "Blackbox의 인증서 검증·만료 시각 수집과 TLS 연결 실패 탐지를 확인했습니다."
 
-"${request[@]}" --fail --get --data-urlencode module=cal_public_route \
-  --data-urlencode target=https://gateway/calendars/v1/monitoring-probe.ics \
-  "$blackbox_url/probe" > "$scratch/public-probe"
-grep -q '^probe_success 1$' "$scratch/public-probe"
-grep -q '^probe_http_status_code 404$' "$scratch/public-probe"
+assert_probe cal_public_route https://gateway/calendars/v1/monitoring-probe.ics '^probe_success 1$' '^probe_http_status_code 404$'
 # Nginx의 차단 페이지도 404이므로, 본문이 있는 응답은 정상으로 보지 않아야 한다.
-"${request[@]}" --fail --get --data-urlencode module=cal_public_route --data-urlencode target=https://gateway/ \
-  "$blackbox_url/probe" > "$scratch/public-rejected"
-grep -q '^probe_success 0$' "$scratch/public-rejected"
-grep -q '^probe_http_status_code 404$' "$scratch/public-rejected"
+assert_probe cal_public_route https://gateway/ '^probe_success 0$' '^probe_http_status_code 404$'
 echo "실제 구독 토큰 없이 공개 경로를 확인하고, 프록시의 404 오류 페이지를 구분했습니다."
 
-"${request[@]}" --fail -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
-  -H 'Content-Type: application/json' --data-binary @"$project_directory/contracts/examples/schedule-snapshot.utc-active.json" \
+internal=("${request[@]}" --fail --oauth2-bearer "$BATON_CAL_INTERNAL_TOKEN")
+"${internal[@]}" --json @"$project_directory/contracts/examples/schedule-snapshot.utc-active.json" \
   "$internal_url/internal/api/v1/schedule-snapshots" > /dev/null
-"${request[@]}" --fail -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
-  -H 'Content-Type: application/json' --data-binary @"$project_directory/contracts/examples/subscription-create.json" \
-  "$internal_url/internal/api/v1/subscriptions" > "$scratch/credential.json"
-feed_path=$(jq -r '"/calendars/v1/" + .token + ".ics"' "$scratch/credential.json")
-token=$(jq -r .token "$scratch/credential.json")
-status=$("${request[@]}" "${tls[@]}" -D "$scratch/headers" -o "$scratch/feed" -w '%{http_code}' "$public_url$feed_path")
-[[ "$status" == 200 ]]
+token=$("${internal[@]}" --json @"$project_directory/contracts/examples/subscription-create.json" \
+  "$internal_url/internal/api/v1/subscriptions" | jq -r .token)
+feed_path="/calendars/v1/$token.ics"
+response=$("${request[@]}" "${tls[@]}" -o "$scratch/feed" -w '%{http_code} %header{etag}' "$public_url$feed_path")
+status=${response%% *} etag=${response#* }
+[[ "$status" == 200 && -n "$etag" ]]
 grep -q 'BEGIN:VEVENT' "$scratch/feed"
-etag=$(awk 'tolower($1) == "etag:" {gsub("\r", ""); print $2}' "$scratch/headers")
-[[ -n "$etag" ]]
 status=$("${request[@]}" "${tls[@]}" -H "If-None-Match: $etag" -o "$scratch/unchanged" -w '%{http_code}' "$public_url$feed_path")
 [[ "$status" == 304 && ! -s "$scratch/unchanged" ]]
 
@@ -129,17 +119,12 @@ http_url="http://$(address gateway 80)"
 [[ "$("${request[@]}" -o /dev/null -w '%{http_code}' "$http_url$feed_path")" == 308 ]]
 
 for ((index=0; index<80; index++)); do
-  "${request[@]}" "${tls[@]}" -D "$scratch/rate-header-$index" -o /dev/null -w '%{http_code}\n' \
+  "${request[@]}" "${tls[@]}" -o /dev/null -w '%{http_code} %header{retry-after} %header{cache-control}\n' \
     "$public_url$feed_path?probe=query-smoke-marker" > "$scratch/rate-$index" &
 done
 wait
-grep -l '^429$' "$scratch"/rate-[0-9]* > "$scratch/rejected"
-[[ -s "$scratch/rejected" ]]
-while IFS= read -r rejected; do
-  index=${rejected##*-}
-  grep -qi '^Retry-After: 1' "$scratch/rate-header-$index"
-  grep -qi '^Cache-Control: no-store' "$scratch/rate-header-$index"
-done < "$scratch/rejected"
+# 요청 초과 응답이 있어야 하고, 모두 같은 재시도 간격과 캐시 금지를 보내야 한다.
+[[ "$(grep -h '^429 ' "$scratch"/rate-* | sort -u)" == '429 1 no-store' ]]
 echo "HTTPS, 피드 200·304, 내부 경로 차단, ACME 경로와 요청 초과 429를 확인했습니다."
 
 for ((attempt=0; attempt<30; attempt++)); do
@@ -201,8 +186,7 @@ wait_heartbeat "$expected"
 "${compose[@]}" stop prometheus
 jq -n '[{labels: {alertname: "CalWatchdog", severity: "none"},
   startsAt: (now - 60 | todate), endsAt: (now | todate)}]' > "$scratch/watchdog-resolved.json"
-"${request[@]}" --fail -H 'Content-Type: application/json' --data-binary @"$scratch/watchdog-resolved.json" \
-  "$alertmanager_url/api/v2/alerts" > /dev/null
+"${request[@]}" --fail --json @"$scratch/watchdog-resolved.json" "$alertmanager_url/api/v2/alerts" > /dev/null
 for ((attempt=0; attempt<65; attempt++)); do
   if (( $(heartbeat_count) != expected )); then
     echo "정상 신호 해제 후에도 외부 점검 요청이 전송됐습니다." >&2

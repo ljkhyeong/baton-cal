@@ -33,7 +33,8 @@ compose=(
   --file "$compose_file"
 )
 http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
-bearer=(--header "Authorization: Bearer $internal_token")
+bearer=(--oauth2-bearer "$internal_token")
+examples="$project_directory/contracts/examples"
 
 fail() {
   echo "오류: $*" >&2
@@ -153,13 +154,19 @@ assert_flyway_versions() {
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 
+# DB 조회 결과가 기대값과 같은지 확인한다.
+assert_database_value() {
+  local expected=$1 query=$2 message=$3 actual
+  actual=$(database_scalar "$query")
+  [[ "$actual" == "$expected" ]] || fail "$message: '${actual:-<비어 있음>}'"
+}
+
 post_snapshot() {
   local fixture_name=$1
   local response
   if ! response=$(
     "${http_request[@]}" "${bearer[@]}" --fail \
-      --header 'Content-Type: application/json' \
-      --data-binary "@$project_directory/contracts/examples/$fixture_name" \
+      --json "@$examples/$fixture_name" \
       "$base_url/internal/api/v1/schedule-snapshots"
   ); then
     fail "일정 스냅샷 '$fixture_name' 수신 요청에 실패했습니다."
@@ -175,13 +182,12 @@ put_season_metadata() {
   local response
   response=$(
     "${http_request[@]}" "${bearer[@]}" --fail --request PUT \
-      --header 'Content-Type: application/json' \
-      --data-binary "@$project_directory/contracts/examples/$fixture_name" \
+      --json "@$examples/$fixture_name" \
       "$base_url/internal/api/v1/seasons/$season_id/calendar-metadata"
   )
   printf '%s' "$response" \
     | jq --exit-status --arg season "$season_id" \
-      --slurpfile expected "$project_directory/contracts/examples/$fixture_name" \
+      --slurpfile expected "$examples/$fixture_name" \
       '.seasonId == $season and .revision == $expected[0].revision and .displayName == $expected[0].displayName' \
       >/dev/null || fail "시즌 표시 이름 '$fixture_name'을 채택하지 못했습니다."
   echo "시즌 표시 이름 채택 확인: $fixture_name"
@@ -203,8 +209,7 @@ assert_recovery_result() {
   local status
   status=$(
     http_status "$scratch/response-body" "${bearer[@]}" --request PUT \
-      --header 'Content-Type: application/json' \
-      --data-binary "@$project_directory/contracts/examples/$fixture" \
+      --json "@$examples/$fixture" \
       "$base_url/internal/api/v1/recovery-runs/$recovery_id/$path"
   )
   [[ "$status" == "$expected_status" ]] \
@@ -285,8 +290,7 @@ put_season_metadata season-calendar-metadata.r0.json
 
 if ! initial_credential=$(
   "${http_request[@]}" "${bearer[@]}" --fail \
-    --header 'Content-Type: application/json' \
-    --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
+    --json "@$examples/subscription-create.json" \
     "$base_url/internal/api/v1/subscriptions"
 ); then
   fail "초기 캘린더 구독 생성에 실패했습니다."
@@ -316,10 +320,8 @@ echo "pg_dump -Fc 아카이브 생성과 pg_restore 목록 검증을 완료했�
 post_snapshot schedule-snapshot.zoned-active-r2.json
 post_snapshot schedule-snapshot.zoned-cancelled.json
 put_season_metadata season-calendar-metadata.r2.json
-latest_state=$(database_scalar \
-  "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
-[[ "$latest_state" == "3:CANCELLED" ]] \
-  || fail "백업 이후 원본 DB가 최신 취소 상태가 아닙니다: '${latest_state:-<비어 있음>}'"
+item_state_query="SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;"
+assert_database_value 3:CANCELLED "$item_state_query" "백업 이후 원본 DB가 최신 취소 상태가 아닙니다"
 echo "백업 이후 원본 DB의 revision 3 CANCELLED 상태를 확인했습니다."
 
 echo "복원 전에 애플리케이션을 중지하고 세대 B와 복구 모드를 설정합니다."
@@ -341,23 +343,16 @@ echo "세대 B 설정으로 애플리케이션을 강제 재생성합니다."
 wait_for_readiness
 assert_flyway_versions
 
-restored_item_state=$(database_scalar \
-  "SELECT revision || ':' || status FROM calendar_item WHERE source_item_id = '$source_item_id'::uuid;")
-[[ "$restored_item_state" == "0:ACTIVE" ]] \
-  || fail "복원된 일정이 백업 시점의 revision 0 ACTIVE 상태가 아닙니다: '${restored_item_state:-<비어 있음>}'"
-restored_metadata_revision=$(database_scalar \
-  "SELECT revision FROM season_calendar_metadata WHERE season_id = '$season_id'::uuid;")
-[[ "$restored_metadata_revision" == 0 ]] \
-  || fail "복원된 시즌 이름이 백업 시점의 revision 0이 아닙니다: '${restored_metadata_revision:-<비어 있음>}'"
-restored_subscription_state=$(database_scalar \
-  "SELECT credential_generation || ':' || status FROM calendar_subscription WHERE id = '$subscription_id'::uuid;")
-[[ "$restored_subscription_state" == "$generation_a:ACTIVE" ]] \
-  || fail "복원된 구독이 세대 A의 ACTIVE 상태가 아닙니다: '${restored_subscription_state:-<비어 있음>}'"
+assert_database_value 0:ACTIVE "$item_state_query" "복원된 일정이 백업 시점의 revision 0 ACTIVE 상태가 아닙니다"
+assert_database_value 0 "SELECT revision FROM season_calendar_metadata WHERE season_id = '$season_id'::uuid;" \
+  "복원된 시즌 이름이 백업 시점의 revision 0이 아닙니다"
+assert_database_value "$generation_a:ACTIVE" \
+  "SELECT credential_generation || ':' || status FROM calendar_subscription WHERE id = '$subscription_id'::uuid;" \
+  "복원된 구독이 세대 A의 ACTIVE 상태가 아닙니다"
 assert_public_not_found "$token_t1"
 echo "복원 직후 세대 A 구독과 토큰의 본문 없는 일반 404를 확인했습니다."
 assert_recovery_blocked \
-  --header 'Content-Type: application/json' \
-  --data-binary "@$project_directory/contracts/examples/subscription-create.json" \
+  --json "@$examples/subscription-create.json" \
   "$base_url/internal/api/v1/subscriptions"
 assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인했습니다."
@@ -411,15 +406,12 @@ running_before_stop=$(docker inspect --format '{{.State.Running}}' "$container_i
 echo "Compose의 35초 종료 유예 설정으로 애플리케이션을 중지합니다."
 "${compose[@]}" stop app
 
-container_status=$(docker inspect --format '{{.State.Status}}' "$container_id")
+container_state=$(docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.State.ExitCode}}' "$container_id")
+read -r container_status oom_killed exit_code <<< "$container_state"
 [[ "$container_status" == exited ]] \
   || fail "애플리케이션 컨테이너가 종료 상태가 아닙니다: $container_status"
-
-oom_killed=$(docker inspect --format '{{.State.OOMKilled}}' "$container_id")
 [[ "$oom_killed" == false ]] \
   || fail "애플리케이션 컨테이너가 OOM으로 종료되었습니다."
-
-exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_id")
 case "$exit_code" in
   0 | 143) ;;
   *) fail "애플리케이션 컨테이너가 정상 종료 코드 0 또는 143이 아닌 $exit_code로 끝났습니다." ;;
