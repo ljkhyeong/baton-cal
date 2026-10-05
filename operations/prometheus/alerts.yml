@@ -35,6 +35,19 @@ groups:
         annotations:
           summary: CAL 시즌 잠금 획득 지연
           description: 최근 5분 평균 잠금 획득 시간이 1초를 넘었습니다. 시즌별 동시 수신량을 확인합니다.
+      - alert: CalInternalAuthenticationFailed
+        expr: sum(increase(baton_cal_internal_authentication_total{job="baton-cal",result="unauthorized"}[5m])) >= 3
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: CAL 내부 API 인증 실패 반복
+          description: 내부 API 요청이 Bearer 인증에 계속 실패해 일정 전달이 멈췄을 수 있습니다. BATON의 CAL 토큰과 회전 상태를 확인합니다.
+      - alert: CalIngestionRejected
+        expr: sum(increase(http_server_requests_seconds_count{job="baton-cal",uri=~"/internal/api/v1/(schedule-snapshots(/batch)?|seasons/.+/calendar-metadata)",status=~"400|409|413"}[15m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: CAL 일정·시즌 이름 수신 거부
+          description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
       - alert: CalTlsFailed
         expr: probe_success{job="baton-cal-tls"} == 0 or up{job="baton-cal-tls"} == 0
         for: 5m

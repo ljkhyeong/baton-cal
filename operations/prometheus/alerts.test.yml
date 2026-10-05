@@ -81,3 +81,55 @@ tests:
     alert_rule_test:
       - {eval_time: 11m, alertname: CalTlsFailed, exp_alerts: []}
       - {eval_time: 11m, alertname: CalCertificateExpiresSoon, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'baton_cal_internal_authentication_total{job="baton-cal",instance="app:8081",result="unauthorized"}'
+        values: '0+2x15'
+      - series: 'baton_cal_internal_authentication_total{job="baton-cal",instance="app:8081",result="previous"}'
+        values: '0+5x15'
+    alert_rule_test:
+      - {eval_time: 3m, alertname: CalInternalAuthenticationFailed, exp_alerts: []}
+      - eval_time: 12m
+        alertname: CalInternalAuthenticationFailed
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: CAL 내부 API 인증 실패 반복
+              description: 내부 API 요청이 Bearer 인증에 계속 실패해 일정 전달이 멈췄을 수 있습니다. BATON의 CAL 토큰과 회전 상태를 확인합니다.
+  - interval: 1m
+    input_series:
+      # 5분에 2회 정도의 산발적인 잘못된 요청은 토큰 설정 오류로 보지 않는다.
+      - series: 'baton_cal_internal_authentication_total{job="baton-cal",instance="app:8081",result="unauthorized"}'
+        values: '0+0.4x15'
+    alert_rule_test:
+      - {eval_time: 12m, alertname: CalInternalAuthenticationFailed, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots",status="409"}'
+        values: '0 0 1+0x25'
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="PUT",uri="/internal/api/v1/subscriptions/{subscriptionId}",status="409"}'
+        values: '0+1x27'
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots/batch",status="200"}'
+        values: '0+1x27'
+    alert_rule_test:
+      - {eval_time: 1m, alertname: CalIngestionRejected, exp_alerts: []}
+      - eval_time: 3m
+        alertname: CalIngestionRejected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: CAL 일정·시즌 이름 수신 거부
+              description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+      - {eval_time: 20m, alertname: CalIngestionRejected, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="PUT",uri="/internal/api/v1/seasons/{seasonId}/calendar-metadata",status="400"}'
+        values: '0 1+0x5'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CalIngestionRejected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: CAL 일정·시즌 이름 수신 거부
+              description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.

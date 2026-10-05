@@ -21,7 +21,9 @@ import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -125,6 +127,39 @@ class OperationalHttpTest @Autowired constructor(
 
         mockMvc.perform(get("/actuator/info"))
             .andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `알림 규칙이 쓰는 내부 인증 실패와 수신 거부 지표를 노출한다`() {
+        val emptySnapshot = { request: MockHttpServletRequestBuilder ->
+            request.contentType(MediaType.APPLICATION_JSON).content("{}")
+        }
+        mockMvc.perform(emptySnapshot(post("/internal/api/v1/schedule-snapshots")))
+            .andExpect(status().isUnauthorized)
+        mockMvc.perform(emptySnapshot(authorizedPost("/internal/api/v1/schedule-snapshots")))
+            .andExpect(status().isBadRequest)
+        mockMvc.perform(
+            put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
+                .bearer()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"),
+        )
+            .andExpect(status().isBadRequest)
+
+        // operations/prometheus/alerts.yml의 CalInternalAuthenticationFailed·CalIngestionRejected가 쓰는 지표다.
+        val metrics = mockMvc.perform(get("/actuator/prometheus")).andReturn().response.contentAsString.lines()
+        assertThat(metrics).anySatisfy {
+            assertThat(it).startsWith("baton_cal_internal_authentication_total{").contains("result=\"unauthorized\"")
+        }
+        for (uri in listOf(
+            "/internal/api/v1/schedule-snapshots",
+            "/internal/api/v1/seasons/{seasonId}/calendar-metadata",
+        )) {
+            assertThat(metrics).anySatisfy {
+                assertThat(it).startsWith("http_server_requests_seconds_count{")
+                    .contains("method=\"", "status=\"400\"", "uri=\"$uri\"")
+            }
+        }
     }
 
     @Test
