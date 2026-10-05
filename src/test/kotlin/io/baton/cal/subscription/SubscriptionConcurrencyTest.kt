@@ -6,6 +6,7 @@ import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.anyArg
 import io.baton.cal.support.runConcurrently
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.ConflictException
@@ -19,7 +20,6 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doCallRealMethod
 import org.mockito.Mockito.doThrow
@@ -52,9 +52,9 @@ class SubscriptionConcurrencyTest @Autowired constructor(
     @ValueSource(booleans = [false, true])
     fun `같은 ID의 동시 생성은 한 자격 증명만 저장하고 다른 시즌 재사용을 거부한다`(differentSeason: Boolean) {
         val otherSeasonId = UUID.randomUUID()
-        val seed = service.create(SEASON_ID)
+        // 두 시즌의 투영을 미리 만들어 동시 생성이 구독 저장 지점에서만 경합하게 한다.
+        service.create(SEASON_ID)
         service.create(otherSeasonId)
-        val matcherPlaceholder = requireNotNull(repository.findById(seed.subscriptionId))
         val subscriptionId = UUID.randomUUID()
         val bothInserting = CountDownLatch(2)
         doAnswer { invocation ->
@@ -63,7 +63,7 @@ class SubscriptionConcurrencyTest @Autowired constructor(
                 "두 구독 생성 요청이 저장 지점에 도달하지 못했습니다"
             }
             invocation.callRealMethod()
-        }.`when`(repository).insert(any(CalendarSubscriptionRow::class.java) ?: matcherPlaceholder)
+        }.`when`(repository).insert(anyArg(CalendarSubscriptionRow::class.java, PLACEHOLDER_ROW))
 
         val outcomes = runConcurrently(
             { runCatching { service.create(SEASON_ID, subscriptionId) } },
@@ -217,6 +217,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 
     private companion object {
         const val TIMEOUT_SECONDS = 10L
+        val PLACEHOLDER_ROW =
+            CalendarSubscriptionRow(UUID(0, 0), UUID(0, 0), "", UUID(0, 0), CalendarSubscriptionStatus.ACTIVE)
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     }
 }

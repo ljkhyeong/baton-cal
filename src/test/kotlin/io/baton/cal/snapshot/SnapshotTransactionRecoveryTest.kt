@@ -8,6 +8,7 @@ import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.projection.SeasonCalendarMetadataService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.eqArg
 import io.baton.cal.support.feedProjection
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -84,8 +85,6 @@ class SnapshotTransactionRecoveryTest @Autowired constructor(
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_item")).isEqualTo(expected)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_feed_projection")).isEqualTo(expected)
     }
-
-    private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
 
     private class SimulatedRenderFailure : RuntimeException()
 

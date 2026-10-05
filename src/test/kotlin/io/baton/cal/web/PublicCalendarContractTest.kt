@@ -9,6 +9,7 @@ import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.bearer
 import io.baton.cal.support.createSubscription
+import io.baton.cal.support.eqArg
 import io.micrometer.observation.tck.TestObservationRegistry
 import io.micrometer.observation.tck.TestObservationRegistryAssert
 import org.assertj.core.api.Assertions.assertThat
@@ -326,8 +327,6 @@ class PublicCalendarContractTest @Autowired constructor(
                 .andExpect(content().bytes(byteArrayOf()))
         }
     }
-
-    private fun <T> eqArg(value: T): T = ArgumentMatchers.eq(value) ?: value
 
     companion object {
         const val SEASON_ID = "11111111-1111-1111-1111-111111111111"
