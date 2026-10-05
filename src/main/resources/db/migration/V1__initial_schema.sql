@@ -17,13 +17,6 @@ CREATE TABLE source_event_inbox (
 CREATE INDEX ix_source_event_inbox_item_revision
     ON source_event_inbox (source_item_id, source_revision);
 
--- A transaction takes SELECT ... FOR UPDATE on this row before replacing a
--- season projection. Keeping the lock separate from the optional feed row also
--- serializes the first projection build.
-CREATE TABLE season_projection_lock (
-    season_id UUID PRIMARY KEY
-);
-
 -- 시간 형태마다 사용하는 열이 다르다. 형태와 열 조합은 ck_calendar_item_time_shape가 보장한다.
 CREATE TABLE calendar_item (
     source_item_id UUID PRIMARY KEY,
