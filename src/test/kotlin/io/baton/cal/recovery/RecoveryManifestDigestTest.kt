@@ -1,5 +1,6 @@
 package io.baton.cal.recovery
 
+import io.baton.cal.contract.contractExample
 import io.baton.cal.snapshot.SnapshotFingerprint
 import io.baton.cal.web.ScheduleSnapshotRequest
 import org.assertj.core.api.Assertions.assertThat
@@ -7,8 +8,6 @@ import org.junit.jupiter.api.Test
 import tools.jackson.databind.JsonNode
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.util.UUID
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 
 class RecoveryManifestDigestTest {
     @Test
@@ -33,7 +32,7 @@ class RecoveryManifestDigestTest {
     fun `계약 예시의 수신 지문으로 BATON과 공유하는 복구 다이제스트를 만든다`() {
         // BATON은 같은 예시 값으로 직렬화기를 검증하므로 인코딩이 바뀌면 DB 없이 여기서 실패해야 한다.
         val snapshot = JSON
-            .readValue(example("schedule-snapshot.zoned-cancelled.json"), ScheduleSnapshotRequest::class.java)
+            .readValue(contractExample("schedule-snapshot.zoned-cancelled.json"), ScheduleSnapshotRequest::class.java)
             .toDomain()
         val metadata = exampleNode("season-calendar-metadata.r2.json")
         val expected = exampleNode("recovery-season-state.zoned-cancelled.json")
@@ -50,9 +49,7 @@ class RecoveryManifestDigestTest {
             .isEqualTo(exampleNode("recovery-run-completion.zoned-cancelled.json")["seasonDigest"].asString())
     }
 
-    private fun example(name: String) = Path("contracts/examples", name).readText()
-
-    private fun exampleNode(name: String): JsonNode = JSON.readTree(example(name))
+    private fun exampleNode(name: String): JsonNode = JSON.readTree(contractExample(name))
 
     private companion object {
         val JSON = jacksonObjectMapper()

@@ -1,3 +1,5 @@
+-- 같은 내용을 다른 eventId로 다시 보낸 전달도 모두 남긴다. 같은 원본 개정 번호의 동일성은
+-- 시즌 잠금 안에서 payload_hash로 판정한다.
 CREATE TABLE source_event_inbox (
     event_id UUID PRIMARY KEY,
     payload_hash CHAR(64) NOT NULL,
@@ -9,26 +11,17 @@ CREATE TABLE source_event_inbox (
     CONSTRAINT ck_source_event_inbox_payload_hash
         CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT ck_source_event_inbox_revision
-        CHECK (source_revision BETWEEN 0 AND 2147483647),
-    CONSTRAINT uq_source_event_inbox_item_revision
-        UNIQUE (source_item_id, source_revision)
+        CHECK (source_revision >= 0)
 );
 
-CREATE INDEX ix_source_event_inbox_season_received
-    ON source_event_inbox (season_id, received_at);
+CREATE INDEX ix_source_event_inbox_item_revision
+    ON source_event_inbox (source_item_id, source_revision);
 
--- A transaction takes SELECT ... FOR UPDATE on this row before replacing a
--- season projection. Keeping the lock separate from the optional feed row also
--- serializes the first projection build.
-CREATE TABLE season_projection_lock (
-    season_id UUID PRIMARY KEY
-);
-
+-- 시간 형태마다 사용하는 열이 다르다. 형태와 열 조합은 ck_calendar_item_time_shape가 보장한다.
 CREATE TABLE calendar_item (
     source_item_id UUID PRIMARY KEY,
     season_id UUID NOT NULL,
     revision INTEGER NOT NULL,
-    payload_hash CHAR(64) NOT NULL,
     status VARCHAR(16) NOT NULL,
     summary TEXT NOT NULL,
     description TEXT,
@@ -39,18 +32,24 @@ CREATE TABLE calendar_item (
     starts_at_local TIMESTAMP WITHOUT TIME ZONE,
     ends_at_local TIMESTAMP WITHOUT TIME ZONE,
     zone_id VARCHAR(255),
+    starts_on_date DATE,
+    ends_on_date DATE,
     source_updated_at TIMESTAMPTZ NOT NULL,
     accepted_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT ck_calendar_item_revision
-        CHECK (revision BETWEEN 0 AND 2147483647),
-    CONSTRAINT ck_calendar_item_payload_hash
-        CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+        CHECK (revision >= 0),
     CONSTRAINT ck_calendar_item_status
         CHECK (status IN ('ACTIVE', 'CANCELLED')),
     CONSTRAINT ck_calendar_item_summary
         CHECK (length(summary) > 0),
     CONSTRAINT ck_calendar_item_time_type
-        CHECK (time_type IN ('UTC_INSTANT', 'ZONED_LOCAL')),
+        CHECK (time_type IN (
+            'UTC_INSTANT',
+            'UTC_POINT',
+            'ZONED_LOCAL',
+            'ZONED_LOCAL_POINT',
+            'ALL_DAY'
+        )),
     CONSTRAINT ck_calendar_item_time_shape
         CHECK (
             (
@@ -61,6 +60,19 @@ CREATE TABLE calendar_item (
                 AND starts_at_local IS NULL
                 AND ends_at_local IS NULL
                 AND zone_id IS NULL
+                AND starts_on_date IS NULL
+                AND ends_on_date IS NULL
+            )
+            OR
+            (
+                time_type = 'UTC_POINT'
+                AND starts_at_instant IS NOT NULL
+                AND ends_at_instant IS NULL
+                AND starts_at_local IS NULL
+                AND ends_at_local IS NULL
+                AND zone_id IS NULL
+                AND starts_on_date IS NULL
+                AND ends_on_date IS NULL
             )
             OR
             (
@@ -72,48 +84,93 @@ CREATE TABLE calendar_item (
                 AND ends_at_local > starts_at_local
                 AND zone_id IS NOT NULL
                 AND length(zone_id) > 0
+                AND starts_on_date IS NULL
+                AND ends_on_date IS NULL
+            )
+            OR
+            (
+                time_type = 'ZONED_LOCAL_POINT'
+                AND starts_at_instant IS NULL
+                AND ends_at_instant IS NULL
+                AND starts_at_local IS NOT NULL
+                AND ends_at_local IS NULL
+                AND zone_id IS NOT NULL
+                AND length(zone_id) > 0
+                AND starts_on_date IS NULL
+                AND ends_on_date IS NULL
+            )
+            OR
+            (
+                time_type = 'ALL_DAY'
+                AND starts_at_instant IS NULL
+                AND ends_at_instant IS NULL
+                AND starts_at_local IS NULL
+                AND ends_at_local IS NULL
+                AND zone_id IS NULL
+                AND starts_on_date IS NOT NULL
+                AND ends_on_date IS NOT NULL
+                AND ends_on_date > starts_on_date
             )
         )
 );
 
-CREATE INDEX ix_calendar_item_season_order
-    ON calendar_item (season_id, source_item_id);
+CREATE INDEX ix_calendar_item_season
+    ON calendar_item (season_id);
 
 CREATE TABLE season_feed_projection (
     season_id UUID PRIMARY KEY,
     representation BYTEA NOT NULL,
     etag TEXT NOT NULL,
     last_modified TIMESTAMPTZ NOT NULL,
-    item_count INTEGER NOT NULL,
-    rebuilt_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT ck_season_feed_projection_etag
-        CHECK (length(etag) > 0),
-    CONSTRAINT ck_season_feed_projection_item_count
-        CHECK (item_count >= 0)
+        CHECK (length(etag) > 0)
 );
 
+-- 구독은 시즌 투영을 만든 뒤에만 추가되므로 투영 없는 구독을 DB가 막는다.
 CREATE TABLE calendar_subscription (
     id UUID PRIMARY KEY,
     season_id UUID NOT NULL,
     token_hash CHAR(64) NOT NULL UNIQUE,
+    credential_generation UUID NOT NULL,
     status VARCHAR(16) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    rotated_at TIMESTAMPTZ,
-    revoked_at TIMESTAMPTZ,
     CONSTRAINT ck_calendar_subscription_token_hash
         CHECK (token_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT ck_calendar_subscription_status
         CHECK (status IN ('ACTIVE', 'REVOKED')),
-    CONSTRAINT ck_calendar_subscription_status_timestamp
-        CHECK (
-            (status = 'ACTIVE' AND revoked_at IS NULL)
-            OR (status = 'REVOKED' AND revoked_at IS NOT NULL)
-        ),
-    CONSTRAINT ck_calendar_subscription_rotated_at
-        CHECK (rotated_at IS NULL OR rotated_at >= created_at),
-    CONSTRAINT ck_calendar_subscription_revoked_at
-        CHECK (revoked_at IS NULL OR revoked_at >= created_at)
+    CONSTRAINT fk_calendar_subscription_projection
+        FOREIGN KEY (season_id)
+        REFERENCES season_feed_projection (season_id)
 );
 
-CREATE INDEX ix_calendar_subscription_season_status
-    ON calendar_subscription (season_id, status);
+CREATE TABLE season_calendar_metadata (
+    season_id UUID PRIMARY KEY,
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 512),
+    accepted_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE recovery_season_manifest (
+    recovery_id UUID NOT NULL,
+    season_id UUID NOT NULL,
+    item_count INTEGER NOT NULL CHECK (item_count >= 0),
+    item_digest CHAR(64) NOT NULL CHECK (item_digest ~ '^[0-9a-f]{64}$'),
+    metadata_revision INTEGER,
+    metadata_digest CHAR(64),
+    verified_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (recovery_id, season_id),
+    CONSTRAINT ck_recovery_season_manifest_metadata
+        CHECK (
+            (metadata_revision IS NULL AND metadata_digest IS NULL)
+            OR (
+                metadata_revision >= 0
+                AND metadata_digest ~ '^[0-9a-f]{64}$'
+            )
+        )
+);
+
+CREATE TABLE recovery_run_completion (
+    recovery_id UUID PRIMARY KEY,
+    season_count INTEGER NOT NULL CHECK (season_count >= 0),
+    season_digest CHAR(64) NOT NULL CHECK (season_digest ~ '^[0-9a-f]{64}$'),
+    completed_at TIMESTAMPTZ NOT NULL
+);

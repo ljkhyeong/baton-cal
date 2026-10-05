@@ -1,12 +1,19 @@
 package io.baton.cal.web
 
+import io.baton.cal.contract.contractExample
 import com.jayway.jsonpath.JsonPath
 import com.zaxxer.hikari.HikariDataSource
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
+import io.baton.cal.support.SNAPSHOT_PATH
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.authorizedPost
-import io.baton.cal.support.bearer
+import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.createSubscription
+import io.baton.cal.support.ingestSnapshot
+import io.baton.cal.support.jsonContent
+import io.baton.cal.support.postSnapshot
+import io.baton.cal.support.seasonCalendarMetadataRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -21,17 +28,12 @@ import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import kotlin.io.path.readBytes
-import kotlin.io.path.readText
-import java.nio.file.Path
 import java.sql.Connection
 import java.time.Duration
 import org.hamcrest.Matchers.containsString
@@ -60,10 +62,8 @@ class OperationalHttpTest @Autowired constructor(
     fun `연결 풀이 고갈되면 503을 반환하고 연결 반환 후 구독을 정상 처리한다`() {
         val token: String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.token")
         val subscriptionId = "cccccccc-cccc-cccc-cccc-cccccccccccc"
-        fun createRequest() = put("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId)
-            .bearer()
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("""{"seasonId":"$SEASON_ID"}""")
+        fun createRequest() = authorizedPut("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId)
+            .jsonContent("""{"seasonId":"$SEASON_ID"}""")
 
         val heldConnections = mutableListOf<Connection>()
         try {
@@ -72,7 +72,7 @@ class OperationalHttpTest @Autowired constructor(
                 mockMvc.perform(request)
                     .andExpect(status().isServiceUnavailable)
                     .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                    .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
                     .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
                     .andExpect(jsonPath("$.message").value("service is temporarily busy"))
             }
@@ -93,16 +93,6 @@ class OperationalHttpTest @Autowired constructor(
         assertThat(jdbcClient.sql("SHOW lock_timeout").query(String::class.java).single()).isEqualTo("5s")
         assertThat(jdbcClient.sql("SHOW statement_timeout").query(String::class.java).single()).isEqualTo("30s")
         assertThat(transactionProperties.defaultTimeout).isEqualTo(Duration.ofSeconds(30))
-    }
-
-    @Test
-    fun `one-time subscription credentials cannot be stored by clients`() {
-        // 구독 생성 응답의 no-store는 createSubscription에서 확인한다.
-        val subscriptionId: String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.subscriptionId")
-
-        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
-            .andExpect(status().isOk)
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
     }
 
     @Test
@@ -131,19 +121,11 @@ class OperationalHttpTest @Autowired constructor(
 
     @Test
     fun `알림 규칙이 쓰는 내부 인증 실패와 수신 거부 지표를 노출한다`() {
-        val emptySnapshot = { request: MockHttpServletRequestBuilder ->
-            request.contentType(MediaType.APPLICATION_JSON).content("{}")
-        }
-        mockMvc.perform(emptySnapshot(post("/internal/api/v1/schedule-snapshots")))
+        mockMvc.perform(post(SNAPSHOT_PATH).jsonContent("{}"))
             .andExpect(status().isUnauthorized)
-        mockMvc.perform(emptySnapshot(authorizedPost("/internal/api/v1/schedule-snapshots")))
+        mockMvc.postSnapshot("{}")
             .andExpect(status().isBadRequest)
-        mockMvc.perform(
-            put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
-                .bearer()
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"),
-        )
+        mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, "{}"))
             .andExpect(status().isBadRequest)
 
         // operations/prometheus/alerts.yml의 CalInternalAuthenticationFailed·CalIngestionRejected가 쓰는 지표다.
@@ -151,10 +133,7 @@ class OperationalHttpTest @Autowired constructor(
         assertThat(metrics).anySatisfy {
             assertThat(it).startsWith("baton_cal_internal_authentication_total{").contains("result=\"unauthorized\"")
         }
-        for (uri in listOf(
-            "/internal/api/v1/schedule-snapshots",
-            "/internal/api/v1/seasons/{seasonId}/calendar-metadata",
-        )) {
+        for (uri in listOf(SNAPSHOT_PATH, SEASON_CALENDAR_METADATA_PATH)) {
             assertThat(metrics).anySatisfy {
                 assertThat(it).startsWith("http_server_requests_seconds_count{")
                     .contains("method=\"", "status=\"400\"", "uri=\"$uri\"")
@@ -164,18 +143,9 @@ class OperationalHttpTest @Autowired constructor(
 
     @Test
     fun `JSON 문서 상한 경계는 허용하고 한 바이트 초과는 413을 반환한다`() {
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH)),
-        )
-            .andExpect(status().isOk)
+        mockMvc.ingestSnapshot(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH))
 
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH + 1)),
-        )
+        mockMvc.postSnapshot(snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH + 1))
             .andExpect(status().isContentTooLarge)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
@@ -184,7 +154,7 @@ class OperationalHttpTest @Autowired constructor(
 
     @Test
     fun `JSON 구조 자원 제한을 넘으면 413을 반환한다`() {
-        val validSnapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readText()
+        val validSnapshot = contractExample("schedule-snapshot.utc-active.json")
         val deepValue = "[".repeat(MAX_JSON_NESTING_DEPTH + 1) + "0" + "]".repeat(MAX_JSON_NESTING_DEPTH + 1)
         val deeplyNestedSnapshot = validSnapshot
             .replace("\"time\": {", "\"time\": {\n    \"padding\": $deepValue,")
@@ -203,11 +173,7 @@ class OperationalHttpTest @Autowired constructor(
         )
 
         payloads.forEach { payload ->
-            mockMvc.perform(
-                authorizedPost("/internal/api/v1/schedule-snapshots")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(payload),
-            )
+            mockMvc.postSnapshot(payload)
                 .andExpect(status().isContentTooLarge)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
@@ -223,11 +189,7 @@ class OperationalHttpTest @Autowired constructor(
             """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA"}""",
             """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA=="}""",
         ).forEach { payload ->
-            mockMvc.perform(
-                authorizedPost("/internal/api/v1/subscriptions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(payload),
-            )
+            mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions").jsonContent(payload))
                 .andExpect(status().isBadRequest)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -243,9 +205,10 @@ class OperationalHttpTest @Autowired constructor(
             .doesNotContain("%r", "%U", "%q")
     }
 
-    private fun snapshotDocumentOfSize(size: Int): ByteArray {
-        val snapshot = Path.of("contracts/examples/schedule-snapshot.utc-active.json").readBytes()
-        return ByteArray(size - snapshot.size) { ' '.code.toByte() } + snapshot
+    // 예시 앞에 ASCII 공백을 붙여 UTF-8 바이트 길이를 맞춘다.
+    private fun snapshotDocumentOfSize(size: Int): String {
+        val snapshot = contractExample("schedule-snapshot.utc-active.json")
+        return " ".repeat(size - snapshot.encodeToByteArray().size) + snapshot
     }
 
     companion object {

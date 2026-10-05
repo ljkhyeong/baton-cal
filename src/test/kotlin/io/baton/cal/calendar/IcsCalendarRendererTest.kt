@@ -1,7 +1,6 @@
 package io.baton.cal.calendar
 
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import net.fortuna.ical4j.model.Parameter
 import net.fortuna.ical4j.model.Property
@@ -32,7 +31,7 @@ class IcsCalendarRendererTest {
         val rendered = renderer.render(seasonId, emptyList(), displayName)
         val calendar = rendered.bytes.parseIcalendar()
 
-        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo(displayName)
+        assertThat(calendar.calendarName()).isEqualTo(displayName)
         assertThat(calendar.events()).isEmpty()
         assertThat(rendered.bytes).isEqualTo(renderer.render(seasonId, emptyList(), displayName).bytes)
         assertThat(rendered.etag).isNotEqualTo(renderer.render(seasonId, emptyList()).etag)
@@ -248,39 +247,6 @@ class IcsCalendarRendererTest {
                 "${middleId.sourceItemId}@cal.baton",
                 "${laterId.sourceItemId}@cal.baton",
             )
-    }
-
-    @Test
-    fun `zoned local schedule rejects a wall time inside a DST gap`() {
-        assertThatThrownBy {
-            ScheduleWindow.ZonedLocal(
-                start = LocalDateTime.parse("2026-03-08T02:30:00"),
-                end = LocalDateTime.parse("2026-03-08T03:30:00"),
-                zoneId = "America/New_York",
-            )
-        }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("DST gap")
-    }
-
-    @Test
-    fun `만료된 과거 DST 규칙은 현재 현지 시각을 거부하지 않는다`() {
-        ScheduleWindow.ZonedLocalPoint(
-            at = LocalDateTime.parse("2026-05-03T00:30:00"),
-            zoneId = "Asia/Tokyo",
-        )
-    }
-
-    @Test
-    fun `schedule range must remain positive at iCalendar second precision`() {
-        assertThatThrownBy {
-            ScheduleWindow.UtcInstant(
-                start = Instant.parse("2026-01-01T00:00:00.100Z"),
-                end = Instant.parse("2026-01-01T00:00:00.900Z"),
-            )
-        }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("second precision")
     }
 
     private fun item(

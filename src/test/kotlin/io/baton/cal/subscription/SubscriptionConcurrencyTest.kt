@@ -11,8 +11,8 @@ import io.baton.cal.support.runConcurrently
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.ConflictException
 import io.baton.cal.web.SubscriptionCredential
+import java.util.concurrent.CyclicBarrier
 import java.util.UUID
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
@@ -56,12 +56,10 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         service.create(SEASON_ID)
         service.create(otherSeasonId)
         val subscriptionId = UUID.randomUUID()
-        val bothInserting = CountDownLatch(2)
+        // 두 요청이 모두 저장 지점에 도달한 뒤 함께 저장을 시도한다.
+        val bothInserting = CyclicBarrier(2)
         doAnswer { invocation ->
-            bothInserting.countDown()
-            check(bothInserting.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                "두 구독 생성 요청이 저장 지점에 도달하지 못했습니다"
-            }
+            bothInserting.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             invocation.callRealMethod()
         }.`when`(repository).insert(anyArg(CalendarSubscriptionRow::class.java, PLACEHOLDER_ROW))
 
@@ -120,16 +118,15 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         synchronizeFirstTwoReads(initial.subscriptionId)
 
         val outcomes = runConcurrently(
-            { attempt { Rotated(service.rotate(initial.subscriptionId)) } },
-            { attempt { Rotated(service.rotate(initial.subscriptionId)) } },
+            { runCatching { service.rotate(initial.subscriptionId) } },
+            { runCatching { service.rotate(initial.subscriptionId) } },
         )
 
-        val winner = outcomes.filterIsInstance<Rotated>().single()
-        assertSubscriptionConflict(outcomes.filterIsInstance<Failed>().single().error)
-        assertThat(repository.findById(initial.subscriptionId)?.tokenHash)
-            .isEqualTo(tokenCodec.hash(winner.credential.token))
+        val winner = outcomes.single { it.isSuccess }.getOrThrow()
+        assertSubscriptionConflict(outcomes.single { it.isFailure }.exceptionOrNull())
+        assertThat(repository.findById(initial.subscriptionId)?.tokenHash).isEqualTo(tokenCodec.hash(winner.token))
         assertThat(service.findFeed(initial.token)).isNull()
-        assertThat(service.findFeed(winner.credential.token)).isNotNull()
+        assertThat(service.findFeed(winner.token)).isNotNull()
     }
 
     @Test
@@ -137,27 +134,18 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         val initial = service.create(SEASON_ID)
         synchronizeFirstTwoReads(initial.subscriptionId)
 
-        val outcomes = runConcurrently(
-            { attempt { Rotated(service.rotate(initial.subscriptionId)) } },
-            {
-                attempt {
-                    service.revoke(initial.subscriptionId)
-                    Revoked
-                }
-            },
+        val (rotation, revocation) = runConcurrently<Result<SubscriptionCredential?>>(
+            { runCatching { service.rotate(initial.subscriptionId) } },
+            { runCatching { service.revoke(initial.subscriptionId).let { null } } },
         )
 
-        assertSubscriptionConflict(outcomes.filterIsInstance<Failed>().single().error)
+        assertSubscriptionConflict(listOf(rotation, revocation).single { it.isFailure }.exceptionOrNull())
 
         when (repository.findById(initial.subscriptionId)?.status) {
-            CalendarSubscriptionStatus.ACTIVE -> {
-                val winner = outcomes.filterIsInstance<Rotated>().single()
-                assertThat(service.findFeed(winner.credential.token)).isNotNull()
-            }
+            CalendarSubscriptionStatus.ACTIVE ->
+                assertThat(service.findFeed(checkNotNull(rotation.getOrThrow()).token)).isNotNull()
 
-            CalendarSubscriptionStatus.REVOKED -> {
-                assertThat(outcomes).anyMatch { it is Revoked }
-            }
+            CalendarSubscriptionStatus.REVOKED -> assertThat(revocation.isSuccess).isTrue()
 
             null -> throw AssertionError("subscription disappeared during the race")
         }
@@ -182,38 +170,23 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             }
     }
 
+    // 두 트랜잭션이 같은 초기 상태를 읽은 뒤 갱신하도록 처음 두 조회를 함께 진행시킨다.
     private fun synchronizeFirstTwoReads(subscriptionId: UUID) {
-        val bothRead = CountDownLatch(2)
+        val bothRead = CyclicBarrier(2)
         val readCount = AtomicInteger()
 
         doAnswer { invocation ->
             val row = invocation.callRealMethod() as CalendarSubscriptionRow?
-            if (readCount.incrementAndGet() <= 2) {
-                bothRead.countDown()
-                check(bothRead.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                    "both subscription transactions did not read the same initial state"
-                }
-            }
+            if (readCount.incrementAndGet() <= 2) bothRead.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             row
         }.`when`(repository).findById(subscriptionId)
     }
 
-    private fun attempt(operation: () -> OperationOutcome): OperationOutcome =
-        runCatching(operation).fold(onSuccess = { it }, onFailure = ::Failed)
-
-    private fun assertSubscriptionConflict(error: Throwable) {
+    private fun assertSubscriptionConflict(error: Throwable?) {
         assertThat(error).isInstanceOfSatisfying(ConflictException::class.java) {
             assertThat(it.code).isEqualTo("SUBSCRIPTION_CONFLICT")
         }
     }
-
-    private sealed interface OperationOutcome
-
-    private data class Rotated(val credential: SubscriptionCredential) : OperationOutcome
-
-    private data object Revoked : OperationOutcome
-
-    private data class Failed(val error: Throwable) : OperationOutcome
 
     private companion object {
         const val TIMEOUT_SECONDS = 10L

@@ -28,12 +28,7 @@ class RecoveryManifestRepository(
         .single()
 
     fun lockRecoveryRun(recoveryId: UUID) {
-        jdbcClient.sql(
-            "SELECT pg_advisory_xact_lock(hashtextextended(CAST(:recoveryId AS TEXT), CAST(0 AS BIGINT)))",
-        )
-            .param("recoveryId", recoveryId.toString())
-            .query { _, _ -> true }
-            .single()
+        jdbcClient.lockUntilTransactionEnds(AdvisoryLockScope.RECOVERY_RUN, recoveryId)
     }
 
     /** 시즌의 현재 항목마다 채택한 개정 번호를 처음 수신한 스냅샷 지문과 함께 조회한다. */

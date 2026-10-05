@@ -24,8 +24,6 @@ spring:
       connection-init-sql: >-
         SET lock_timeout TO '${DATABASE_LOCK_TIMEOUT:5s}';
         SET statement_timeout TO '${DATABASE_STATEMENT_TIMEOUT:30s}'
-  flyway:
-    enabled: true
   transaction:
     default-timeout: ${DATABASE_TRANSACTION_TIMEOUT:30s}
 

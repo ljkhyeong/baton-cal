@@ -116,7 +116,7 @@ class CalPropertiesTest {
     }
 
     @Test
-    fun `구독 세대는 기존 데이터용 초기값을 쓰고 모든 자릿수가 0인 UUID는 거부한다`() {
+    fun `구독 세대는 기본값을 쓰고 모든 자릿수가 0인 UUID는 거부한다`() {
         val token = "secret-internal-token-that-is-long-enough"
         val configuredGeneration = UUID.fromString("11111111-1111-1111-1111-111111111111")
 

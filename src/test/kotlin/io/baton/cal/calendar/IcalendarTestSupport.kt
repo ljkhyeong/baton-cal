@@ -20,6 +20,8 @@ internal fun goldenIcalendarFixture(name: String): ByteArray = Base64.Mime.decod
     Path("contracts/golden", name).readText(),
 )
 
+internal fun Calendar.calendarName(): String = propertyList.getRequired<Property>("X-WR-CALNAME").value
+
 internal fun Calendar.events(): List<VEvent> = componentList.get(Component.VEVENT)
 
 internal fun Calendar.requiredEvent(): VEvent = componentList.getRequired(Component.VEVENT)

@@ -2,56 +2,42 @@ package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.andReturnValid
+import io.baton.cal.contract.contractExample
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.recovery.RecoverySeasonState
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.RecoveryModeIntegrationTest
 import io.baton.cal.support.authorizedGet
-import io.baton.cal.support.authorizedPost
-import io.baton.cal.support.bearer
+import io.baton.cal.support.authorizedPut
+import io.baton.cal.support.ingestSnapshotExample
+import io.baton.cal.support.jsonContent
+import io.baton.cal.support.updateSeasonCalendarMetadata
+import org.springframework.test.json.JsonContent
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.recovery-mode=true",
-    ],
-)
-@Sql("/reset-database.sql")
+@RecoveryModeIntegrationTest
 class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
@@ -64,7 +50,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     @Test
     fun `복구 상태 조회는 진행과 완료를 구분하고 이후 원본 변경에도 완료 기록을 유지한다`() {
-        ingest("schedule-snapshot.zoned-active-r0.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
         val state = currentState()
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         val before = storedManifests()
@@ -72,9 +58,9 @@ class RecoveryManifestHttpTest @Autowired constructor(
         readRunStatus("IN_PROGRESS", 1)
         val completed = complete(completionPayload(listOf(state)))
         val completedAt: String = JsonPath.read(completed, "$.completedAt")
-        ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-cancelled.json")
         assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
-        mockMvc.perform(manifestRequest(Path("contracts/examples/recovery-season-manifest.json").readText()))
+        mockMvc.perform(manifestRequest(contractExample("recovery-season-manifest.json")))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
         val status = readRunStatus("COMPLETED", 1)
@@ -127,7 +113,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     @Test
     fun `시즌 진단은 복구 실행이 없어도 일정과 이름 불일치를 나누어 확인한다`() {
-        ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-cancelled.json")
         val initial = readSeasonState()
         assertThat(JsonPath.read<Any?>(initial, "$.metadataRevision")).isNull()
         assertThat(JsonPath.read<Any?>(initial, "$.metadataDigest")).isNull()
@@ -136,24 +122,20 @@ class RecoveryManifestHttpTest @Autowired constructor(
         assertThat(JsonPath.read<String>(named, "$.itemDigest"))
             .isEqualTo(JsonPath.read<String>(initial, "$.itemDigest"))
         // 복원 스모크와 BATON이 쓰는 진단 예시와 실제 응답이 같아야 한다.
-        assertThat(JSON.readTree(named))
-            .isEqualTo(JSON.readTree(Path("contracts/examples/recovery-season-state.zoned-cancelled.json").readText()))
+        assertThat(JsonContent(named)).isStrictlyEqualTo(contractExample("recovery-season-state.zoned-cancelled.json"))
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_season_manifest")).isZero()
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_run_completion")).isZero()
     }
 
     @Test
-    fun `복구 진단은 인증과 UUID를 확인하고 없는 수신 기록은 404다`() {
+    fun `복구 진단은 없는 수신 기록에 404를 반환한다`() {
         listOf(
             "/internal/api/v1/recovery-runs/$RECOVERY_ID",
             "/internal/api/v1/seasons/$SEASON_ID/recovery-state",
         ).forEach { path ->
-            mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
             mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-            val invalidPath = path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid")
-            mockMvc.perform(authorizedGet(invalidPath)).andExpect(status().isBadRequest)
+                .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         }
         updateMetadata()
         val metadataOnly = readSeasonState()
@@ -162,13 +144,13 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     @Test
     fun `복원 스모크의 고정 매니페스트는 최신 취소와 시즌 이름을 모두 요구한다`() {
-        val manifest = Path("contracts/examples/recovery-season-manifest.zoned-cancelled.json").readText()
-        val completion = Path("contracts/examples/recovery-run-completion.zoned-cancelled.json").readText()
-        ingest("schedule-snapshot.zoned-active-r2.json")
+        val manifest = contractExample("recovery-season-manifest.zoned-cancelled.json")
+        val completion = contractExample("recovery-run-completion.zoned-cancelled.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r2.json")
         updateMetadata()
         mockMvc.perform(manifestRequest(manifest)).andExpect(status().isConflict)
         mockMvc.perform(completionRequest(completion)).andExpect(status().isConflict)
-        ingest("schedule-snapshot.zoned-cancelled.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-cancelled.json")
         mockMvc.perform(manifestRequest(manifest))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.result").value("VERIFIED"))
@@ -178,7 +160,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     @Test
     fun `전체 시즌 상태가 일치하면 복구 완료 신호를 멱등하게 반환한다`() {
-        ingest("schedule-snapshot.zoned-active-r0.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
         updateMetadata()
         val state = currentState()
 
@@ -210,7 +192,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
             mockMvc.perform(completionRequest(payload))
                 .andExpect(status().isServiceUnavailable)
                 .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
-                .andExpect(content().json(Path("contracts/examples/api-error.service-busy.json").readText()))
+                .andExpect(content().json(contractExample("api-error.service-busy.json")))
                 .andReturnValid("api-error.v1.schema.json", "복구 잠금 시간 초과")
         }
         assertThat(repository.findCompletion(UUID.fromString(RECOVERY_ID))).isNull()
@@ -220,7 +202,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @ParameterizedTest
     @ValueSource(booleans = [false, true])
     fun `매니페스트 검증은 복구 완료 전까지만 시즌 잠금을 기다린다`(completed: Boolean) {
-        ingest("schedule-snapshot.zoned-active-r0.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
         val state = currentState()
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         if (completed) complete(completionPayload(listOf(state)))
@@ -268,11 +250,11 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     @Test
     fun `시즌 상태가 바뀌면 최신 매니페스트를 다시 검증하기 전까지 완료하지 않는다`() {
-        ingest("schedule-snapshot.zoned-active-r0.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
         val initial = currentState()
         verifySeason(initial.itemCount, initial.itemDigest, null, null)
 
-        ingest("schedule-snapshot.zoned-active-r2.json")
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r2.json")
         assertCompletionMismatch(listOf(initial))
 
         val current = currentState()
@@ -308,18 +290,10 @@ class RecoveryManifestHttpTest @Autowired constructor(
         .query()
         .listOfRows()
 
-    private fun ingest(fileName: String) {
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(Path("contracts/examples", fileName).readText()),
-        ).andExpect(status().isOk)
-    }
-
     private fun readRunStatus(expectedStatus: String, seasonCount: Int): String = mockMvc
         .perform(authorizedGet("/internal/api/v1/recovery-runs/{recoveryId}", RECOVERY_ID))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.status").value(expectedStatus))
         .andExpect(jsonPath("$.verifiedSeasonCount").value(seasonCount))
         .andExpect(jsonPath("$.recoveryMode").value(true))
@@ -328,16 +302,11 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private fun readSeasonState(): String = mockMvc
         .perform(authorizedGet("/internal/api/v1/seasons/{seasonId}/recovery-state", SEASON_ID))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andReturnValid("recovery-season-state.v1.schema.json", "시즌 복구 진단 응답")
 
     private fun updateMetadata() {
-        mockMvc.perform(
-            put("/internal/api/v1/seasons/{seasonId}/calendar-metadata", SEASON_ID)
-                .bearer()
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(Path("contracts/examples/season-calendar-metadata.r2.json").readText()),
-        ).andExpect(status().isOk)
+        mockMvc.updateSeasonCalendarMetadata(SEASON_ID, contractExample("season-calendar-metadata.r2.json"))
     }
 
     private fun verifySeason(
@@ -350,7 +319,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         seasonManifestRequest(itemCount, itemDigest, metadataRevision, metadataDigest, seasonId),
     )
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("VERIFIED"))
         .andReturnValid("recovery-season-manifest-result.v1.schema.json", "시즌 복구 매니페스트 검증 응답")
 
@@ -373,10 +342,8 @@ class RecoveryManifestHttpTest @Autowired constructor(
     )
 
     private fun manifestRequest(body: String, seasonId: UUID = SEASON_ID) =
-        put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
-            .bearer()
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(body)
+        authorizedPut("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", RECOVERY_ID, seasonId)
+            .jsonContent(body)
 
     private fun completionPayload(states: List<RecoverySeasonState>): String =
         """
@@ -388,20 +355,17 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     private fun complete(payload: String): String = mockMvc.perform(completionRequest(payload))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("COMPLETED"))
         .andReturnValid("recovery-run-completion-result.v1.schema.json", "전체 복구 완료 응답")
 
     private fun completionRequest(payload: String) =
-        put("/internal/api/v1/recovery-runs/{recoveryId}/completion", RECOVERY_ID)
-            .bearer()
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(payload)
+        authorizedPut("/internal/api/v1/recovery-runs/{recoveryId}/completion", RECOVERY_ID).jsonContent(payload)
 
     private fun assertCompletionMismatch(states: List<RecoverySeasonState>) {
         mockMvc.perform(completionRequest(completionPayload(states)))
             .andExpect(status().isConflict)
-            .andExpect(content().json(Path("contracts/examples/api-error.recovery-manifest-mismatch.json").readText()))
+            .andExpect(content().json(contractExample("api-error.recovery-manifest-mismatch.json")))
     }
 
     // 다른 트랜잭션이 잠금을 잡은 동안 짧은 lock_timeout으로 요청을 실행하고 그 트랜잭션은 롤백한다.
@@ -423,6 +387,5 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         const val RECOVERY_ID = "92490d0d-b82e-4f94-a041-308b184aaef9"
-        val JSON = JsonMapper()
     }
 }

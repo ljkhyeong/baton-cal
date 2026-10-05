@@ -12,7 +12,7 @@ import java.util.UUID
 /**
  * `calendar_item` 행이다. 시간 형태마다 사용하는 열이 다르므로 [ScheduleWindow]와의 변환을 이 파일에서만 한다.
  * 새 시간 형태를 추가하면 저장([from])과 복원([toCalendarItem])을 함께 고치고 `ck_calendar_item_time_shape`를
- * 새 마이그레이션으로 갱신한다.
+ * 마이그레이션에서 함께 갱신한다.
  */
 data class CalendarItemRow(
     val sourceItemId: UUID,

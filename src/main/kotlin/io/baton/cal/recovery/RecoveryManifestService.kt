@@ -11,7 +11,6 @@ import io.baton.cal.web.RecoveryRunCompletionResponse
 import io.baton.cal.web.RecoveryRunStatus
 import io.baton.cal.web.RecoveryRunStatusResponse
 import io.baton.cal.web.RecoverySeasonManifestResponse
-import io.baton.cal.web.RecoverySeasonStateResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Isolation
 import org.springframework.transaction.annotation.Transactional
@@ -44,18 +43,12 @@ class RecoveryManifestService(
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    fun getSeasonState(seasonId: UUID): RecoverySeasonStateResponse {
+    fun getSeasonState(seasonId: UUID): RecoverySeasonState {
         val state = currentSeasonState(seasonId)
         if (state.itemCount == 0 && state.metadataRevision == null) {
             throw InternalResourceNotFoundException("시즌의 일정과 이름 수신 기록이 없습니다")
         }
-        return RecoverySeasonStateResponse(
-            seasonId = seasonId,
-            itemCount = state.itemCount,
-            itemDigest = state.itemDigest,
-            metadataRevision = state.metadataRevision,
-            metadataDigest = state.metadataDigest,
-        )
+        return state
     }
 
     @Transactional
@@ -143,7 +136,6 @@ class RecoveryManifestService(
 
     private fun RecoveryRunCompletionRow.toResponse() = RecoveryRunCompletionResponse(
         recoveryId = recoveryId,
-        result = "COMPLETED",
         seasonCount = seasonCount,
         completedAt = completedAt,
     )
@@ -151,7 +143,6 @@ class RecoveryManifestService(
     private fun RecoverySeasonState.toResponse(recoveryId: UUID) = RecoverySeasonManifestResponse(
         recoveryId = recoveryId,
         seasonId = seasonId,
-        result = "VERIFIED",
         itemCount = itemCount,
         metadataRevision = metadataRevision,
     )

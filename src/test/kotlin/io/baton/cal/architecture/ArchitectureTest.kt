@@ -18,13 +18,13 @@ import org.springframework.stereotype.Service
 internal object ArchitectureRules {
     private val database = DescribedPredicate.describe<JavaClass>("DB 접근 클래스") {
         it.simpleName.substringBefore('$').endsWith("Repository") ||
-            it.isAnnotatedWith(Repository::class.java) || it.isMetaAnnotatedWith(Repository::class.java) ||
+            it.isMetaAnnotatedWith(Repository::class.java) ||
             it.packageName.startsWith("org.springframework.jdbc") ||
             it.packageName == "java.sql" || it.packageName == "javax.sql"
     }
 
     private val controllers = DescribedPredicate.describe<JavaClass>("Controller") {
-        it.isMetaAnnotatedWith(Controller::class.java) || it.isAnnotatedWith(Controller::class.java)
+        it.isMetaAnnotatedWith(Controller::class.java)
     }
 
     // 현재 기능별 패키지에서 실행 계층만 제외한다. 새 도메인 클래스도 자동으로 검사한다.
@@ -45,7 +45,7 @@ internal object ArchitectureRules {
             it.packageName.startsWith("io.baton.cal.web") ||
             it.packageName.startsWith("io.baton.cal.config") ||
             it.packageName.startsWith("org.springframework") ||
-            it.isAnnotatedWith(Component::class.java) || it.isMetaAnnotatedWith(Component::class.java)
+            it.isMetaAnnotatedWith(Component::class.java)
     })
 
     val controllerRule = noClasses().that(controllers).should().dependOnClassesThat(database)

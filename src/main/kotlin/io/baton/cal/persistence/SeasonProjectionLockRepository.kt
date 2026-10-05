@@ -18,33 +18,11 @@ class SeasonProjectionLockRepository(
         .register(meterRegistry)
 
     /**
-     * 잠금 행이 없으면 만들고 PostgreSQL 행 잠금을 건다.
+     * 같은 시즌의 일정·이름·투영을 바꾸는 트랜잭션을 직렬화한다. 첫 투영처럼 행이 아직 없는 시즌도 잠근다.
      * 호출자는 캘린더 항목과 시즌 피드를 갱신하는 트랜잭션 안에서 실행해야 한다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     fun acquire(seasonId: UUID) {
-        acquisitionTimer.record(Runnable {
-            jdbcClient.sql(
-                """
-                INSERT INTO season_projection_lock (season_id)
-                VALUES (:seasonId)
-                ON CONFLICT (season_id) DO NOTHING
-                """.trimIndent(),
-            )
-                .param("seasonId", seasonId)
-                .update()
-
-            jdbcClient.sql(
-                """
-                SELECT season_id
-                FROM season_projection_lock
-                WHERE season_id = :seasonId
-                FOR UPDATE
-                """.trimIndent(),
-            )
-                .param("seasonId", seasonId)
-                .query(UUID::class.java)
-                .single()
-        })
+        acquisitionTimer.record(Runnable { jdbcClient.lockUntilTransactionEnds(AdvisoryLockScope.SEASON, seasonId) })
     }
 }

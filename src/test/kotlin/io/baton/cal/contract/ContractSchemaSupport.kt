@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 internal object ContractSchemaSupport {
 
     val schemaDirectory: Path = Path.of("contracts/schemas")
+    val exampleDirectory: Path = Path.of("contracts/examples")
 
     fun loadSchema(fileName: String): Schema = schemas.computeIfAbsent(fileName) {
         schemaDirectory.resolve(it).inputStream()
@@ -55,3 +56,7 @@ internal object ContractSchemaSupport {
 /** 응답 본문이 계약 스키마를 통과하는지 확인하고 본문을 반환한다. */
 internal fun ResultActions.andReturnValid(schemaFileName: String, description: String): String =
     andReturn().response.contentAsString.also { ContractSchemaSupport.assertValid(schemaFileName, it, description) }
+
+/** `contracts/examples`의 계약 예시 원문을 읽는다. */
+internal fun contractExample(fileName: String): String =
+    ContractSchemaSupport.exampleDirectory.resolve(fileName).readText()

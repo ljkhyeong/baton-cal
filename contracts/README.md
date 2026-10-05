@@ -162,14 +162,14 @@ DB 연결·트랜잭션 시작에 실패하거나 잠금·SQL·트랜잭션 제�
 
 ## 계약 팩 생성과 배포
 
-계약 버전은 `contracts/VERSION`에서 관리하며 현재 작업 후보는 `1.1.0-rc.2`이다. 계약 팩은
+계약 버전은 `contracts/VERSION`에서 관리하며 현재 작업 후보는 `1.1.0-rc.3`이다. 계약 팩은
 Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 
 ```shell
 ./gradlew --no-daemon verifyContractsZip
 ```
 
-`build/distributions/baton-cal-contracts-1.1.0-rc.2.zip`에는 다음 기준만 들어간다.
+`build/distributions/baton-cal-contracts-1.1.0-rc.3.zip`에는 다음 기준만 들어간다.
 
 - `LICENSE`: 계약 팩 복제·재배포 조건을 설명하는 MIT 라이선스
 - `contracts/**`: JSON Schema, 예시, 정규 iCalendar 골든과 이 안내서
@@ -182,7 +182,7 @@ Gradle 표준 `Zip` 작업으로 생성하고 실제 산출물을 검증한다.
 만들지 않는다. 압축, 체크섬이나 매니페스트도 별도 코드로 구현하지 않고 Gradle의 아카이브 기능과
 GitHub Actions가 제공하는 artifact digest를 사용한다.
 
-ZIP 내부의 `contracts/VERSION`, 파일명과 후보 태그 `contracts-v1.1.0-rc.2`는 모두 같은 버전을
+ZIP 내부의 `contracts/VERSION`, 파일명과 후보 태그 `contracts-v1.1.0-rc.3`은 모두 같은 버전을
 가리켜야 한다. 안정 버전은 새 ZIP과 태그로 게시하며, 게시된 RC 파일과 태그를 덮어쓰지 않는다.
 
 GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
@@ -192,9 +192,10 @@ GitHub Actions는 단일 ZIP을 `upload-artifact`로 올리고 `retention-days: 
 BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 이 자산에는 루트 `LICENSE`가 없어 계약 의미를 유지한 `1.0.1` 호환 보완판으로 재포장하고 BATON이
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
-`1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. 현재 작업 후보 `1.1.0-rc.2`는 ID 지정 구독 생성,
-중복·시즌 충돌 응답과 고정된 복원 다이제스트 예시를 추가한다. `rc.2`는 미게시·BATON 미고정 상태이며
-기존 안정 기준은 `1.0.0`이다.
+`1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. `1.1.0-rc.2`는 ID 지정 구독 생성, 중복·시즌 충돌
+응답과 고정된 복원 다이제스트 예시를 추가했고 게시·BATON 고정을 마쳤다. 현재 작업 후보 `1.1.0-rc.3`은
+계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명만 정리하며 아직 게시하지 않았다. 기존 안정 기준은
+`1.0.0`이다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.

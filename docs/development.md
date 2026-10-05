@@ -80,7 +80,7 @@ Claude Code는 `.codex/hooks.json`을 읽지 않는다. 세 검사 명령은 같
 
 | 스킬 | 사용 시점 |
 | --- | --- |
-| `baton-cal-flows` | 일정 수신·투영·구독·복구·DB 스키마·HTTP 계약 변경. Codex 전역 스킬을 저장소 기준으로 옮겼다 |
+| `baton-cal-flows` | 일정 수신·투영·구독·복구·DB 스키마·HTTP 계약 변경. Codex 전역 스킬은 이 파일을 읽는 안내만 둔다 |
 | `baton-cal-docs` | README·PRD·ADR·HANDOFF·안내 문서 작성과 링크 검사 |
 | `baton-cal-operations` | Compose·프록시·모니터링·알림·TLS·Secret 파일과 운영 스모크 |
 | `baton-cal-dependencies` | 의존성·Wrapper·Actions·이미지 버전 갱신과 Dependabot PR |

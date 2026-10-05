@@ -39,7 +39,7 @@ class ApiExceptionHandlerTest {
             .perform(get("/internal/api/v1/temporary-database-contention/{failureType}", failureType))
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
             .andExpect(jsonPath("$.message").value("service is temporarily busy"))
             .andReturnValid("api-error.v1.schema.json", "데이터베이스 실패 응답")
@@ -64,7 +64,7 @@ class ApiExceptionHandlerTest {
 
         if (expectedStatus == 503) {
             result.andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.message").value("service is temporarily busy"))
         } else {
             result.andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
@@ -111,20 +111,15 @@ class ApiExceptionHandlerTest {
         @GetMapping("/internal/api/v1/failure")
         fun fail(): Nothing = throw IllegalStateException(SENSITIVE_VALUE)
 
-        @GetMapping("/internal/api/v1/temporary-database-contention/lock")
-        fun lockTimeout(): Nothing = throw CannotAcquireLockException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/query")
-        fun queryTimeout(): Nothing = throw QueryTimeoutException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/transaction")
-        fun transactionTimeout(): Nothing = throw TransactionTimedOutException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/connection")
-        fun connectionFailure(): Nothing = throw CannotGetJdbcConnectionException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/transaction-start")
-        fun transactionStartFailure(): Nothing = throw CannotCreateTransactionException(SENSITIVE_VALUE)
+        @GetMapping("/internal/api/v1/temporary-database-contention/{failureType}")
+        fun temporaryFailure(@PathVariable failureType: String): Nothing = throw when (failureType) {
+            "lock" -> CannotAcquireLockException(SENSITIVE_VALUE)
+            "query" -> QueryTimeoutException(SENSITIVE_VALUE)
+            "transaction" -> TransactionTimedOutException(SENSITIVE_VALUE)
+            "connection" -> CannotGetJdbcConnectionException(SENSITIVE_VALUE)
+            "transaction-start" -> CannotCreateTransactionException(SENSITIVE_VALUE)
+            else -> error("알 수 없는 실패 유형: $failureType")
+        }
     }
 
     private companion object {

@@ -1,7 +1,7 @@
 package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItemStatus
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.micrometer.core.instrument.MeterRegistry
 import java.time.Instant
 import java.time.LocalDate
@@ -14,23 +14,14 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=persistence-test-internal-token-0001",
-    ],
-)
-@Sql("/reset-database.sql")
+@CalIntegrationTest
 class PersistenceRepositoryTest @Autowired constructor(
     private val inboxRepository: SourceEventInboxRepository,
     private val seasonLockRepository: SeasonProjectionLockRepository,
@@ -116,23 +107,10 @@ class PersistenceRepositoryTest @Autowired constructor(
     }
 
     @Test
-    fun `zoned local rows round trip through persistence`() {
-        val later = zonedItem(
-            sourceItemId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
-        )
-        val earlier = zonedItem(
-            sourceItemId = UUID.fromString("00000000-0000-0000-0000-000000000001"),
-        )
-
-        applyWithSeasonLock(later)
-        applyWithSeasonLock(earlier)
-
-        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactlyInAnyOrder(earlier, later)
-    }
-
-    @Test
-    fun `시점 일정과 종일 일정 행을 원본 형태로 읽고 쓴다`() {
+    fun `모든 시간 형태의 행을 원본 형태로 읽고 쓴다`() {
         val rows = listOf(
+            utcItem(revision = 0),
+            zonedItem(UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff")),
             utcItem(revision = 0).copy(
                 sourceItemId = UUID.fromString("10000000-0000-0000-0000-000000000001"),
                 timeType = ScheduleTimeType.UTC_POINT,

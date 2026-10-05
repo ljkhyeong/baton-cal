@@ -16,14 +16,6 @@ data class RecoveryRunStatusResponse(
     val completedAt: Instant?,
 )
 
-data class RecoverySeasonStateResponse(
-    val seasonId: UUID,
-    val itemCount: Int,
-    val itemDigest: String,
-    val metadataRevision: Int?,
-    val metadataDigest: String?,
-)
-
 data class RecoverySeasonManifestRequest(
     @field:Min(0)
     val itemCount: Int,
@@ -51,10 +43,11 @@ data class RecoverySeasonManifestRequest(
 data class RecoverySeasonManifestResponse(
     val recoveryId: UUID,
     val seasonId: UUID,
-    val result: String,
     val itemCount: Int,
     val metadataRevision: Int?,
-)
+) {
+    val result = "VERIFIED"
+}
 
 data class RecoveryRunCompletionRequest(
     @field:Min(0)
@@ -65,7 +58,8 @@ data class RecoveryRunCompletionRequest(
 
 data class RecoveryRunCompletionResponse(
     val recoveryId: UUID,
-    val result: String,
     val seasonCount: Int,
     val completedAt: Instant,
-)
+) {
+    val result = "COMPLETED"
+}

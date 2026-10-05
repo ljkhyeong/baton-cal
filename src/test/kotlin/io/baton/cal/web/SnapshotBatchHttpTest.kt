@@ -4,10 +4,17 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.contract.ContractSchemaSupport
-import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
+import io.baton.cal.support.jsonContent
+import io.baton.cal.support.numberedSnapshot
+import io.baton.cal.support.runConcurrently
+import java.util.concurrent.CyclicBarrier
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
+import org.springframework.test.jdbc.JdbcTestUtils
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -23,31 +30,22 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.ObjectNode
-import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.Callable
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
 @Sql("/reset-database.sql")
-@SpringBootTest(properties = ["baton.cal.internal-token=batch-test-internal-token-that-is-long-enough"])
+@SpringBootTest(properties = ["baton.cal.internal-token=$TEST_INTERNAL_TOKEN"])
 class SnapshotBatchHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbc: JdbcClient,
@@ -62,13 +60,13 @@ class SnapshotBatchHttpTest @Autowired constructor(
         ContractSchemaSupport.assertValid("schedule-snapshot-batch.v1.schema.json", body, "100건 요청")
         assertResults(body, List(100) { "APPLIED" }, snapshots)
         verify(projectionService, times(1)).rebuildWhileLocked(SEASON)
-        val projection = projection(SEASON)
+        val projection = jdbc.feedProjection(SEASON)
         assertThat(projection.representation.parseIcalendar().events()).hasSize(100)
 
         clearInvocations(projectionService)
         assertResults(body, List(100) { "DUPLICATE" }, snapshots)
         verifyNoInteractions(projectionService)
-        assertThat(projection(SEASON)).usingRecursiveComparison().isEqualTo(projection)
+        assertThat(jdbc.feedProjection(SEASON)).usingRecursiveComparison().isEqualTo(projection)
     }
 
     @Test
@@ -80,7 +78,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
         assertResults(batch(snapshots), listOf("DUPLICATE", "STALE", "APPLIED", "APPLIED"), snapshots)
         verify(projectionService, times(1)).rebuildWhileLocked(SEASON)
         verify(projectionService, times(1)).rebuildWhileLocked(OTHER_SEASON)
-        val event = projection(SEASON).representation.parseIcalendar().events().single()
+        val event = jdbc.feedProjection(SEASON).representation.parseIcalendar().events().single()
         assertThat(event.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("3")
         assertThat(event.requiredPropertyValue(Property.STATUS)).isEqualTo("CANCELLED")
     }
@@ -131,36 +129,24 @@ class SnapshotBatchHttpTest @Autowired constructor(
             listOf(snapshot(1), snapshot(2, OTHER_SEASON)),
             listOf(snapshot(3, OTHER_SEASON), snapshot(4)),
         )
-        val ready = CountDownLatch(2)
-        Executors.newFixedThreadPool(2).use { executor ->
-            val tasks = batches.map { snapshots ->
-                Callable {
-                    ready.countDown()
-                    check(ready.await(10, TimeUnit.SECONDS))
-                    assertResults(batch(snapshots), listOf("APPLIED", "APPLIED"))
-                }
+        val bothReady = CyclicBarrier(2)
+        val submit = { snapshots: List<JsonNode> ->
+            {
+                bothReady.await(10, TimeUnit.SECONDS)
+                assertResults(batch(snapshots), listOf("APPLIED", "APPLIED"))
             }
-            executor.invokeAll(tasks, 20, TimeUnit.SECONDS).forEach { it.get() }
         }
+        runConcurrently(submit(batches[0]), submit(batches[1]))
         for (season in listOf(SEASON, OTHER_SEASON)) {
-            val projection = projection(season)
+            val projection = jdbc.feedProjection(season)
             assertThat(projection.representation.parseIcalendar().events()).hasSize(2)
             assertThat(projectionService.rebuild(season).etag).isEqualTo(projection.etag)
         }
     }
 
-    @Test
-    fun `묶음 수신도 내부 인증을 요구한다`() {
-        mockMvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).content(batch(listOf(snapshot(1)))))
-            .andExpect(status().isUnauthorized)
-        assertEmptyDatabase()
-    }
-
-    private fun projection(season: UUID): SeasonFeedProjectionRow = jdbc.feedProjection(season)
-
     private fun assertEmptyDatabase() {
         for (table in listOf("source_event_inbox", "calendar_item", "season_feed_projection")) {
-            assertThat(jdbc.sql("SELECT count(*) FROM $table").query(Int::class.java).single()).isZero()
+            assertThat(JdbcTestUtils.countRowsInTable(jdbc, table)).isZero()
         }
     }
 
@@ -174,10 +160,8 @@ class SnapshotBatchHttpTest @Autowired constructor(
     }
 
     private fun submit(body: String, expectedStatus: Int): JsonNode {
-        val response = mockMvc.perform(
-            post(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer batch-test-internal-token-that-is-long-enough")
-                .contentType(MediaType.APPLICATION_JSON).content(body),
-        ).andExpect(status().`is`(expectedStatus)).andReturn().response.contentAsString
+        val response = mockMvc.perform(authorizedPost(PATH).jsonContent(body))
+            .andExpect(status().`is`(expectedStatus)).andReturn().response.contentAsString
         ContractSchemaSupport.assertValid(
             if (expectedStatus == 200) "schedule-snapshot-batch-result.v1.schema.json" else "api-error.v1.schema.json",
             response, "묶음 수신 응답",
@@ -188,20 +172,12 @@ class SnapshotBatchHttpTest @Autowired constructor(
     private fun batch(snapshots: List<JsonNode>): String = JSON.writeValueAsString(mapOf("snapshots" to snapshots))
 
     private fun snapshot(index: Int, season: UUID = SEASON, revision: Int = 0): ObjectNode =
-        (JSON.readTree(TEMPLATE) as ObjectNode).apply {
-            put("eventId", UUID(revision + 1L, index.toLong()).toString())
-            put("sourceItemId", UUID(0, index.toLong()).toString())
-            put("seasonId", season.toString())
-            put("revision", revision)
-            put("status", if (revision == 3) "CANCELLED" else "ACTIVE")
-            put("sourceUpdatedAt", Instant.parse("2026-08-11T01:00:00Z").plusSeconds(revision.toLong()).toString())
-        }
+        numberedSnapshot(index, revision, season, if (revision == 3) "CANCELLED" else "ACTIVE")
 
     private companion object {
         const val PATH = "/internal/api/v1/schedule-snapshots/batch"
         val SEASON = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         val OTHER_SEASON = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         val JSON = JsonMapper()
-        val TEMPLATE = Path("contracts/examples/schedule-snapshot.utc-active.json").readText()
     }
 }

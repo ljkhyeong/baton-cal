@@ -17,7 +17,7 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-for required in docker jq python3; do command -v "$required" >/dev/null; done
+for required in docker jq; do command -v "$required" >/dev/null; done
 
 # 이미지 고정값은 Dependabot이 갱신하는 Compose 정의에서 읽어 운영 스모크와 같은 버전을 검증한다.
 # 보간 없는 `docker compose config`는 Compose 버전에 따라 `${VAR:?}` 볼륨을 해석하지 못하므로 image 줄을 직접 읽는다.
@@ -34,6 +34,9 @@ compose_image() {
 }
 alertmanager_image=$(compose_image "$project_directory/compose.operations.yml" alertmanager)
 receiver_image=$(compose_image "$project_directory/compose.operations-smoke.yml" alert-receiver)
+
+# 현재 조합의 설정 파일과 Secret 파일을 연결해 Alertmanager 도구를 외부 통신 없이 실행한다.
+amtool() { docker run --rm --network none --entrypoint amtool "${config_volumes[@]}" "$alertmanager_image" "$@" > /dev/null; }
 
 # 실제 메시지를 보내지 않도록 외부 통신이 차단된 검증 네트워크를 사용한다.
 docker network create --internal "$project_name" > /dev/null
@@ -63,17 +66,9 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
     --volume "$scratch/webhook-url:/run/secrets/alert-webhook-url:ro"
     --volume "$scratch/healthchecks-url:/run/secrets/healthchecks-ping-url:ro"
   )
-  docker run --rm --network none --entrypoint amtool \
-    "${config_volumes[@]}" \
-    "$alertmanager_image" check-config /config.yml > /dev/null
-  docker run --rm --network none --entrypoint amtool \
-    "${config_volumes[@]}" \
-    "$alertmanager_image" config routes test --config.file=/config.yml \
-    --verify.receivers="$watchdog_receiver" alertname=CalWatchdog > /dev/null
-  docker run --rm --network none --entrypoint amtool \
-    "${config_volumes[@]}" \
-    "$alertmanager_image" config routes test --config.file=/config.yml \
-    --verify.receivers=operations alertname=CalTlsFailed > /dev/null
+  amtool check-config /config.yml
+  amtool config routes test --config.file=/config.yml --verify.receivers="$watchdog_receiver" alertname=CalWatchdog
+  amtool config routes test --config.file=/config.yml --verify.receivers=operations alertname=CalTlsFailed
   if [[ "$channel" == alertmanager ]]; then continue; fi
   # 조합마다 새 수신기를 사용해 이전 수신 기록이 검증에 섞이지 않게 한다.
   docker run --detach --name "$receiver" --network "$project_name" --network-alias alert-receiver \
@@ -96,18 +91,11 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
     exit 1
   fi
   for state in firing resolved; do
-    python3 -B - "$state" > "$scratch/alert.json" <<'PY'
-from datetime import datetime, timedelta, timezone
-import json
-import sys
-now = datetime.now(timezone.utc)
-print(json.dumps([{
-    "labels": {"alertname": name},
-    "annotations": {"summary": "HTTPS 연결 확인", "description": "스모크 테스트"},
-    "startsAt": (now - timedelta(minutes=1)).isoformat(),
-    "endsAt": (now + timedelta(minutes=5) if sys.argv[1] == "firing" else now).isoformat(),
-} for name in ("CalTlsFailed", "CalWatchdog")]))
-PY
+    jq -n --arg state "$state" '[("CalTlsFailed", "CalWatchdog") | {
+      labels: {alertname: .},
+      annotations: {summary: "HTTPS 연결 확인", description: "스모크 테스트"},
+      startsAt: (now - 60 | todate),
+      endsAt: (if $state == "firing" then now + 300 else now end | todate)}]' > "$scratch/alert.json"
     request --header 'Content-Type: application/json' --post-file /data/alert.json \
       "$sender_url/api/v2/alerts" > /dev/null
     if [[ "$state" == firing ]]; then wait_message '장애 발생: CalTlsFailed'; else wait_message '복구: CalTlsFailed'; fi

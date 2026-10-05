@@ -29,7 +29,7 @@ class InternalApiAuthenticationFilter(
         AuthenticationResult.entries.associateWith { result ->
             Counter.builder(AUTHENTICATION_METRIC)
                 .description("내부 API 인증 결과")
-                .tag("result", result.tagValue)
+                .tag("result", result.name.lowercase())
                 .register(meterRegistry)
         }
 
@@ -75,10 +75,10 @@ class InternalApiAuthenticationFilter(
     private fun matchingAuthenticationResult(presented: ByteArray): AuthenticationResult? =
         expectedTokens.filterValues { MessageDigest.isEqual(it, presented) }.keys.firstOrNull()
 
-    private enum class AuthenticationResult(val tagValue: String) {
-        CURRENT("current"),
-        PREVIOUS("previous"),
-        UNAUTHORIZED("unauthorized"),
+    private enum class AuthenticationResult {
+        CURRENT,
+        PREVIOUS,
+        UNAUTHORIZED,
     }
 
     private companion object {
