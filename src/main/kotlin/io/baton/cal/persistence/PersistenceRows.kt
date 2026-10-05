@@ -1,6 +1,5 @@
 package io.baton.cal.persistence
 
-import io.baton.cal.calendar.CalendarItemStatus
 import java.time.Instant
 import java.util.UUID
 
@@ -12,14 +11,6 @@ data class SourceEventInboxRow(
     val sourceRevision: Int,
     val occurredAt: Instant,
     val receivedAt: Instant,
-)
-
-data class CalendarItemStatusRow(
-    val sourceItemId: UUID,
-    val seasonId: UUID,
-    val revision: Int,
-    val status: CalendarItemStatus,
-    val sourceUpdatedAt: Instant,
 )
 
 enum class CalendarItemApplyOutcome {

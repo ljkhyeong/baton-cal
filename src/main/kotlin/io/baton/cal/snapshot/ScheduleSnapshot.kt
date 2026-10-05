@@ -25,6 +25,15 @@ enum class SnapshotIngestionResult {
     STALE,
 }
 
+/** 채택한 일정 항목의 개정 번호와 상태다. 내부 상태 조회가 이 값을 그대로 응답한다. */
+data class AcceptedItemStatus(
+    val sourceItemId: UUID,
+    val seasonId: UUID,
+    val revision: Int,
+    val status: CalendarItemStatus,
+    val sourceUpdatedAt: Instant,
+)
+
 object SnapshotFingerprint {
     fun sha256(snapshot: ScheduleSnapshot): String = DigestWriter.sha256 {
         string("baton-cal-snapshot-v1")

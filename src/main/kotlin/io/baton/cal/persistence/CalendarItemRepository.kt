@@ -1,5 +1,6 @@
 package io.baton.cal.persistence
 
+import io.baton.cal.snapshot.AcceptedItemStatus
 import java.sql.Types
 import java.time.ZoneOffset
 import java.util.UUID
@@ -29,7 +30,7 @@ class CalendarItemRepository(
         }
     }
 
-    fun findStatusBySourceItemId(sourceItemId: UUID): CalendarItemStatusRow? =
+    fun findStatusBySourceItemId(sourceItemId: UUID): AcceptedItemStatus? =
         jdbcClient.sql(
             """
             SELECT source_item_id, season_id, revision, status, source_updated_at
@@ -38,7 +39,7 @@ class CalendarItemRepository(
             """.trimIndent(),
         )
             .param("sourceItemId", sourceItemId)
-            .query(CalendarItemStatusRow::class.java)
+            .query(AcceptedItemStatus::class.java)
             .optional()
             .getOrNull()
 

@@ -7,7 +7,6 @@ import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.persistence.SourceEventInboxRepository
 import io.baton.cal.persistence.SourceEventInboxRow
 import io.baton.cal.projection.SeasonProjectionService
-import io.baton.cal.web.CalendarItemStatusResponse
 import io.baton.cal.web.InternalResourceNotFoundException
 import io.baton.cal.web.ConflictException
 import org.springframework.stereotype.Service
@@ -25,17 +24,9 @@ class SnapshotIngestionService(
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
-    fun getItemStatus(sourceItemId: UUID): CalendarItemStatusResponse {
-        val item = itemRepository.findStatusBySourceItemId(sourceItemId)
+    fun getItemStatus(sourceItemId: UUID): AcceptedItemStatus =
+        itemRepository.findStatusBySourceItemId(sourceItemId)
             ?: throw InternalResourceNotFoundException("일정 항목을 찾을 수 없습니다")
-        return CalendarItemStatusResponse(
-            sourceItemId = item.sourceItemId,
-            seasonId = item.seasonId,
-            revision = item.revision,
-            status = item.status,
-            sourceUpdatedAt = item.sourceUpdatedAt,
-        )
-    }
 
     @Transactional
     fun ingest(snapshot: ScheduleSnapshot): SnapshotIngestionResult = ingestBatch(listOf(snapshot)).single()
