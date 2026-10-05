@@ -17,9 +17,12 @@
   교착 상태·직렬화 실패는 Spring의 공통 잠금 실패 예외로 처리한다. 실제 연결 풀 고갈 테스트에서는
   연결 반환 후 기존 구독 조회와 같은 ID의 발급 재시도가 정상 처리되는지 확인했다.
 - 이미 저장된 구독의 재요청은 캘린더 준비와 토큰 생성을 생략한다. 동시 생성은 DB 기본키로 판정한다.
-  V3의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
-- 일정·구독·복구 상태 조회의 `404`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503`에도
-  `Cache-Control: no-store`를 적용한다. 상태가 바뀐 뒤 이전 오류 응답이 재사용되는 것을 막는다.
+  구독의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
+- 내부 API 응답은 `/internal/**`의 Spring `WebContentInterceptor`가 성공·오류 모두 `Cache-Control: no-store`로
+  보낸다. 상태가 바뀐 뒤 이전 응답이 재사용되는 것을 막는다. 공개 피드의 `503`은 예외 처리기가 같은 헤더를 붙인다.
+- 보존할 DB 데이터와 운영 배포가 없어 마이그레이션 V1~V8을 최종 스키마의 V1 하나로 합쳤다. 운영 데이터가 생기기
+  전까지는 V1을 직접 고친다. 시즌 잠금은 잠금 전용 테이블 대신 복구 실행과 같은 `pg_advisory_xact_lock`을 쓰고,
+  경로 UUID는 `@InitBinder` 편집기로 36자 표준 형식만 받는다. 기존 V1~V8을 적용한 로컬 DB는 다시 만들어야 한다.
 - 파일 작성 직후 검사와 종료 전 전체 diff·ArchUnit 검사를 추가했다. 기존 Spring Repository 주입 구조를
   유지하며 Controller의 DB 접근, 도메인의 실행 계층 의존, Service의 JDBC 사용·Repository 생성을 검사한다.
   실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
@@ -49,6 +52,8 @@
 - 안정 계약은 `1.0.0`, 공식 후보는 `1.1.0-rc.2`다. `3ba5889`에서 게시한 불변 릴리스·ZIP 증명을
   검증하고 BATON의 버전·해시와 구독·복구 스키마 출처를 고정했다. 실제 앱 검증·운영 활성화와
   안정 버전 승격은 남아 있다. [릴리스 현황](docs/contract-release-history.md)
+  작업 후보 `1.1.0-rc.3`은 마이그레이션 통합에 맞춰 PRD-0002의 구버전 배포 순서 설명만 지웠다. HTTP·스키마·
+  다이제스트·iCalendar 바이트는 같고 게시하지 않았다. [릴리스 노트 초안](docs/releases/contracts-v1.1.0-rc.3.md)
   게시된 `contracts/**`·루트 `LICENSE`·PRD-0002를 바꾸려면 다음 계약 버전으로 올린다.
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
@@ -81,27 +86,24 @@
 
 ## 최근 검증
 
-- 4차 리팩터링은 `7b7d6b6` 커밋 상태에서 검증했다. 운영 코드는 다이제스트 인코딩 공유만 바꿨고 나머지는 테스트다.
-  `./gradlew --no-daemon --max-workers=2 check`로 일반 169개·구조 3개 테스트와 계약 ZIP 검증이 실패·제외 없이
-  통과했다. 검사 스크립트 회귀 테스트는 입력이 같아 기존 결과를 재사용했다. Spring 테스트 컨텍스트는 9개를 유지했다
-  (Hikari 풀 번호가 3차 로그와 같이 `TlsHttpIntegrationTest` 포함 10에서 끝난다). Java 25 toolchain·PostgreSQL 18.6.
-  로그: `/private/tmp/baton-cal-round4-check.log`. 그 뒤 `ContractArtifactsTest`의 빈 줄 하나만 지웠고 컴파일과
-  파일·종료 검사를 다시 통과했다. 지문 고정값 5개와 계약 예시 복구 다이제스트가 바이트 변화 없이 통과했고, 합성
-  어노테이션을 쓴 6개 클래스 64개 테스트가 컨텍스트 2개로 실행됐다. 로그: `/private/tmp/baton-cal-round4-focused.log`.
-  다이제스트 출력이 고정 벡터로 같음을 확인해 OCI·운영·알림 채널 스모크는 실행하지 않았다. 스크립트 중복 정리는 이득이
-  몇 줄이고 Docker 스모크 재실행이 필요해 보류했다. 파일·종료 검사와 전체 `review.diff` 검토 기록:
-  `build/agent-feedback/2f0b097ee5ac8bb7/`.
+- 프레임워크 API 정리는 `4394cda`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 168개·구조 3개
+  테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했다. 삭제한 업그레이드 경로 테스트 1개만 줄었고 Spring 테스트
+  컨텍스트 9개(Hikari 풀 번호 10, TLS 직접 기동 포함)를 유지했다. 검사 스크립트 회귀 테스트는 입력이 같아 재사용했다.
+  Java 25 toolchain·PostgreSQL 18.6. 로그: `/private/tmp/baton-cal-framework-cleanup-check.log`.
+  그 뒤 `CalendarItemRow` 주석 한 줄과 문서만 바꿨다.
+  통합 V1과 기존 V1~V8을 각각 PostgreSQL 18.6에 적용해 열·인덱스·제약을 비교했고, 의도한 개정 번호 상한 검사 2건 외에는 같았다.
+  `974b7b8`(같은 운영 코드)로 `bootBuildImage --imageName=baton-cal:framework-cleanup` 뒤 `./scripts/smoke-oci-image.sh`가
+  Flyway 적용 버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 이어 실행한 `./scripts/smoke-operations.sh`는
+  Docker가 gateway에 호스트 포트를 붙이지 않아 `curl: (7)`로 실패했고, 같은 이미지로 단독 재실행해 HTTPS 피드·429·504·
+  알림 발생과 해제까지 통과했다. Docker 29.8.1·Compose v5.5.1. 로그: `/private/tmp/baton-cal-framework-cleanup-smoke.log`,
+  `/private/tmp/baton-cal-framework-cleanup-operations-retry.log`. 알림 채널 스모크와 BATON 교차 서비스 테스트는 입력과 HTTP
+  계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는 CAL Flyway 버전·잠금 테이블을 참조하지 않는다.
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
   해석하지 못했다(`too many colons`). 로컬 Compose v5.5.1에서는 재현되지 않았다. Compose 해석 없이 서비스의
   `image` 줄을 읽고 digest 고정 형식이 아니면 실패하도록 고쳤으며 `bash scripts/smoke-alert-channels.sh` 4개 조합이
   통과했다. 로그: `/private/tmp/baton-cal-ci-c4c3055-failed.log`, `/private/tmp/baton-cal-alert-smoke-fix.log`.
-- 3차 리팩터링 커밋 `63455fe`에서 `bash scripts/smoke-alert-channels.sh`(4개 조합),
-  `bootBuildImage --imageName=baton-cal:refactoring-round3`,
-  `./scripts/smoke-oci-image.sh`, `./scripts/smoke-operations.sh`가 통과했다. 운영 스모크의 `promtool test rules`가
-  새 알림 규칙을 포함한다. 로그: `/private/tmp/baton-cal-round3-smoke.log`. Java 25 toolchain·PostgreSQL 18.6.
-  알림 규칙의 임계값·경로 변형은 `promtool` 테스트가 잡는 것을 따로 확인했다.
 - 원격 main `a0058f6`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37212960498)가 통과했다.
   전체 테스트·계약 ZIP·OCI 이미지 빌드와 실행 스모크·HTTPS 프록시·운영 알림·알림 채널 스모크와 GHCR 이미지 게시를
   포함한다. 로그: `/private/tmp/baton-cal-main-ci-a0058f6.log`.
@@ -162,7 +164,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 4차 리팩터링은 전체 `check`만 실행했고 OCI·운영·알림 채널 스모크는 3차 결과 이후 실행하지 않았다.
+이번 정리는 전체 `check`와 OCI·운영 스모크를 실행했고 알림 채널 스모크는 `496e0bb` 결과를 재사용한다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
@@ -173,7 +175,8 @@
 CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS 연결 입력을 보완했다.
 남은 후보는 아래 조건이 정해지면 진행한다.
 
-1. 실제 캘린더 앱·운영 연결 검증 후 `1.1.0` 안정 버전 승격을 판단한다.
+1. 실제 캘린더 앱·운영 연결 검증 후 `1.1.0` 안정 버전 승격을 판단한다. 저장소의 작업 후보 `1.1.0-rc.3`은
+   계약 의미가 같으므로 별도 게시하거나 안정 승격에 포함할지 그때 정한다.
    `1.0.x` 유지가 필요할 때만 `LICENSE`를 포함한 `1.0.1` 호환 보완판을 게시한다.
 2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
    BATON에는 공개 구독 주소와 구분되는 사설 HTTPS 연결을 제공한다. CAL `tls` 사용 시 공개 프록시의
@@ -191,6 +194,7 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
 
 ## 현재 제한
 
+- 통합 전 V1~V8을 적용한 DB는 Flyway 검증에 실패한다. 로컬·테스트 DB만 해당하므로 볼륨을 지우고 다시 만든다.
 - Codex 자동 훅의 실제 세션 실행은 미검증이다. `.codex/hooks.json`의 세 훅을 `/hooks`에서 검토·신뢰해야
   자동 실행된다. 신뢰 전에는 AGENTS.md의 수동 파일·종료 검사를 사용한다.
 - Claude Code에는 저장소 훅을 연결하지 않았다. 파일·종료 검사는 수동으로 실행한다. 저장소 `baton-cal-flows`와
