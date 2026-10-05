@@ -38,7 +38,7 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 | Spring Boot·Jackson | `web.SnapshotInputContractTest`의 입력 엄격성, `web.ApiExceptionHandlerTest`의 오류 응답 |
 | iCal4j | 아래 골든·시간대 검토. 출력이나 허용 TZID가 바뀌면 새 계약 후보가 필요하다 |
 | JSON Schema 검증기 | `contract.ContractArtifactsTest`의 `format` 평가와 거부 사례 |
-| Flyway·PostgreSQL 드라이버·Testcontainers | `persistence.SchemaMigrationTest`, `persistence.PersistenceRepositoryTest` |
+| Flyway·PostgreSQL 드라이버·Testcontainers | `persistence.PersistenceRepositoryTest` |
 | ArchUnit | `architectureTest` |
 | Spring Boot 이미지 빌더 | `bootBuildImage` 후 `./scripts/smoke-oci-image.sh <이미지>` |
 
