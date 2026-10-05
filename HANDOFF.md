@@ -89,12 +89,11 @@
 
 ## 최근 검증
 
-- 최신 정리는 `1435fd2`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개 테스트,
-  검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했다. 중복 테스트 2개를 지우고 인증 경로 테스트
-  1개를 더했다. Spring 테스트 컨텍스트는 9개에서 8개(Hikari 풀 번호 9, TLS 직접 기동 포함)로 줄었다. 마지막 커밋의 형식
-  정리 뒤에는 `SeasonCalendarMetadataHttpTest` 5개를 다시 실행했다. Java 25 toolchain·PostgreSQL 18.6.
-  로그: `/private/tmp/baton-cal-round6-check.log`.
-  운영 코드가 같은 `9d26d60`으로 `bootBuildImage --imageName=baton-cal:round6` 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
+- 최신 정리는 `d78cd27`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개 테스트와
+  `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했고 Spring 테스트 컨텍스트 8개(TLS 직접 기동 제외)를 유지했다. 검사 스크립트
+  회귀 테스트는 입력이 같아 재사용했다. Java 25 toolchain·PostgreSQL 18.6. 로그: `/private/tmp/baton-cal-round7-check.log`.
+  `9d26d60` 이후 운영 코드는 같은 조회 결과 재사용과 같은 지표 태그 생성만 바뀌어 아래 스모크 결과를 재사용한다.
+  `9d26d60`으로 `bootBuildImage --imageName=baton-cal:round6` 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
   버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 최종 스크립트로 `./scripts/smoke-operations.sh`와
   `bash scripts/smoke-alert-channels.sh`(4개 조합)도 통과했다. Docker 29.8.1·Compose v5.5.1. 로그:
   `/private/tmp/baton-cal-round6-smoke.log`, `/private/tmp/baton-cal-round6-operations.log`,
@@ -117,35 +116,10 @@
   `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의
   링크 검사가 통과했다. 파일·종료 검사는 ArchUnit·검사 스크립트의 기존 성공 결과를 재사용해 통과했다.
   기록: `build/agent-feedback/f8327a0187405a2d/`.
-- 웹훅 실패 검증 기준은 `b0369f0`다. 웹훅 스모크·모의 수신기와 문서만 변경했다.
-  `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개가 통과했다.
-  각 메시지에 `429`·`503`을 순서대로 반환한 뒤 장애·복구 메시지 각 1건의 수신, 정상 신호 분리와
-  오류 로그의 URL 비노출을 확인했다. 임시 컨테이너·네트워크는 정리했다.
-  로그: `/private/tmp/baton-cal-webhook-retry.log`. 실제 제공자 연결이나 `Retry-After` 대기 시간 준수는
-  검증하지 않았다. 제품·Kotlin 테스트·의존성이 같아 기존 HTTPS 테스트와 JAR 빌드 결과를 재사용한다.
-- 조합 추가 기준은 `285e99a`다. 알림 조합·스모크와 안내만 바뀌었으며 제품·Kotlin 테스트·의존성·계약 입력은
-  같아 기존 HTTPS 테스트와 JAR 빌드 결과를 재사용했다. 새 이미지 빌드·게시·운영 변경은 하지 않았다.
-  `bash scripts/smoke-alert-channels.sh`로 Slack·Discord 단독 및 Healthchecks 조합 4개를 검증했다.
-  장애·복구 메시지, 정상 신호의 수신 경로 분리와 URL 비노출이 통과했다. 각 조합은 새 모의 수신기와
-  실제 Alertmanager를 외부 통신 차단 네트워크에서 사용하고 정리했다.
-  로그: `/private/tmp/baton-cal-combined-webhooks.log`.
-- TLS 추가 검증은 `118577a`에서 시작했다. 당시 TLS 프로필·통합 테스트 외 제품·의존성·계약 변경은 없다.
-  `./gradlew --no-daemon --max-workers=2 test --tests 'io.baton.cal.config.TlsHttpIntegrationTest'
-  --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest' bootJar`가 통과했다.
-  Java 25.0.3·PostgreSQL 18.6에서 테스트 6개를 실행했고 Gradle 작업 3개 실행·5개 결과를 재사용했다.
-  로그: `/private/tmp/baton-cal-integration-runtime-tests.log`. HTTPS 인증·구독 발급/조회/해제,
-  관리 HTTP 포트 분리와 토큰 비노출을 확인했다. 새 OCI 이미지는 빌드하지 않았다.
-- `bash scripts/smoke-alert-channels.sh`가 통과했다. 외부 통신 차단 네트워크에서 Slack·Discord의
-  장애·복구 메시지와 웹훅 주소 비노출을 확인하고 임시 컨테이너를 정리했다.
-  로그: `/private/tmp/baton-cal-integration-webhooks.log`. 실제 수신 채널에는 발송하지 않았다.
 - CAL 제품 기준 `81cd46a`에서 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
   두 실행 모두 최종 1,000개 UID·개정 2·취소 500개·동일 ETag를 확인했다. 최초 적재는 82.589초와
   1.843초였다. 로컬 단회 비교이며 운영 성능 보장은 아니다. [측정 조건과 결과](docs/performance-baseline.md)
   로그와 XML: `/private/tmp/baton-cal-batch-load-single.{log,xml}`, `/private/tmp/baton-cal-batch-load-100.log`.
-- CAL [PR #19 CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34675397849)와
-  [`3ba5889` main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/34675704171)가 통과했다.
-  전체 테스트·계약 ZIP·OCI 이미지·HTTPS·운영 알림·채널 검증을 포함하며 main의 GHCR 이미지 게시도 완료했다.
-  로그: `/private/tmp/baton-cal-rc2-pr-ci.log`, `/private/tmp/baton-cal-rc2-main-ci.log`.
 - 로컬 `bootBuildImage --imageName=baton-cal:batch-rc2`가 통과했다.
   이미지 digest는 `sha256:89f514d33792f89595dd7c3d7a1f87f934ac908fa3b826229190b3ebad9c916c`이며
   로그는 `/private/tmp/baton-cal-batch-image.log`다. 이 이미지와 BATON `6c3e5f5d`에서 다음 명령으로
@@ -169,7 +143,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 정리는 전체 `check`와 OCI·운영·알림 채널 스모크를 모두 실행했다.
+최근 정리는 `d78cd27`에서 전체 `check`를, `9d26d60`에서 OCI·운영·알림 채널 스모크를 실행했다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
