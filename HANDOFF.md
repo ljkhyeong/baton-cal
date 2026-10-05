@@ -79,6 +79,12 @@
 
 ## 최근 검증
 
+- `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
+  운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
+  `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
+  해석하지 못했다(`too many colons`). 로컬 Compose v5.5.1에서는 재현되지 않았다. Compose 해석 없이 서비스의
+  `image` 줄을 읽고 digest 고정 형식이 아니면 실패하도록 고쳤으며 `bash scripts/smoke-alert-channels.sh` 4개 조합이
+  통과했다. 로그: `/private/tmp/baton-cal-ci-c4c3055-failed.log`, `/private/tmp/baton-cal-alert-smoke-fix.log`.
 - 3차 리팩터링은 `30800e3`에 스크립트 변경을 더한 미커밋 상태에서 검증했다. 2차 리팩터링과 수신 알림을 포함한다.
   `./gradlew --no-daemon --max-workers=2 check`로 일반 169개·구조 3개 테스트, 검사 스크립트, 계약 ZIP이
   실패·제외 없이 통과했고 Spring 테스트 컨텍스트는 9개를 유지했다. 로그: `/private/tmp/baton-cal-round3-check.log`.
