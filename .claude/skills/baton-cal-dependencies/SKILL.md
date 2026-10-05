@@ -15,7 +15,8 @@ Spring Boot BOM이 관리하는 라이브러리는 Boot 버전을 따른다.
 - `gradle.lockfile`과 `gradle/verification-metadata.xml`을 함께 갱신하고, 바뀐 항목이 의도한 의존성과
   전이 의존성에만 해당하는지 diff로 확인한다.
 - GitHub Actions는 커밋 SHA로 고정하고 뒤에 `# v<주 버전>` 주석을 둔다.
-- Compose 이미지는 버전 태그와 `@sha256` digest를 함께 바꾼다.
+- Compose 이미지는 버전 태그와 `@sha256` digest를 함께 바꾼다. 알림 채널 스모크는 Compose 정의에서 이미지를
+  읽으므로 따로 고치지 않는다. 테스트 PostgreSQL 이미지(`support/PostgreSqlTestContainer.kt`)는 Compose와 함께 바꾼다.
 - Gradle Wrapper는 `distributionSha256Sum`을 유지한다.
 
 ## Gradle 의존성

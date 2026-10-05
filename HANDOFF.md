@@ -34,6 +34,8 @@
   도메인 값만 받고 409는 모두 `ConflictException`이다. 피드 헤더 값 타입은 `SeasonFeedHeaders`이며 계약 TEXT·
   다이제스트 입력 패턴은 `web/ContractInputPatterns.kt`에서 공유한다. 서비스가 `web` 예외·DTO를 쓰는 구조는
   ADR-0002에 따라 유지한다.
+- BATON과 공유하는 복구 다이제스트는 계약 예시를 벡터로 삼아 DB 없이 검증한다. 알림 채널 스모크는 이미지 고정값을
+  Compose 정의에서 읽고, 이미지 스모크는 Flyway 기대 버전을 마이그레이션 파일에서 만든다.
 - 일정 전달이 조용히 멈추는 경우를 알리는 `CalInternalAuthenticationFailed`(내부 Bearer 인증 실패 반복)와
   `CalIngestionRejected`(일정·묶음·시즌 이름 수신의 `400`·`409`·`413`)를 추가했다. 4xx는 기존 5xx 알림에 잡히지
   않는다. 실제 수신 채널 도착은 운영 연결 뒤 확인한다. [알림 표](docs/operations.md#모니터링과-알림)
@@ -77,16 +79,13 @@
 
 ## 최근 검증
 
-- 수신 알림 추가는 `1f37f90` 기준 미커밋 상태에서 검증했다. 고정 이미지
-  `prom/prometheus:v3.13.1-distroless`의 `promtool check config`·`test rules`가 통과했고, 발생·미발생 사례와
-  임계값·경로 변형을 넣으면 테스트가 실패하는 것도 확인했다. 지표 이름·라벨을 실제 Prometheus 출력으로 확인하는
-  테스트를 포함한 `OperationalHttpTest` 9개가 통과했다. 로그: `/private/tmp/baton-cal-alert-metrics-test.log`.
-  제품 코드는 바뀌지 않아 전체 테스트·이미지·운영 스모크는 아래 결과를 재사용하고 푸시 후 main CI에서 확인한다.
-- 2차 리팩터링은 `d7ae6c0` 커밋 상태에서 `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개
-  테스트, 검사 스크립트, 계약 ZIP이 실패·제외 없이 통과했다. 투영 테스트 2개를 추가해 렌더러에서 옮긴
-  Last-Modified 규칙을 검증한다. Java 25 toolchain·PostgreSQL 18.6.
-  로그: `/private/tmp/baton-cal-refactoring-review-check.log`. HTTP 응답·저장 열·다이제스트·ETag가 같아
-  OCI·운영 스모크는 실행하지 않았고 푸시 후 main CI에서 확인한다.
+- 3차 리팩터링은 `30800e3`에 스크립트 변경을 더한 미커밋 상태에서 검증했다. 2차 리팩터링과 수신 알림을 포함한다.
+  `./gradlew --no-daemon --max-workers=2 check`로 일반 169개·구조 3개 테스트, 검사 스크립트, 계약 ZIP이
+  실패·제외 없이 통과했고 Spring 테스트 컨텍스트는 9개를 유지했다. 로그: `/private/tmp/baton-cal-round3-check.log`.
+  같은 코드로 `bash scripts/smoke-alert-channels.sh`(4개 조합), `bootBuildImage --imageName=baton-cal:refactoring-round3`,
+  `./scripts/smoke-oci-image.sh`, `./scripts/smoke-operations.sh`가 통과했다. 운영 스모크의 `promtool test rules`가
+  새 알림 규칙을 포함한다. 로그: `/private/tmp/baton-cal-round3-smoke.log`. Java 25 toolchain·PostgreSQL 18.6.
+  알림 규칙의 임계값·경로 변형은 `promtool` 테스트가 잡는 것을 따로 확인했다.
 - 원격 main `a0058f6`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37212960498)가 통과했다.
   전체 테스트·계약 ZIP·OCI 이미지 빌드와 실행 스모크·HTTPS 프록시·운영 알림·알림 채널 스모크와 GHCR 이미지 게시를
   포함한다. 로그: `/private/tmp/baton-cal-main-ci-a0058f6.log`.
