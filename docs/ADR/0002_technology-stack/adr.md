@@ -117,7 +117,9 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 조건부 GET은 저장된 캘린더 바이트와 PostgreSQL 투영 상태만으로 처리한다.
 공개 HEAD는 Spring MVC의 명시적 HEAD 매핑으로 처리하고 구독 검증 SQL에서 ETag·Last-Modified·
 `octet_length(representation)`만 조회한다. 본문을 가져와 길이를 계산하지 않는다. GET과 HEAD는
-캐시 판정과 응답 헤더 설정을 공유하며, 별도 파일 크기 열이나 캐시는 두지 않는다.
+캐시 판정과 응답 헤더 설정을 공유하며, 별도 파일 크기 열이나 캐시는 두지 않는다. Spring `ResponseEntity`의 자동
+조건부 응답은 `304`에 `Content-Type`을 남기고 Unix epoch `Last-Modified`를 생략하므로 공개 피드는 서블릿 응답
+헤더를 직접 설정한다(Spring 7.0.9 기준 확인).
 
 ### iCalendar
 

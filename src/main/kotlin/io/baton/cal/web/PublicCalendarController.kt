@@ -17,6 +17,8 @@ import java.time.Clock
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+// ResponseEntity의 자동 조건부 응답은 304에 Content-Type을 남기고 Unix epoch Last-Modified를 생략한다.
+// 공개 피드 계약을 지키기 위해 서블릿 응답 헤더를 직접 설정한다.
 @RestController
 class PublicCalendarController(
     private val subscriptionService: SubscriptionService,
