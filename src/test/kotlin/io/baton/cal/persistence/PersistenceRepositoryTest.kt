@@ -107,23 +107,10 @@ class PersistenceRepositoryTest @Autowired constructor(
     }
 
     @Test
-    fun `zoned local rows round trip through persistence`() {
-        val later = zonedItem(
-            sourceItemId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
-        )
-        val earlier = zonedItem(
-            sourceItemId = UUID.fromString("00000000-0000-0000-0000-000000000001"),
-        )
-
-        applyWithSeasonLock(later)
-        applyWithSeasonLock(earlier)
-
-        assertThat(itemRepository.listBySeasonId(SEASON_ID)).containsExactlyInAnyOrder(earlier, later)
-    }
-
-    @Test
-    fun `시점 일정과 종일 일정 행을 원본 형태로 읽고 쓴다`() {
+    fun `모든 시간 형태의 행을 원본 형태로 읽고 쓴다`() {
         val rows = listOf(
+            utcItem(revision = 0),
+            zonedItem(UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff")),
             utcItem(revision = 0).copy(
                 sourceItemId = UUID.fromString("10000000-0000-0000-0000-000000000001"),
                 timeType = ScheduleTimeType.UTC_POINT,

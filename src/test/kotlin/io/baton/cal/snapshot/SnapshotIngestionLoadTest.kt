@@ -3,9 +3,9 @@ package io.baton.cal.snapshot
 import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
-import io.baton.cal.contract.contractExample
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.numberedSnapshot
 import io.micrometer.core.instrument.MeterRegistry
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -17,13 +17,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.test.context.jdbc.Sql
 import tools.jackson.databind.json.JsonMapper
-import tools.jackson.databind.node.ObjectNode
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
-import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -167,16 +165,16 @@ class SnapshotIngestionLoadTest @Autowired constructor(
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString())
     }
 
-    private fun snapshot(index: Int, revision: Int, replay: Boolean = false): String {
-        val document = JSON.readTree(TEMPLATE) as ObjectNode
-        document.put("eventId", UUID(if (replay) 9 else revision + 1L, index.toLong()).toString())
-        document.put("sourceItemId", UUID(0, index.toLong()).toString())
-        document.put("seasonId", SEASON_ID.toString())
-        document.put("revision", revision)
-        document.put("status", if (revision > 0 && index % 2 == 0) "CANCELLED" else "ACTIVE")
-        document.put("sourceUpdatedAt", Instant.parse("2026-08-11T01:00:00Z").plusSeconds(revision.toLong()).toString())
-        return JSON.writeValueAsString(document)
-    }
+    // 재전달은 같은 내용을 다른 eventId 묶음으로 보낸다.
+    private fun snapshot(index: Int, revision: Int, replay: Boolean = false): String = JSON.writeValueAsString(
+        numberedSnapshot(
+            index,
+            revision,
+            SEASON_ID,
+            status = if (revision > 0 && index % 2 == 0) "CANCELLED" else "ACTIVE",
+            eventGroup = if (replay) 9 else revision + 1L,
+        ),
+    )
 
     private fun report(phase: String, latency: Collection<Double>, started: Long) {
         val sorted = latency.sorted()
@@ -195,6 +193,5 @@ class SnapshotIngestionLoadTest @Autowired constructor(
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         val JSON = JsonMapper()
-        val TEMPLATE = contractExample("schedule-snapshot.utc-active.json")
     }
 }

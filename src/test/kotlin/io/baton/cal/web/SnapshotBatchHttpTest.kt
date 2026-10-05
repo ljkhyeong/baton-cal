@@ -4,13 +4,13 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.contract.ContractSchemaSupport
-import io.baton.cal.contract.contractExample
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.jsonContent
+import io.baton.cal.support.numberedSnapshot
 import io.baton.cal.support.runConcurrently
 import java.util.concurrent.CyclicBarrier
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
@@ -39,7 +39,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.ObjectNode
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -173,20 +172,12 @@ class SnapshotBatchHttpTest @Autowired constructor(
     private fun batch(snapshots: List<JsonNode>): String = JSON.writeValueAsString(mapOf("snapshots" to snapshots))
 
     private fun snapshot(index: Int, season: UUID = SEASON, revision: Int = 0): ObjectNode =
-        (JSON.readTree(TEMPLATE) as ObjectNode).apply {
-            put("eventId", UUID(revision + 1L, index.toLong()).toString())
-            put("sourceItemId", UUID(0, index.toLong()).toString())
-            put("seasonId", season.toString())
-            put("revision", revision)
-            put("status", if (revision == 3) "CANCELLED" else "ACTIVE")
-            put("sourceUpdatedAt", Instant.parse("2026-08-11T01:00:00Z").plusSeconds(revision.toLong()).toString())
-        }
+        numberedSnapshot(index, revision, season, if (revision == 3) "CANCELLED" else "ACTIVE")
 
     private companion object {
         const val PATH = "/internal/api/v1/schedule-snapshots/batch"
         val SEASON = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         val OTHER_SEASON = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         val JSON = JsonMapper()
-        val TEMPLATE = contractExample("schedule-snapshot.utc-active.json")
     }
 }
