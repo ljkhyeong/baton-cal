@@ -23,6 +23,7 @@
 - 보존할 DB 데이터와 운영 배포가 없어 마이그레이션 V1~V8을 최종 스키마의 V1 하나로 합쳤다. 운영 데이터가 생기기
   전까지는 V1을 직접 고친다. 시즌 잠금은 잠금 전용 테이블 대신 복구 실행과 같은 `pg_advisory_xact_lock`을 쓰고,
   경로 UUID는 `@InitBinder` 편집기로 36자 표준 형식만 받는다. 기존 V1~V8을 적용한 로컬 DB는 다시 만들어야 한다.
+  표준 API 대체 검토에서 유지한 구현과 근거는 [코드 축소 검토](docs/reviews/2026-10-05-code-reduction-review.md)에 정리했다.
 - 필드가 응답 스키마와 같은 DTO는 두지 않고 일정 상태는 `AcceptedItemStatus`, 시즌 복구 진단은 `RecoverySeasonState`를
   그대로 응답한다. 스모크 스크립트는 준비 대기·내부 요청·429 헤더 확인을 curl 재시도·`--json`·`%header`로, 알림 JSON 생성을
   jq로 처리한다. 인증 401과 경로 UUID 400은 각각 한 테스트가 모든 내부 경로를 확인한다.
