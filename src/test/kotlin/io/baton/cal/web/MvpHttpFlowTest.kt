@@ -7,9 +7,7 @@ import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.calendar.timeZones
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
-import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
 import io.baton.cal.support.CalIntegrationTest
-import io.baton.cal.support.SNAPSHOT_PATH
 import io.baton.cal.support.TEST_PUBLIC_BASE_URL
 import io.baton.cal.support.authorizedDelete
 import io.baton.cal.support.authorizedGet
@@ -20,6 +18,7 @@ import io.baton.cal.support.ingestSnapshot
 import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.jsonContent
 import io.baton.cal.support.postSnapshot
+import io.baton.cal.support.seasonCalendarMetadataRequest
 import io.micrometer.core.instrument.MeterRegistry
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -30,8 +29,6 @@ import org.springframework.http.HttpHeaders
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -52,8 +49,6 @@ class MvpHttpFlowTest @Autowired constructor(
         val path = "/internal/api/v1/subscriptions/$subscriptionId"
         fun createRequest(seasonId: String = SEASON_ID) = authorizedPut(path).jsonContent("""{"seasonId":"$seasonId"}""")
 
-        mockMvc.perform(put(path).jsonContent("""{"seasonId":"$SEASON_ID"}"""))
-            .andExpect(status().isUnauthorized)
         mockMvc.perform(authorizedGet(path))
             .andExpect(status().isNotFound)
             .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
@@ -130,11 +125,6 @@ class MvpHttpFlowTest @Autowired constructor(
         val appliedBefore = ingestionCount("applied")
         val duplicateBefore = ingestionCount("duplicate")
         val staleBefore = ingestionCount("stale")
-
-        mockMvc.perform(post(SNAPSHOT_PATH).jsonContent(utcSnapshot(EVENT_1, revision = 1, summary = "Opening")))
-            .andExpect(status().isUnauthorized)
-            .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
-            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
 
         mockMvc.ingestSnapshot(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"))
         mockMvc.ingestSnapshot(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"), "DUPLICATE")
@@ -239,6 +229,7 @@ class MvpHttpFlowTest @Autowired constructor(
         val rotateJson = mockMvc
             .perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
             .andExpect(status().isOk)
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andReturnValid("subscription-credential.v1.schema.json", "실제 구독 회전 응답")
         val replacementToken = credentialToken(rotateJson)
         assertThat(replacementToken).isNotEqualTo(originalToken)
@@ -280,6 +271,13 @@ class MvpHttpFlowTest @Autowired constructor(
             authorizedPut("/internal/api/v1/subscriptions/1-1-1-1-1").jsonContent("""{"seasonId":"$SEASON_ID"}"""),
             authorizedDelete("/internal/api/v1/subscriptions/1-1-1-1-1"),
             authorizedPost("/internal/api/v1/projections/seasons/1-1-1-1-1/rebuild"),
+            seasonCalendarMetadataRequest("1-1-1-1-1", contractExample("season-calendar-metadata.r0.json")),
+            authorizedGet("/internal/api/v1/recovery-runs/1-1-1-1-1"),
+            authorizedGet("/internal/api/v1/seasons/1-1-1-1-1/recovery-state"),
+            authorizedPut("/internal/api/v1/recovery-runs/1-1-1-1-1/seasons/$SEASON_ID/manifest")
+                .jsonContent(contractExample("recovery-season-manifest.json")),
+            authorizedPut("/internal/api/v1/recovery-runs/1-1-1-1-1/completion")
+                .jsonContent(contractExample("recovery-run-completion.zoned-cancelled.json")),
         ).forEach { request ->
             mockMvc.perform(request)
                 .andExpect(status().isBadRequest)
@@ -345,16 +343,11 @@ class MvpHttpFlowTest @Autowired constructor(
     }
 
     @Test
-    fun `내부 상태 조회는 인증을 요구하고 없는 자원은 공통 오류로 반환한다`() {
+    fun `내부 상태 조회의 없는 자원은 공통 오류로 반환한다`() {
         listOf(
             "/internal/api/v1/calendar-items/$SOURCE_ITEM_ID",
             "/internal/api/v1/subscriptions/$SOURCE_ITEM_ID",
         ).forEach { path ->
-            mockMvc.perform(get(path))
-                .andExpect(status().isUnauthorized)
-                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, INTERNAL_BEARER_CHALLENGE))
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-
             mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
                 .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))

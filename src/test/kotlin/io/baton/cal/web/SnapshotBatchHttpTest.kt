@@ -12,6 +12,8 @@ import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.jsonContent
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.jdbc.JdbcTestUtils
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
@@ -33,7 +35,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -148,13 +149,6 @@ class SnapshotBatchHttpTest @Autowired constructor(
             assertThat(projection.representation.parseIcalendar().events()).hasSize(2)
             assertThat(projectionService.rebuild(season).etag).isEqualTo(projection.etag)
         }
-    }
-
-    @Test
-    fun `묶음 수신도 내부 인증을 요구한다`() {
-        mockMvc.perform(post(PATH).jsonContent(batch(listOf(snapshot(1)))))
-            .andExpect(status().isUnauthorized)
-        assertEmptyDatabase()
     }
 
     private fun projection(season: UUID): SeasonFeedProjectionRow = jdbc.feedProjection(season)

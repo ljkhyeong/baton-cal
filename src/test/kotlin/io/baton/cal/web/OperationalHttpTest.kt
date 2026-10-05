@@ -96,16 +96,6 @@ class OperationalHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `one-time subscription credentials cannot be stored by clients`() {
-        // 구독 생성 응답의 no-store는 createSubscription에서 확인한다.
-        val subscriptionId: String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.subscriptionId")
-
-        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
-            .andExpect(status().isOk)
-            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
-    }
-
-    @Test
     fun `actuator는 상세 없는 상태와 Prometheus 메트릭만 공개한다`() {
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk)

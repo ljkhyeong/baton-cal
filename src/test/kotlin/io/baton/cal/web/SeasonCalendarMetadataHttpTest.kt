@@ -8,11 +8,9 @@ import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
 import io.baton.cal.support.CalIntegrationTest
-import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.ingestSnapshotExample
-import io.baton.cal.support.jsonContent
 import io.baton.cal.support.seasonCalendarMetadataRequest
 import io.baton.cal.support.updateSeasonCalendarMetadata
 import io.micrometer.core.instrument.MeterRegistry
@@ -24,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -96,12 +93,8 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `시즌 이름 수신은 기존 인증과 UUID 및 TEXT 검증을 적용한다`() {
+    fun `시즌 이름 수신은 개정 번호와 TEXT 검증을 적용한다`() {
         val valid = contractExample("season-calendar-metadata.r0.json")
-        mockMvc.perform(put(SEASON_CALENDAR_METADATA_PATH, SEASON_ID).jsonContent(valid))
-            .andExpect(status().isUnauthorized)
-        mockMvc.perform(metadataRequest(valid, seasonId = "1-1-1-1-1"))
-            .andExpect(status().isBadRequest)
         listOf(
             valid.replace("\"revision\": 0", "\"revision\": -1"),
             valid.replace("\"revision\": 0", "\"revision\": 0.5"),

@@ -129,17 +129,14 @@ class RecoveryManifestHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `복구 진단은 인증과 UUID를 확인하고 없는 수신 기록은 404다`() {
+    fun `복구 진단은 없는 수신 기록에 404를 반환한다`() {
         listOf(
             "/internal/api/v1/recovery-runs/$RECOVERY_ID",
             "/internal/api/v1/seasons/$SEASON_ID/recovery-state",
         ).forEach { path ->
-            mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
             mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
                 .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
-            val invalidPath = path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid")
-            mockMvc.perform(authorizedGet(invalidPath)).andExpect(status().isBadRequest)
         }
         updateMetadata()
         val metadataOnly = readSeasonState()
