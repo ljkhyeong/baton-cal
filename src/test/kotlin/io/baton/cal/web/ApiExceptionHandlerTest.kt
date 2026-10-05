@@ -111,20 +111,15 @@ class ApiExceptionHandlerTest {
         @GetMapping("/internal/api/v1/failure")
         fun fail(): Nothing = throw IllegalStateException(SENSITIVE_VALUE)
 
-        @GetMapping("/internal/api/v1/temporary-database-contention/lock")
-        fun lockTimeout(): Nothing = throw CannotAcquireLockException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/query")
-        fun queryTimeout(): Nothing = throw QueryTimeoutException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/transaction")
-        fun transactionTimeout(): Nothing = throw TransactionTimedOutException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/connection")
-        fun connectionFailure(): Nothing = throw CannotGetJdbcConnectionException(SENSITIVE_VALUE)
-
-        @GetMapping("/internal/api/v1/temporary-database-contention/transaction-start")
-        fun transactionStartFailure(): Nothing = throw CannotCreateTransactionException(SENSITIVE_VALUE)
+        @GetMapping("/internal/api/v1/temporary-database-contention/{failureType}")
+        fun temporaryFailure(@PathVariable failureType: String): Nothing = throw when (failureType) {
+            "lock" -> CannotAcquireLockException(SENSITIVE_VALUE)
+            "query" -> QueryTimeoutException(SENSITIVE_VALUE)
+            "transaction" -> TransactionTimedOutException(SENSITIVE_VALUE)
+            "connection" -> CannotGetJdbcConnectionException(SENSITIVE_VALUE)
+            "transaction-start" -> CannotCreateTransactionException(SENSITIVE_VALUE)
+            else -> error("알 수 없는 실패 유형: $failureType")
+        }
     }
 
     private companion object {
