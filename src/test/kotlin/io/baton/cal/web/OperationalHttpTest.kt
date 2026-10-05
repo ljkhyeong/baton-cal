@@ -72,7 +72,7 @@ class OperationalHttpTest @Autowired constructor(
                 mockMvc.perform(request)
                     .andExpect(status().isServiceUnavailable)
                     .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                    .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
                     .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
                     .andExpect(jsonPath("$.message").value("service is temporarily busy"))
             }
@@ -102,7 +102,7 @@ class OperationalHttpTest @Autowired constructor(
 
         mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
             .andExpect(status().isOk)
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
     }
 
     @Test

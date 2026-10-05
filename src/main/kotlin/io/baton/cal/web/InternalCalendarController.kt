@@ -9,9 +9,7 @@ import io.baton.cal.subscription.SubscriptionService
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.validation.Valid
-import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -66,57 +64,59 @@ class InternalCalendarController(
     @GetMapping("/calendar-items/{sourceItemId}")
     fun getCalendarItemStatus(
         @PathVariable sourceItemId: UUID,
-    ) = noStore(snapshotIngestionService.getItemStatus(sourceItemId))
+    ) = snapshotIngestionService.getItemStatus(sourceItemId)
 
     @GetMapping("/subscriptions/{subscriptionId}")
     fun getSubscriptionStatus(
         @PathVariable subscriptionId: UUID,
-    ) = noStore(subscriptionService.getStatus(subscriptionId))
+    ) = subscriptionService.getStatus(subscriptionId)
 
     @PutMapping("/seasons/{seasonId}/calendar-metadata")
     fun updateSeasonCalendarMetadata(
         @PathVariable seasonId: UUID,
         @Valid @RequestBody request: SeasonCalendarMetadataRequest,
-    ) = noStore(metadataService.update(seasonId, request.revision, request.displayName))
+    ) = metadataService.update(seasonId, request.revision, request.displayName)
 
     @GetMapping("/recovery-runs/{recoveryId}")
     fun getRecoveryRunStatus(
         @PathVariable recoveryId: UUID,
-    ) = noStore(recoveryManifestService.getStatus(recoveryId))
+    ) = recoveryManifestService.getStatus(recoveryId)
 
     @GetMapping("/seasons/{seasonId}/recovery-state")
     fun getRecoverySeasonState(
         @PathVariable seasonId: UUID,
-    ) = noStore(recoveryManifestService.getSeasonState(seasonId))
+    ) = recoveryManifestService.getSeasonState(seasonId)
 
     @PutMapping("/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest")
     fun verifyRecoverySeasonManifest(
         @PathVariable recoveryId: UUID,
         @PathVariable seasonId: UUID,
         @Valid @RequestBody request: RecoverySeasonManifestRequest,
-    ) = noStore(recoveryManifestService.verifySeason(recoveryId, request.toState(seasonId)))
+    ) = recoveryManifestService.verifySeason(recoveryId, request.toState(seasonId))
 
     @PutMapping("/recovery-runs/{recoveryId}/completion")
     fun completeRecoveryRun(
         @PathVariable recoveryId: UUID,
         @Valid @RequestBody request: RecoveryRunCompletionRequest,
-    ) = noStore(recoveryManifestService.complete(recoveryId, request.seasonCount, request.seasonDigest))
+    ) = recoveryManifestService.complete(recoveryId, request.seasonCount, request.seasonDigest)
 
     @PostMapping("/subscriptions")
+    @ResponseStatus(HttpStatus.CREATED)
     fun createSubscription(
         @RequestBody request: CreateSubscriptionRequest,
-    ) = noStore(subscriptionService.create(request.seasonId), HttpStatus.CREATED)
+    ) = subscriptionService.create(request.seasonId)
 
     @PostMapping("/subscriptions/{subscriptionId}/rotate")
     fun rotateSubscription(
         @PathVariable subscriptionId: UUID,
-    ) = noStore(subscriptionService.rotate(subscriptionId))
+    ) = subscriptionService.rotate(subscriptionId)
 
     @PutMapping("/subscriptions/{subscriptionId}")
+    @ResponseStatus(HttpStatus.CREATED)
     fun createSubscriptionWithId(
         @PathVariable subscriptionId: UUID,
         @RequestBody request: CreateSubscriptionRequest,
-    ) = noStore(subscriptionService.create(request.seasonId, subscriptionId), HttpStatus.CREATED)
+    ) = subscriptionService.create(request.seasonId, subscriptionId)
 
     @DeleteMapping("/subscriptions/{subscriptionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -130,9 +130,6 @@ class InternalCalendarController(
     fun rebuildProjection(
         @PathVariable seasonId: UUID,
     ) = projectionService.rebuild(seasonId)
-
-    private fun <T : Any> noStore(body: T, status: HttpStatus = HttpStatus.OK): ResponseEntity<T> =
-        ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(body)
 
     private companion object {
         const val INGESTION_METRIC = "baton.cal.snapshot.ingestion"

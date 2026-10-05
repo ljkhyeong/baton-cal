@@ -137,7 +137,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
             mockMvc.perform(get(path)).andExpect(status().isUnauthorized)
             mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
             val invalidPath = path.replace(RECOVERY_ID, "invalid").replace(SEASON_ID.toString(), "invalid")
             mockMvc.perform(authorizedGet(invalidPath)).andExpect(status().isBadRequest)
         }
@@ -297,7 +297,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private fun readRunStatus(expectedStatus: String, seasonCount: Int): String = mockMvc
         .perform(authorizedGet("/internal/api/v1/recovery-runs/{recoveryId}", RECOVERY_ID))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.status").value(expectedStatus))
         .andExpect(jsonPath("$.verifiedSeasonCount").value(seasonCount))
         .andExpect(jsonPath("$.recoveryMode").value(true))
@@ -306,7 +306,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private fun readSeasonState(): String = mockMvc
         .perform(authorizedGet("/internal/api/v1/seasons/{seasonId}/recovery-state", SEASON_ID))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andReturnValid("recovery-season-state.v1.schema.json", "시즌 복구 진단 응답")
 
     private fun updateMetadata() {
@@ -323,7 +323,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         seasonManifestRequest(itemCount, itemDigest, metadataRevision, metadataDigest, seasonId),
     )
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("VERIFIED"))
         .andReturnValid("recovery-season-manifest-result.v1.schema.json", "시즌 복구 매니페스트 검증 응답")
 
@@ -359,7 +359,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
 
     private fun complete(payload: String): String = mockMvc.perform(completionRequest(payload))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("COMPLETED"))
         .andReturnValid("recovery-run-completion-result.v1.schema.json", "전체 복구 완료 응답")
 

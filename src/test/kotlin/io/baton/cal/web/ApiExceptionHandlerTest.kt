@@ -39,7 +39,7 @@ class ApiExceptionHandlerTest {
             .perform(get("/internal/api/v1/temporary-database-contention/{failureType}", failureType))
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
             .andExpect(jsonPath("$.message").value("service is temporarily busy"))
             .andReturnValid("api-error.v1.schema.json", "데이터베이스 실패 응답")
@@ -64,7 +64,7 @@ class ApiExceptionHandlerTest {
 
         if (expectedStatus == 503) {
             result.andExpect(header().string(HttpHeaders.RETRY_AFTER, ApiExceptionHandler.RETRY_AFTER_SECONDS))
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.message").value("service is temporarily busy"))
         } else {
             result.andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))

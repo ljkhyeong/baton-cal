@@ -43,7 +43,7 @@ fun MockMvc.createSubscription(seasonId: String): String = perform(
     authorizedPost("/internal/api/v1/subscriptions").jsonContent("""{"seasonId":"$seasonId"}"""),
 )
     .andExpect(status().isCreated)
-    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+    .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
     .andReturnValid("subscription-credential.v1.schema.json", "구독 생성 응답")
 
 /** 일정 스냅샷을 보낸다. 오류 응답은 호출자가 확인한다. */
@@ -65,6 +65,6 @@ fun seasonCalendarMetadataRequest(seasonId: Any, payload: String): MockHttpServl
 fun MockMvc.updateSeasonCalendarMetadata(seasonId: Any, payload: String): String =
     perform(seasonCalendarMetadataRequest(seasonId, payload))
         .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.seasonId").value(seasonId.toString()))
         .andReturnValid("season-calendar-metadata-result.v1.schema.json", "시즌 이름 수신 응답")
