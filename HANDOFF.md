@@ -23,6 +23,9 @@
 - 보존할 DB 데이터와 운영 배포가 없어 마이그레이션 V1~V8을 최종 스키마의 V1 하나로 합쳤다. 운영 데이터가 생기기
   전까지는 V1을 직접 고친다. 시즌 잠금은 잠금 전용 테이블 대신 복구 실행과 같은 `pg_advisory_xact_lock`을 쓰고,
   경로 UUID는 `@InitBinder` 편집기로 36자 표준 형식만 받는다. 기존 V1~V8을 적용한 로컬 DB는 다시 만들어야 한다.
+- 필드가 응답 스키마와 같은 DTO는 두지 않고 일정 상태는 `AcceptedItemStatus`, 시즌 복구 진단은 `RecoverySeasonState`를
+  그대로 응답한다. 스모크 스크립트는 준비 대기·내부 요청·429 헤더 확인을 curl 재시도·`--json`·`%header`로, 알림 JSON 생성을
+  jq로 처리한다. 인증 401과 경로 UUID 400은 각각 한 테스트가 모든 내부 경로를 확인한다.
 - 파일 작성 직후 검사와 종료 전 전체 diff·ArchUnit 검사를 추가했다. 기존 Spring Repository 주입 구조를
   유지하며 Controller의 DB 접근, 도메인의 실행 계층 의존, Service의 JDBC 사용·Repository 생성을 검사한다.
   실행 방법과 Codex 훅 신뢰 절차는 [개발 검증 절차](docs/development.md)를 따른다.
@@ -86,18 +89,20 @@
 
 ## 최근 검증
 
-- 프레임워크 API 정리는 `4394cda`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 168개·구조 3개
-  테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했다. 삭제한 업그레이드 경로 테스트 1개만 줄었고 Spring 테스트
-  컨텍스트 9개(Hikari 풀 번호 10, TLS 직접 기동 포함)를 유지했다. 검사 스크립트 회귀 테스트는 입력이 같아 재사용했다.
-  Java 25 toolchain·PostgreSQL 18.6. 로그: `/private/tmp/baton-cal-framework-cleanup-check.log`.
-  그 뒤 `CalendarItemRow` 주석 한 줄과 문서만 바꿨다.
+- 최신 정리는 `1435fd2`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개 테스트,
+  검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했다. 중복 테스트 2개를 지우고 인증 경로 테스트
+  1개를 더했다. Spring 테스트 컨텍스트는 9개에서 8개(Hikari 풀 번호 9, TLS 직접 기동 포함)로 줄었다. 마지막 커밋의 형식
+  정리 뒤에는 `SeasonCalendarMetadataHttpTest` 5개를 다시 실행했다. Java 25 toolchain·PostgreSQL 18.6.
+  로그: `/private/tmp/baton-cal-round6-check.log`.
+  운영 코드가 같은 `9d26d60`으로 `bootBuildImage --imageName=baton-cal:round6` 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
+  버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 최종 스크립트로 `./scripts/smoke-operations.sh`와
+  `bash scripts/smoke-alert-channels.sh`(4개 조합)도 통과했다. Docker 29.8.1·Compose v5.5.1. 로그:
+  `/private/tmp/baton-cal-round6-smoke.log`, `/private/tmp/baton-cal-round6-operations.log`,
+  `/private/tmp/baton-cal-round6-alert-channels.log`. 직전 운영 스모크 한 번은 Docker가 gateway에 호스트 포트를 붙이지 않아
+  `curl: (7)`로 실패했고 같은 이미지의 재실행은 통과했다.
   통합 V1과 기존 V1~V8을 각각 PostgreSQL 18.6에 적용해 열·인덱스·제약을 비교했고, 의도한 개정 번호 상한 검사 2건 외에는 같았다.
-  `974b7b8`(같은 운영 코드)로 `bootBuildImage --imageName=baton-cal:framework-cleanup` 뒤 `./scripts/smoke-oci-image.sh`가
-  Flyway 적용 버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 이어 실행한 `./scripts/smoke-operations.sh`는
-  Docker가 gateway에 호스트 포트를 붙이지 않아 `curl: (7)`로 실패했고, 같은 이미지로 단독 재실행해 HTTPS 피드·429·504·
-  알림 발생과 해제까지 통과했다. Docker 29.8.1·Compose v5.5.1. 로그: `/private/tmp/baton-cal-framework-cleanup-smoke.log`,
-  `/private/tmp/baton-cal-framework-cleanup-operations-retry.log`. 알림 채널 스모크와 BATON 교차 서비스 테스트는 입력과 HTTP
-  계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는 CAL Flyway 버전·잠금 테이블을 참조하지 않는다.
+  BATON 교차 서비스 테스트는 HTTP 계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는 CAL Flyway
+  버전·잠금 테이블을 참조하지 않는다.
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
@@ -164,7 +169,7 @@
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
-이번 정리는 전체 `check`와 OCI·운영 스모크를 실행했고 알림 채널 스모크는 `496e0bb` 결과를 재사용한다.
+이번 정리는 전체 `check`와 OCI·운영·알림 채널 스모크를 모두 실행했다.
 과거 검증은 Git 이력을 참고한다.
 
 ## 남은 작업
