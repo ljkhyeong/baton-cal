@@ -4,10 +4,15 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.contractExample
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
+import io.baton.cal.support.jsonContent
+import org.springframework.test.jdbc.JdbcTestUtils
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -23,8 +28,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
@@ -41,13 +44,11 @@ import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 
 @ImportTestcontainers(PostgreSqlTestContainer::class)
 @AutoConfigureMockMvc
 @Sql("/reset-database.sql")
-@SpringBootTest(properties = ["baton.cal.internal-token=batch-test-internal-token-that-is-long-enough"])
+@SpringBootTest(properties = ["baton.cal.internal-token=$TEST_INTERNAL_TOKEN"])
 class SnapshotBatchHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbc: JdbcClient,
@@ -151,7 +152,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
 
     @Test
     fun `묶음 수신도 내부 인증을 요구한다`() {
-        mockMvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).content(batch(listOf(snapshot(1)))))
+        mockMvc.perform(post(PATH).jsonContent(batch(listOf(snapshot(1)))))
             .andExpect(status().isUnauthorized)
         assertEmptyDatabase()
     }
@@ -160,7 +161,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
 
     private fun assertEmptyDatabase() {
         for (table in listOf("source_event_inbox", "calendar_item", "season_feed_projection")) {
-            assertThat(jdbc.sql("SELECT count(*) FROM $table").query(Int::class.java).single()).isZero()
+            assertThat(JdbcTestUtils.countRowsInTable(jdbc, table)).isZero()
         }
     }
 
@@ -174,10 +175,8 @@ class SnapshotBatchHttpTest @Autowired constructor(
     }
 
     private fun submit(body: String, expectedStatus: Int): JsonNode {
-        val response = mockMvc.perform(
-            post(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer batch-test-internal-token-that-is-long-enough")
-                .contentType(MediaType.APPLICATION_JSON).content(body),
-        ).andExpect(status().`is`(expectedStatus)).andReturn().response.contentAsString
+        val response = mockMvc.perform(authorizedPost(PATH).jsonContent(body))
+            .andExpect(status().`is`(expectedStatus)).andReturn().response.contentAsString
         ContractSchemaSupport.assertValid(
             if (expectedStatus == 200) "schedule-snapshot-batch-result.v1.schema.json" else "api-error.v1.schema.json",
             response, "묶음 수신 응답",
@@ -202,6 +201,6 @@ class SnapshotBatchHttpTest @Autowired constructor(
         val SEASON = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         val OTHER_SEASON = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         val JSON = JsonMapper()
-        val TEMPLATE = Path("contracts/examples/schedule-snapshot.utc-active.json").readText()
+        val TEMPLATE = contractExample("schedule-snapshot.utc-active.json")
     }
 }

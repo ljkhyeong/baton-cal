@@ -17,7 +17,7 @@ class ContractArtifactsTest {
     @Test
     fun `모든 JSON 스키마와 예시는 명시된 매핑으로 검증된다`() {
         val actualSchemaFiles = jsonFileNames(ContractSchemaSupport.schemaDirectory)
-        val actualExampleFiles = jsonFileNames(EXAMPLE_DIRECTORY)
+        val actualExampleFiles = jsonFileNames(ContractSchemaSupport.exampleDirectory)
         val mappedExampleFiles = EXAMPLES_BY_SCHEMA.values.flatten()
 
         assertThat(EXAMPLES_BY_SCHEMA.keys)
@@ -36,7 +36,7 @@ class ContractArtifactsTest {
             exampleFiles.forEach { exampleFile ->
                 ContractSchemaSupport.assertValid(
                     schemaFile,
-                    EXAMPLE_DIRECTORY.resolve(exampleFile).readText(),
+                    contractExample(exampleFile),
                     "$schemaFile 스키마로 $exampleFile 예시 검증",
                 )
             }
@@ -56,8 +56,8 @@ class ContractArtifactsTest {
     @Test
     fun `시간 스키마는 윤초와 9자리 초과 소수를 거부한다`() {
         val schema = ContractSchemaSupport.loadSchema("schedule-snapshot.v1.schema.json")
-        val validUtcExample = EXAMPLE_DIRECTORY.resolve("schedule-snapshot.utc-active.json").readText()
-        val validZonedExample = EXAMPLE_DIRECTORY.resolve("schedule-snapshot.zoned-active-r0.json").readText()
+        val validUtcExample = contractExample("schedule-snapshot.utc-active.json")
+        val validZonedExample = contractExample("schedule-snapshot.zoned-active-r0.json")
         val invalidExamples = linkedMapOf(
             "절대 시각 윤초" to validUtcExample.replace(
                 "2026-08-11T01:00:05Z",
@@ -83,7 +83,7 @@ class ContractArtifactsTest {
     @Test
     fun `TEXT 스키마는 정상 Unicode를 허용하고 금지 문자를 문자열 끝까지 거부한다`() {
         val schema = ContractSchemaSupport.loadSchema("schedule-snapshot.v1.schema.json")
-        val validExample = EXAMPLE_DIRECTORY.resolve("schedule-snapshot.utc-active.json").readText()
+        val validExample = contractExample("schedule-snapshot.utc-active.json")
         val supportedText = validExample.replace(
             "ROUND 1 운영",
             "줄 바꿈\\n탭\\t과 😀",
@@ -118,7 +118,7 @@ class ContractArtifactsTest {
     }
 
     private fun readExample(fileName: String): JsonNode =
-        JSON_MAPPER.readTree(EXAMPLE_DIRECTORY.resolve(fileName).readText())
+        JSON_MAPPER.readTree(contractExample(fileName))
 
     private fun jsonFileNames(directory: Path): Set<String> = directory
         .listDirectoryEntries("*.json")
@@ -126,8 +126,6 @@ class ContractArtifactsTest {
         .mapTo(mutableSetOf()) { it.name }
 
     companion object {
-        private val EXAMPLE_DIRECTORY = Path.of("contracts/examples")
-
         private val EXAMPLES_BY_SCHEMA = linkedMapOf(
             "schedule-snapshot-batch.v1.schema.json" to listOf("schedule-snapshot-batch.json"),
             "schedule-snapshot-batch-result.v1.schema.json" to listOf("schedule-snapshot-batch-result.json"),

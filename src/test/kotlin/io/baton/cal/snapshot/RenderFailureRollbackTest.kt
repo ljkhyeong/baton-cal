@@ -3,6 +3,7 @@ package io.baton.cal.snapshot
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.ScheduleWindow
+import io.baton.cal.calendar.calendarName
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
@@ -78,7 +79,7 @@ class RenderFailureRollbackTest @Autowired constructor(
         assertThat(result.revision).isEqualTo(2)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_calendar_metadata")).isEqualTo(1)
         val calendar = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar()
-        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
+        assertThat(calendar.calendarName()).isEqualTo("가을 시즌")
     }
 
     private fun assertDurableRowCounts(expected: Int) {

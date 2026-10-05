@@ -6,8 +6,8 @@ import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.authorizedDelete
 import io.baton.cal.support.authorizedPost
-import io.baton.cal.support.bearer
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.eqArg
 import io.micrometer.observation.tck.TestObservationRegistry
@@ -35,7 +35,6 @@ import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
@@ -229,7 +228,7 @@ class PublicCalendarContractTest @Autowired constructor(
         val replacementToken = rotate(subscriptionId)
         assertPublicNotFound(originalToken)
 
-        mockMvc.perform(delete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId).bearer())
+        mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId))
             .andExpect(status().isNoContent)
 
         assertPublicNotFound(replacementToken)

@@ -2,6 +2,7 @@ package io.baton.cal.snapshot
 
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleWindow
+import io.baton.cal.calendar.calendarName
 import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
@@ -75,7 +76,7 @@ class SnapshotIngestionConcurrencyTest @Autowired constructor(
         val snapshot = snapshot(number = 1)
         runConcurrently<Unit>({ metadataService.update(SEASON_ID, 2, "가을 시즌") }, { ingestionService.ingest(snapshot) })
         val calendar = jdbcClient.feedProjection(SEASON_ID).representation.parseIcalendar()
-        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("가을 시즌")
+        assertThat(calendar.calendarName()).isEqualTo("가을 시즌")
         assertThat(calendar.events().map { it.requiredPropertyValue(Property.UID) })
             .containsExactly("${snapshot.sourceItemId}@cal.baton")
     }

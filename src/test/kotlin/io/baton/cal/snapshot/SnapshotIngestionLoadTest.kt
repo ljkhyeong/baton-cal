@@ -3,6 +3,7 @@ package io.baton.cal.snapshot
 import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
+import io.baton.cal.contract.contractExample
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.micrometer.core.instrument.MeterRegistry
@@ -29,8 +30,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 import kotlin.math.ceil
 
 @Tag("ingestion-load")
@@ -196,6 +195,6 @@ class SnapshotIngestionLoadTest @Autowired constructor(
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         val JSON = JsonMapper()
-        val TEMPLATE = Path("contracts/examples/schedule-snapshot.utc-active.json").readText()
+        val TEMPLATE = contractExample("schedule-snapshot.utc-active.json")
     }
 }

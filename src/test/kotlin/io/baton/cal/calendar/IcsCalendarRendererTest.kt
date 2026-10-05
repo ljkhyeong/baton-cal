@@ -32,7 +32,7 @@ class IcsCalendarRendererTest {
         val rendered = renderer.render(seasonId, emptyList(), displayName)
         val calendar = rendered.bytes.parseIcalendar()
 
-        assertThat(calendar.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo(displayName)
+        assertThat(calendar.calendarName()).isEqualTo(displayName)
         assertThat(calendar.events()).isEmpty()
         assertThat(rendered.bytes).isEqualTo(renderer.render(seasonId, emptyList(), displayName).bytes)
         assertThat(rendered.etag).isNotEqualTo(renderer.render(seasonId, emptyList()).etag)

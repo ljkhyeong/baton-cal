@@ -4,12 +4,12 @@ import io.baton.cal.support.INTERNAL_BEARER_CHALLENGE
 import io.baton.cal.support.InternalHttpTest
 import io.baton.cal.support.TEST_INTERNAL_TOKEN
 import io.baton.cal.support.TEST_PREVIOUS_INTERNAL_TOKEN
+import io.baton.cal.support.jsonContent
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -28,11 +28,7 @@ class InternalApiAuthenticationHttpTest @Autowired constructor(
             "/internal/api/v1;ignored/subscriptions",
             "/internal;ignored/api/v1/subscriptions",
         ).forEach { path ->
-            mockMvc.perform(
-                post(path)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content("""{"seasonId":"$SEASON_ID"}"""),
-            )
+            mockMvc.perform(post(path).jsonContent("""{"seasonId":"$SEASON_ID"}"""))
                 .andExpect(status().isUnauthorized)
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
         }

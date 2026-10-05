@@ -2,7 +2,8 @@ package io.baton.cal.web
 
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.support.InternalHttpTest
-import io.baton.cal.support.bearer
+import io.baton.cal.support.ingestSnapshot
+import io.baton.cal.support.postSnapshot
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
@@ -10,8 +11,6 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -106,7 +105,7 @@ class SnapshotInputContractTest @Autowired constructor(
     @Test
     fun `timestamp errors do not reflect the rejected value`() {
         val sensitiveValue = "https://calendar.example.test/calendars/v1/secret.ics"
-        postSnapshot(utcSnapshot(occurredAt = quoted(sensitiveValue)))
+        mockMvc.postSnapshot(utcSnapshot(occurredAt = quoted(sensitiveValue)))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.message").value("snapshot contains an invalid timestamp"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(sensitiveValue))))
@@ -213,11 +212,8 @@ class SnapshotInputContractTest @Autowired constructor(
         )
     }
 
-    private fun postSnapshot(payload: String): ResultActions =
-        mockMvc.perform(post(SNAPSHOT_PATH).bearer().contentType(MediaType.APPLICATION_JSON).content(payload))
-
     private fun assertInvalid(payload: String) {
-        postSnapshot(payload)
+        mockMvc.postSnapshot(payload)
             .andExpect(status().isBadRequest)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -225,9 +221,7 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     private fun assertApplied(payload: String) {
-        postSnapshot(payload)
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.result").value("APPLIED"))
+        mockMvc.ingestSnapshot(payload)
     }
 
     private fun utcSnapshot(
@@ -236,6 +230,32 @@ class SnapshotInputContractTest @Autowired constructor(
         sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
         startInstant: String = quoted("2026-08-16T09:00:00Z"),
         endInstant: String = quoted("2026-08-16T10:30:00Z"),
+        summary: String = "ROUND 1",
+        description: String? = null,
+        location: String? = null,
+    ): String = snapshotWithTime(
+        """{"type":"UTC_INSTANT","startInstant":$startInstant,"endInstant":$endInstant}""",
+        eventId = eventId,
+        occurredAt = occurredAt,
+        sourceUpdatedAt = sourceUpdatedAt,
+        summary = summary,
+        description = description,
+        location = location,
+    )
+
+    private fun zonedSnapshot(
+        startLocal: String = "2026-08-31T23:30:00",
+        endLocal: String = "2026-09-01T00:30:00",
+        zoneId: String = "Asia/Seoul",
+    ): String = snapshotWithTime(
+        """{"type":"ZONED_LOCAL","startLocal":"$startLocal","endLocal":"$endLocal","zoneId":"$zoneId"}""",
+    )
+
+    private fun snapshotWithTime(
+        time: String,
+        eventId: String = UUID.randomUUID().toString(),
+        occurredAt: String = quoted("2026-08-11T01:00:05Z"),
+        sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
         summary: String = "ROUND 1",
         description: String? = null,
         location: String? = null,
@@ -252,35 +272,6 @@ class SnapshotInputContractTest @Autowired constructor(
           "description": ${description?.let(::quoted) ?: "null"},
           "location": ${location?.let(::quoted) ?: "null"},
           "sourceUpdatedAt": $sourceUpdatedAt,
-          "time": {
-            "type": "UTC_INSTANT",
-            "startInstant": $startInstant,
-            "endInstant": $endInstant
-          }
-        }
-        """.trimIndent()
-
-    private fun zonedSnapshot(
-        startLocal: String = "2026-08-31T23:30:00",
-        endLocal: String = "2026-09-01T00:30:00",
-        zoneId: String = "Asia/Seoul",
-    ): String = snapshotWithTime(
-        """{"type":"ZONED_LOCAL","startLocal":"$startLocal","endLocal":"$endLocal","zoneId":"$zoneId"}""",
-    )
-
-    private fun snapshotWithTime(time: String): String =
-        """
-        {
-          "eventId": "${UUID.randomUUID()}",
-          "occurredAt": "2026-08-11T01:00:05Z",
-          "sourceItemId": "${UUID.randomUUID()}",
-          "seasonId": "$SEASON_ID",
-          "revision": 0,
-          "status": "ACTIVE",
-          "summary": "시간 형태 검증",
-          "description": null,
-          "location": null,
-          "sourceUpdatedAt": "2026-08-11T01:00:00Z",
           "time": $time
         }
         """.trimIndent()
@@ -288,7 +279,6 @@ class SnapshotInputContractTest @Autowired constructor(
     private fun quoted(value: String): String = "\"$value\""
 
     private companion object {
-        const val SNAPSHOT_PATH = "/internal/api/v1/schedule-snapshots"
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
     }
 }

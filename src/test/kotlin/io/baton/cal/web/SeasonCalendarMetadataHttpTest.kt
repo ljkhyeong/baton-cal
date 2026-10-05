@@ -1,23 +1,27 @@
 package io.baton.cal.web
 
+import io.baton.cal.calendar.calendarName
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.contract.andReturnValid
+import io.baton.cal.contract.contractExample
 import io.baton.cal.support.InternalHttpTest
+import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
 import io.baton.cal.support.authorizedPost
-import io.baton.cal.support.bearer
 import io.baton.cal.support.createSubscription
+import io.baton.cal.support.ingestSnapshotExample
+import io.baton.cal.support.jsonContent
+import io.baton.cal.support.seasonCalendarMetadataRequest
+import io.baton.cal.support.updateSeasonCalendarMetadata
 import io.micrometer.core.instrument.MeterRegistry
-import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
@@ -25,8 +29,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import kotlin.io.path.Path
-import kotlin.io.path.readText
 
 @InternalHttpTest
 class SeasonCalendarMetadataHttpTest @Autowired constructor(
@@ -35,8 +37,8 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
 ) {
     @Test
     fun `이름 변경은 개정 번호를 따르고 일정 표현과 구독을 유지한다`() {
-        val initial = Path("contracts/examples/season-calendar-metadata.r0.json").readText()
-        val updated = Path("contracts/examples/season-calendar-metadata.r2.json").readText()
+        val initial = contractExample("season-calendar-metadata.r0.json")
+        val updated = contractExample("season-calendar-metadata.r2.json")
         val initialResponse = update(initial)
         assertThat(JsonPath.read<Int>(initialResponse, "$.revision")).isZero()
 
@@ -45,19 +47,13 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
             .andExpect(status().isOk)
             .andReturn().response.contentAsByteArray.parseIcalendar()
         assertThat(emptyFeed.events()).isEmpty()
-        assertThat(emptyFeed.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("BATON 개발 시즌")
+        assertThat(emptyFeed.calendarName()).isEqualTo("BATON 개발 시즌")
 
-        mockMvc.perform(
-            authorizedPost("/internal/api/v1/schedule-snapshots")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(Path("contracts/examples/schedule-snapshot.zoned-active-r0.json").readText()),
-        )
-            .andExpect(status().isOk)
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
         val before = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isOk)
             .andReturn().response
-        assertThat(before.contentAsByteArray.parseIcalendar().propertyList.getRequired<Property>("X-WR-CALNAME").value)
-            .isEqualTo("BATON 개발 시즌")
+        assertThat(before.contentAsByteArray.parseIcalendar().calendarName()).isEqualTo("BATON 개발 시즌")
 
         val updatedResponse = update(updated)
         assertThat(updatedResponse).isEqualTo(update(updated))
@@ -70,7 +66,7 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
             .andExpect(status().isOk)
             .andReturn().response
         val renamed = after.contentAsByteArray.parseIcalendar()
-        assertThat(renamed.propertyList.getRequired<Property>("X-WR-CALNAME").value).isEqualTo("BATON 가을 개발 시즌")
+        assertThat(renamed.calendarName()).isEqualTo("BATON 가을 개발 시즌")
         assertThat(renamed.requiredEvent().toString())
             .isEqualTo(before.contentAsByteArray.parseIcalendar().requiredEvent().toString())
 
@@ -101,8 +97,8 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
 
     @Test
     fun `시즌 이름 수신은 기존 인증과 UUID 및 TEXT 검증을 적용한다`() {
-        val valid = Path("contracts/examples/season-calendar-metadata.r0.json").readText()
-        mockMvc.perform(put(PATH, SEASON_ID).contentType(MediaType.APPLICATION_JSON).content(valid))
+        val valid = contractExample("season-calendar-metadata.r0.json")
+        mockMvc.perform(put(SEASON_CALENDAR_METADATA_PATH, SEASON_ID).jsonContent(valid))
             .andExpect(status().isUnauthorized)
         mockMvc.perform(metadataRequest(valid, seasonId = "1-1-1-1-1"))
             .andExpect(status().isBadRequest)
@@ -124,7 +120,7 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
     @ParameterizedTest
     @ValueSource(strings = ["123", "12.5", "true"])
     fun `시즌 이름의 숫자와 불리언은 거부하고 같은 내용의 문자열은 처리한다`(value: String) {
-        val payload = Path("contracts/examples/season-calendar-metadata.r0.json").readText()
+        val payload = contractExample("season-calendar-metadata.r0.json")
             .replace("BATON 개발 시즌", value)
         mockMvc.perform(metadataRequest(payload.replace("\"displayName\": \"$value\"", "\"displayName\": $value")))
             .andExpect(status().isBadRequest)
@@ -133,17 +129,12 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
         assertThat(JsonPath.read<String>(update(payload), "$.displayName")).isEqualTo(value)
     }
 
-    private fun update(payload: String): String = mockMvc.perform(metadataRequest(payload))
-        .andExpect(status().isOk)
-        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-        .andExpect(jsonPath("$.seasonId").value(SEASON_ID))
-        .andReturnValid("season-calendar-metadata-result.v1.schema.json", "시즌 이름 수신 응답")
+    private fun update(payload: String): String = mockMvc.updateSeasonCalendarMetadata(SEASON_ID, payload)
 
     private fun metadataRequest(payload: String, seasonId: String = SEASON_ID) =
-        put(PATH, seasonId).bearer().contentType(MediaType.APPLICATION_JSON).content(payload)
+        seasonCalendarMetadataRequest(seasonId, payload)
 
     private companion object {
-        const val PATH = "/internal/api/v1/seasons/{seasonId}/calendar-metadata"
         const val SEASON_ID = "f5316f93-d49e-4230-b1d0-9e9c2d079819"
     }
 }
