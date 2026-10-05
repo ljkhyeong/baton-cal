@@ -142,11 +142,14 @@ database_scalar() {
 }
 
 assert_flyway_versions() {
-  local successful_versions
+  # 체크아웃의 마이그레이션 파일과 이미지가 실제로 적용한 버전이 정확히 같아야 한다.
+  local expected_versions successful_versions
+  expected_versions=$(cd "$project_directory/src/main/resources/db/migration" && printf '%s\n' V*__*.sql \
+    | sed -E 's/^V([0-9]+)__.*/\1/' | sort -n | paste -sd, -)
   successful_versions=$(database_scalar \
     "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "1,2,3,4,5,6,7,8" ]] \
-    || fail "성공한 Flyway 버전이 정확히 1,2,3,4,5,6,7,8이 아닙니다: '${successful_versions:-<비어 있음>}'"
+  [[ "$successful_versions" == "$expected_versions" ]] \
+    || fail "성공한 Flyway 버전 '${successful_versions:-<비어 있음>}'이 마이그레이션 파일 '$expected_versions'과 다릅니다."
   echo "Flyway 성공 버전 확인: $successful_versions"
 }
 

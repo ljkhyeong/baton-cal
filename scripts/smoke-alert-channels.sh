@@ -6,7 +6,6 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/baton-cal-alerts.XXXXXX")
 project_name="baton-cal-alerts-$(date +%s)-$$"
 receiver="$project_name-receiver"
 sender="$project_name-sender"
-alertmanager_image=prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
 request() { docker exec "$receiver" wget -q -T 5 -O - "$@"; }
 
 cleanup() {
@@ -19,6 +18,12 @@ cleanup() {
 }
 trap cleanup EXIT
 for required in docker jq python3; do command -v "$required" >/dev/null; done
+
+# 이미지 고정값은 Dependabot이 갱신하는 Compose 정의에서 읽어 운영 스모크와 같은 버전을 검증한다.
+compose_definition=$(docker compose --file "$project_directory/compose.operations.yml" \
+  --file "$project_directory/compose.operations-smoke.yml" config --no-interpolate --format json)
+alertmanager_image=$(jq -er '.services.alertmanager.image' <<< "$compose_definition")
+receiver_image=$(jq -er '.services["alert-receiver"].image' <<< "$compose_definition")
 
 # 실제 메시지를 보내지 않도록 외부 통신이 차단된 검증 네트워크를 사용한다.
 docker network create --internal "$project_name" > /dev/null
@@ -65,7 +70,7 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
     --env ALERT_TEST_FAILURES=429,503 \
     --volume "$project_directory/scripts/fixtures/alert-receiver.py:/app/receiver.py:ro" \
     --volume "$scratch:/data:ro" \
-    python:3.14.7-alpine3.23@sha256:8caa2adfeb414dfe68d8b257f7aea9e205a400521c2b13b2d2e5e731fb8e70e5 \
+    "$receiver_image" \
     python /app/receiver.py > /dev/null
   docker run --detach --name "$sender" --network "$project_name" --network-alias alert-sender \
     "${config_volumes[@]}" \
