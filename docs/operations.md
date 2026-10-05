@@ -257,6 +257,8 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 | `CalReadinessFailed` | 준비 상태 실패 또는 점검기 수집 실패가 30초 지속 | CAL·PostgreSQL·Blackbox |
 | `CalHttpServerErrors` | 최근 5분의 CAL 5xx가 5회 이상인 상태가 1분 지속 | DB·일시적 503·잠금 지연 |
 | `CalProjectionLockSlow` | 최근 5분 평균 잠금 획득 시간이 1초 초과한 상태가 2분 지속 | 같은 시즌의 동시 수신량과 전체 재구축 소요 시간 |
+| `CalInternalAuthenticationFailed` | 최근 5분 내부 API 인증 실패가 3회 이상인 상태가 5분 지속 | BATON의 CAL 토큰과 [내부 Bearer 회전](../README.md#내부-bearer-회전) 순서 |
+| `CalIngestionRejected` | 최근 15분 안에 일정·묶음·시즌 이름 수신이 `400`·`409`·`413`으로 거부됨 | 오류 코드와 BATON 전송 기록. 거부된 변경은 캘린더에 반영되지 않았다 |
 | `CalTlsFailed` | TLS 점검 또는 점검기 수집 실패가 5분 지속 | 인증서 이름·체인·HTTPS 포트 연결 |
 | `CalPublicRouteFailed` | 공개 경로의 상태·본문 확인 실패 또는 점검기 수집 실패가 30초 지속 | 프록시 라우팅·CAL·DB 연결 |
 | `CalCertificateExpiresSoon` | 인증서의 남은 기간이 14일 미만인 상태가 10분 지속 | 기존 인증서 관리 도구의 갱신·적용 상태 |
@@ -280,6 +282,9 @@ k3s에서는 위 URL의 `gateway`를 실제 HTTPS 프록시 서비스 주소로 
 알림의 `for`는 조건이 계속 유지돼야 하는 시간이며 실제 도착에는 수집·평가와 Alertmanager의
 그룹 대기 시간이 추가된다. [Prometheus 알림 규칙](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
 5xx 지표는 CAL에서 처리한 응답만 포함하므로 Nginx에서 발생한 502·429는 Nginx 접근 로그에서 확인한다.
+잘못된 내부 토큰의 `401`과 수신 거부의 `4xx`는 5xx 알림에 잡히지 않아 일정 전달이 조용히 멈출 수 있으므로
+별도 알림으로 둔다. 구독·복구 요청의 `409`는 정상 흐름에서도 발생하므로 수신 거부 알림에서 제외한다.
+알림이 쓰는 지표 이름과 라벨은 `OperationalHttpTest`가 실제 Prometheus 출력으로 확인한다.
 운영에서는 호스트·인증서 만료·Prometheus 자체 장애를 외부에서 점검하는 경로도 연결한다.
 
 ## 재현 가능한 로컬 검증

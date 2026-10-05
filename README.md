@@ -118,6 +118,9 @@ openssl rand -hex 32
 CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
 토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다. 외부 메트릭 수집기를 연결한 환경에서는
 `baton.cal.internal.authentication{result="previous"}` 증가가 멈춘 것을 제거 판단의 근거로 쓴다.
+Prometheus에서는 `sum(increase(baton_cal_internal_authentication_total{result="previous"}[1h]))`가 0인지
+확인한다. BATON 전환 뒤 `CalInternalAuthenticationFailed` 알림이 발생하면 BATON이 등록되지 않은 값을 쓰는 것이므로
+이전 값을 제거하지 않고 BATON 설정부터 확인한다.
 
 ### V4~V7 최초 배포
 
