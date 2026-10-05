@@ -1,7 +1,6 @@
 package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
-import io.baton.cal.contract.ContractSchemaSupport
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
@@ -36,6 +35,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -135,8 +135,9 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val named = readSeasonState()
         assertThat(JsonPath.read<String>(named, "$.itemDigest"))
             .isEqualTo(JsonPath.read<String>(initial, "$.itemDigest"))
-        assertThat(JsonPath.read<Int>(named, "$.metadataRevision")).isEqualTo(2)
-        assertThat(JsonPath.read<String>(named, "$.metadataDigest")).hasSize(64)
+        // 복원 스모크와 BATON이 쓰는 진단 예시와 실제 응답이 같아야 한다.
+        assertThat(JSON.readTree(named))
+            .isEqualTo(JSON.readTree(Path("contracts/examples/recovery-season-state.zoned-cancelled.json").readText()))
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_season_manifest")).isZero()
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_run_completion")).isZero()
     }
@@ -181,22 +182,12 @@ class RecoveryManifestHttpTest @Autowired constructor(
         updateMetadata()
         val state = currentState()
 
-        val manifestResponse = verifySeason(state.itemCount, state.itemDigest, state.metadataRevision, state.metadataDigest)
-        ContractSchemaSupport.assertValid(
-            "recovery-season-manifest-result.v1.schema.json",
-            manifestResponse,
-            "시즌 복구 매니페스트 검증 응답",
-        )
+        verifySeason(state.itemCount, state.itemDigest, state.metadataRevision, state.metadataDigest)
         val completionPayload = completionPayload(listOf(state))
         val first = complete(completionPayload)
         val duplicate = complete(completionPayload)
 
         assertThat(duplicate).isEqualTo(first)
-        ContractSchemaSupport.assertValid(
-            "recovery-run-completion-result.v1.schema.json",
-            first,
-            "전체 복구 완료 응답",
-        )
         mockMvc.perform(completionRequest(completionPayload(emptyList())))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RECOVERY_RUN_CONFLICT"))
@@ -361,7 +352,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         .andExpect(status().isOk)
         .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("VERIFIED"))
-        .andReturn().response.contentAsString
+        .andReturnValid("recovery-season-manifest-result.v1.schema.json", "시즌 복구 매니페스트 검증 응답")
 
     private fun seasonManifestRequest(
         itemCount: Int,
@@ -399,7 +390,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         .andExpect(status().isOk)
         .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(jsonPath("$.result").value("COMPLETED"))
-        .andReturn().response.contentAsString
+        .andReturnValid("recovery-run-completion-result.v1.schema.json", "전체 복구 완료 응답")
 
     private fun completionRequest(payload: String) =
         put("/internal/api/v1/recovery-runs/{recoveryId}/completion", RECOVERY_ID)
@@ -432,5 +423,6 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("f5316f93-d49e-4230-b1d0-9e9c2d079819")
         const val RECOVERY_ID = "92490d0d-b82e-4f94-a041-308b184aaef9"
+        val JSON = JsonMapper()
     }
 }
