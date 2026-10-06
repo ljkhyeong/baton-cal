@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository
 class SeasonFeedProjectionRepository(
     private val jdbcClient: JdbcClient,
 ) {
+    /** 시즌 표현을 저장한다. ETag는 표현 바이트의 해시이므로 ETag와 Last-Modified가 같으면 행을 다시 쓰지 않는다. */
     fun upsert(row: SeasonFeedProjectionRow) {
         jdbcClient.sql(
             """
@@ -28,9 +29,8 @@ class SeasonFeedProjectionRepository(
                 representation = EXCLUDED.representation,
                 etag = EXCLUDED.etag,
                 last_modified = EXCLUDED.last_modified
-            WHERE season_feed_projection.representation IS DISTINCT FROM EXCLUDED.representation
-               OR season_feed_projection.etag IS DISTINCT FROM EXCLUDED.etag
-               OR season_feed_projection.last_modified IS DISTINCT FROM EXCLUDED.last_modified
+            WHERE (season_feed_projection.etag, season_feed_projection.last_modified)
+                IS DISTINCT FROM (EXCLUDED.etag, EXCLUDED.last_modified)
             """.trimIndent(),
         )
             .param("seasonId", row.seasonId)

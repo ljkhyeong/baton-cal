@@ -4,7 +4,7 @@ import io.baton.cal.config.CalProperties
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.RecoveryRunCompletionRow
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
-import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.web.resourceNotFound
 import io.baton.cal.web.conflict
 import io.baton.cal.web.RecoveryRunCompletionResponse
@@ -22,14 +22,14 @@ import java.util.UUID
 class RecoveryManifestService(
     private val repository: RecoveryManifestRepository,
     private val metadataRepository: SeasonCalendarMetadataRepository,
-    private val seasonLockRepository: SeasonProjectionLockRepository,
+    private val lockRepository: AdvisoryLockRepository,
     private val properties: CalProperties,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     fun getStatus(recoveryId: UUID): RecoveryRunStatusResponse {
         val completion = repository.findCompletion(recoveryId)
-        val verifiedSeasonCount = completion?.seasonCount ?: repository.countSeasonManifests(recoveryId)
+        val verifiedSeasonCount = completion?.seasonCount ?: repository.listVerifiedSeasonStates(recoveryId).size
         if (completion == null && verifiedSeasonCount == 0) {
             throw resourceNotFound("저장된 복구 실행을 찾을 수 없습니다")
         }
@@ -54,16 +54,14 @@ class RecoveryManifestService(
     @Transactional
     fun verifySeason(recoveryId: UUID, expected: RecoverySeasonState): RecoverySeasonManifestResponse {
         val seasonId = expected.seasonId
-        repository.lockRecoveryRun(recoveryId)
+        lockRepository.lockRecoveryRun(recoveryId)
         val completion = repository.findCompletion(recoveryId)
         if (completion != null) {
-            if (repository.findVerifiedSeasonState(recoveryId, seasonId) != expected) {
-                throw runConflict()
-            }
+            if (expected !in repository.listVerifiedSeasonStates(recoveryId)) throw runConflict()
             return expected.toResponse(recoveryId)
         }
         requireRecoveryMode()
-        seasonLockRepository.acquire(seasonId)
+        lockRepository.lockSeason(seasonId)
         if (currentSeasonState(seasonId) != expected) {
             throw manifestMismatch()
         }
@@ -77,7 +75,7 @@ class RecoveryManifestService(
 
     @Transactional
     fun complete(recoveryId: UUID, seasonCount: Int, seasonDigest: String): RecoveryRunCompletionResponse {
-        repository.lockRecoveryRun(recoveryId)
+        lockRepository.lockRecoveryRun(recoveryId)
         repository.findCompletion(recoveryId)?.let { stored ->
             if (stored.seasonCount != seasonCount || stored.seasonDigest != seasonDigest) {
                 throw runConflict()

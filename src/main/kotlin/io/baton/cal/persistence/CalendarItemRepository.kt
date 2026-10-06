@@ -14,22 +14,6 @@ import kotlin.jvm.optionals.getOrNull
 class CalendarItemRepository(
     private val jdbcClient: JdbcClient,
 ) {
-    /**
-     * 새 항목을 추가하거나 원본 개정 번호가 증가했을 때만 기존 항목을 교체한다.
-     * 호출자는 외부 트랜잭션에서 해당 시즌의 투영 잠금을 보유해야 한다.
-     */
-    @Transactional(propagation = Propagation.MANDATORY)
-    fun applyIfNewer(candidate: CalendarItemRow): CalendarItemApplyOutcome {
-        if (upsert(candidate)) return CalendarItemApplyOutcome.APPLIED
-
-        val current = checkNotNull(findStatusBySourceItemId(candidate.sourceItemId))
-        return when {
-            candidate.seasonId != current.seasonId -> CalendarItemApplyOutcome.SCOPE_CONFLICT
-            candidate.revision < current.revision -> CalendarItemApplyOutcome.STALE
-            else -> CalendarItemApplyOutcome.REVISION_CONFLICT
-        }
-    }
-
     fun findStatusBySourceItemId(sourceItemId: UUID): AcceptedItemStatus? =
         jdbcClient.sql(
             """
@@ -44,36 +28,18 @@ class CalendarItemRepository(
             .getOrNull()
 
     fun listBySeasonId(seasonId: UUID): List<CalendarItemRow> =
-        jdbcClient.sql(
-            """
-            SELECT
-                source_item_id,
-                season_id,
-                revision,
-                status,
-                summary,
-                description,
-                location,
-                time_type,
-                starts_at_instant,
-                ends_at_instant,
-                starts_at_local,
-                ends_at_local,
-                zone_id,
-                starts_on_date,
-                ends_on_date,
-                source_updated_at,
-                accepted_at
-            FROM calendar_item
-            WHERE season_id = :seasonId
-            """.trimIndent(),
-        )
+        jdbcClient.sql("SELECT * FROM calendar_item WHERE season_id = :seasonId")
             .param("seasonId", seasonId)
             .query(CalendarItemRow::class.java)
             .list()
             .requireNoNulls()
 
-    private fun upsert(candidate: CalendarItemRow): Boolean =
+    /**
+     * 새 항목을 추가하거나, 같은 시즌에서 원본 개정 번호와 수정 시각이 모두 증가했을 때만 기존 항목을 교체한다.
+     * 반영하지 않았으면 false다. 호출자는 외부 트랜잭션에서 해당 시즌의 잠금을 보유해야 한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun upsertIfNewer(candidate: CalendarItemRow): Boolean =
         jdbcClient.sql(
             """
             INSERT INTO calendar_item (
@@ -142,18 +108,10 @@ class CalendarItemRepository(
             .param("description", candidate.description, Types.VARCHAR)
             .param("location", candidate.location, Types.VARCHAR)
             .param("timeType", candidate.timeType.name)
-            .param(
-                "startsAtInstant",
-                candidate.startsAtInstant?.atOffset(ZoneOffset.UTC),
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .param(
-                "endsAtInstant",
-                candidate.endsAtInstant?.atOffset(ZoneOffset.UTC),
-                Types.TIMESTAMP_WITH_TIMEZONE,
-            )
-            .param("startsAtLocal", candidate.startsAtLocal, Types.TIMESTAMP)
-            .param("endsAtLocal", candidate.endsAtLocal, Types.TIMESTAMP)
+            .param("startsAtInstant", candidate.startsAtInstant?.atOffset(ZoneOffset.UTC))
+            .param("endsAtInstant", candidate.endsAtInstant?.atOffset(ZoneOffset.UTC))
+            .param("startsAtLocal", candidate.startsAtLocal)
+            .param("endsAtLocal", candidate.endsAtLocal)
             .param("zoneId", candidate.zoneId, Types.VARCHAR)
             .param("startsOnDate", candidate.startsOnDate, Types.DATE)
             .param("endsOnDate", candidate.endsOnDate, Types.DATE)

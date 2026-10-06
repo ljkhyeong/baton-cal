@@ -7,7 +7,6 @@ import java.util.UUID
 
 data class ScheduleSnapshot(
     val eventId: UUID,
-    val occurredAt: Instant,
     val sourceItemId: UUID,
     val seasonId: UUID,
     val revision: Int,
@@ -46,36 +45,14 @@ object SnapshotFingerprint {
         nullableString(snapshot.location)
         string(snapshot.sourceUpdatedAt.toString())
 
-        when (val schedule = snapshot.schedule) {
-            is ScheduleWindow.UtcInstant -> {
-                string("UTC_INSTANT")
-                string(schedule.start.toString())
-                string(schedule.end.toString())
-            }
-
-            is ScheduleWindow.UtcPoint -> {
-                string("UTC_POINT")
-                string(schedule.at.toString())
-            }
-
-            is ScheduleWindow.ZonedLocal -> {
-                string("ZONED_LOCAL")
-                string(schedule.start.toString())
-                string(schedule.end.toString())
-                string(schedule.zoneId)
-            }
-
-            is ScheduleWindow.ZonedLocalPoint -> {
-                string("ZONED_LOCAL_POINT")
-                string(schedule.at.toString())
-                string(schedule.zoneId)
-            }
-
-            is ScheduleWindow.AllDay -> {
-                string("ALL_DAY")
-                string(schedule.startDate.toString())
-                string(schedule.endDate.toString())
-            }
-        }
+        val schedule = snapshot.schedule
+        string(schedule.type.name)
+        when (schedule) {
+            is ScheduleWindow.UtcInstant -> listOf(schedule.start, schedule.end)
+            is ScheduleWindow.UtcPoint -> listOf(schedule.at)
+            is ScheduleWindow.ZonedLocal -> listOf(schedule.start, schedule.end, schedule.zoneId)
+            is ScheduleWindow.ZonedLocalPoint -> listOf(schedule.at, schedule.zoneId)
+            is ScheduleWindow.AllDay -> listOf(schedule.startDate, schedule.endDate)
+        }.forEach { string(it.toString()) }
     }
 }

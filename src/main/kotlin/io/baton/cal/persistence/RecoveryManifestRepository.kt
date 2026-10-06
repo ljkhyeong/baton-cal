@@ -4,6 +4,7 @@ import io.baton.cal.recovery.RecoveryItemState
 import io.baton.cal.recovery.RecoverySeasonState
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
+import java.sql.Types
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
@@ -20,17 +21,6 @@ data class RecoveryRunCompletionRow(
 class RecoveryManifestRepository(
     private val jdbcClient: JdbcClient,
 ) {
-    fun countSeasonManifests(recoveryId: UUID): Int = jdbcClient.sql(
-        "SELECT count(*) FROM recovery_season_manifest WHERE recovery_id = :recoveryId",
-    )
-        .param("recoveryId", recoveryId)
-        .query(Int::class.java)
-        .single()
-
-    fun lockRecoveryRun(recoveryId: UUID) {
-        jdbcClient.lockUntilTransactionEnds(AdvisoryLockScope.RECOVERY_RUN, recoveryId)
-    }
-
     /** 시즌의 현재 항목마다 채택한 개정 번호를 처음 수신한 스냅샷 지문과 함께 조회한다. */
     fun listItemStates(seasonId: UUID): List<RecoveryItemState> = jdbcClient.sql(
         """
@@ -74,24 +64,11 @@ class RecoveryManifestRepository(
             .param("seasonId", state.seasonId)
             .param("itemCount", state.itemCount)
             .param("itemDigest", state.itemDigest)
-            .param("metadataRevision", state.metadataRevision, java.sql.Types.INTEGER)
-            .param("metadataDigest", state.metadataDigest, java.sql.Types.CHAR)
+            .param("metadataRevision", state.metadataRevision, Types.INTEGER)
+            .param("metadataDigest", state.metadataDigest, Types.CHAR)
             .param("verifiedAt", verifiedAt.atOffset(ZoneOffset.UTC))
             .update()
     }
-
-    fun findVerifiedSeasonState(recoveryId: UUID, seasonId: UUID): RecoverySeasonState? = jdbcClient.sql(
-        """
-        SELECT season_id, item_count, item_digest, metadata_revision, metadata_digest
-        FROM recovery_season_manifest
-        WHERE recovery_id = :recoveryId AND season_id = :seasonId
-        """.trimIndent(),
-    )
-        .param("recoveryId", recoveryId)
-        .param("seasonId", seasonId)
-        .query(RecoverySeasonState::class.java)
-        .optional()
-        .getOrNull()
 
     fun listVerifiedSeasonStates(recoveryId: UUID): List<RecoverySeasonState> = jdbcClient.sql(
         """

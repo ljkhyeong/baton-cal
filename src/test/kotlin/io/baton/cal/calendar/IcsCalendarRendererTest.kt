@@ -55,7 +55,6 @@ class IcsCalendarRendererTest {
                 end = Instant.parse("2026-08-12T02:30:00Z"),
             ),
             sourceUpdatedAt = Instant.parse("2026-08-11T12:34:56.987Z"),
-            acceptedAt = Instant.parse("2026-08-11T12:34:56.987Z"),
         )
 
         val first = renderer.render(seasonId, listOf(item))
@@ -91,7 +90,6 @@ class IcsCalendarRendererTest {
                 end = Instant.parse("2026-08-14T02:03:04Z"),
             ),
             sourceUpdatedAt = Instant.parse("2026-08-13T12:34:56.987Z"),
-            acceptedAt = Instant.parse("2026-08-13T12:34:56.987Z"),
         )
 
         val rendered = renderer.render(seasonId, listOf(item))
@@ -126,7 +124,6 @@ class IcsCalendarRendererTest {
                 zoneId = "America/New_York",
             ),
             sourceUpdatedAt = Instant.parse("2026-10-31T12:34:56.987Z"),
-            acceptedAt = Instant.parse("2026-10-31T12:34:56.987Z"),
         )
 
         val rendered = renderer.render(seasonId, listOf(item))
@@ -162,7 +159,6 @@ class IcsCalendarRendererTest {
             location = null,
             schedule = ScheduleWindow.UtcPoint(Instant.parse("2026-09-01T01:02:03Z")),
             sourceUpdatedAt = Instant.parse("2026-08-20T01:00:00Z"),
-            acceptedAt = Instant.parse("2026-08-20T01:00:00Z"),
         )
         val zonedPoint = CalendarItem(
             sourceItemId = UUID.fromString("20000000-0000-0000-0000-000000000002"),
@@ -176,7 +172,6 @@ class IcsCalendarRendererTest {
                 zoneId = "Asia/Seoul",
             ),
             sourceUpdatedAt = Instant.parse("2026-08-20T02:00:00Z"),
-            acceptedAt = Instant.parse("2026-08-20T02:00:00Z"),
         )
         val allDay = CalendarItem(
             sourceItemId = UUID.fromString("30000000-0000-0000-0000-000000000003"),
@@ -190,7 +185,6 @@ class IcsCalendarRendererTest {
                 endDate = LocalDate.parse("2026-09-05"),
             ),
             sourceUpdatedAt = Instant.parse("2026-08-20T03:00:00Z"),
-            acceptedAt = Instant.parse("2026-08-20T03:00:00Z"),
         )
 
         val rendered = renderer.render(seasonId, listOf(allDay, utcPoint))
@@ -264,7 +258,6 @@ class IcsCalendarRendererTest {
             end = Instant.parse("2026-01-01T01:00:00Z"),
         ),
         sourceUpdatedAt = Instant.parse("2026-01-01T00:00:00Z"),
-        acceptedAt = Instant.parse("2026-01-01T00:00:00Z"),
     )
 
     private fun assertCanonicalCrLf(bytes: ByteArray) {

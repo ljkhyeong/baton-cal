@@ -2,7 +2,7 @@ package io.baton.cal.projection
 
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRow
-import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.web.SeasonCalendarMetadataResponse
 import io.baton.cal.web.conflict
 import org.springframework.stereotype.Service
@@ -14,13 +14,13 @@ import java.util.UUID
 @Service
 class SeasonCalendarMetadataService(
     private val repository: SeasonCalendarMetadataRepository,
-    private val lockRepository: SeasonProjectionLockRepository,
+    private val lockRepository: AdvisoryLockRepository,
     private val projectionService: SeasonProjectionService,
     private val clock: Clock,
 ) {
     @Transactional
     fun update(seasonId: UUID, revision: Int, displayName: String): SeasonCalendarMetadataResponse {
-        lockRepository.acquire(seasonId)
+        lockRepository.lockSeason(seasonId)
         val current = repository.findBySeasonId(seasonId)
         if (current != null && revision <= current.revision) {
             if (revision == current.revision && displayName != current.displayName) {

@@ -4,9 +4,7 @@ CREATE TABLE source_event_inbox (
     event_id UUID PRIMARY KEY,
     payload_hash CHAR(64) NOT NULL,
     source_item_id UUID NOT NULL,
-    season_id UUID NOT NULL,
     source_revision INTEGER NOT NULL,
-    occurred_at TIMESTAMPTZ NOT NULL,
     received_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT ck_source_event_inbox_payload_hash
         CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
@@ -17,7 +15,8 @@ CREATE TABLE source_event_inbox (
 CREATE INDEX ix_source_event_inbox_item_revision
     ON source_event_inbox (source_item_id, source_revision);
 
--- 시간 형태마다 사용하는 열이 다르다. 형태와 열 조합은 ck_calendar_item_time_shape가 보장한다.
+-- 시간 형태마다 사용하는 열이 다르다. 형태별 필수 열은 CASE의 비교식이 NOT NULL까지 보장하고,
+-- 시간 열 전체의 NOT NULL 개수가 필수 열 수와 같아야 하므로 나머지 시간 열은 비어 있다.
 CREATE TABLE calendar_item (
     source_item_id UUID PRIMARY KEY,
     season_id UUID NOT NULL,
@@ -42,75 +41,21 @@ CREATE TABLE calendar_item (
         CHECK (status IN ('ACTIVE', 'CANCELLED')),
     CONSTRAINT ck_calendar_item_summary
         CHECK (length(summary) > 0),
-    CONSTRAINT ck_calendar_item_time_type
-        CHECK (time_type IN (
-            'UTC_INSTANT',
-            'UTC_POINT',
-            'ZONED_LOCAL',
-            'ZONED_LOCAL_POINT',
-            'ALL_DAY'
-        )),
     CONSTRAINT ck_calendar_item_time_shape
         CHECK (
-            (
-                time_type = 'UTC_INSTANT'
-                AND starts_at_instant IS NOT NULL
-                AND ends_at_instant IS NOT NULL
-                AND ends_at_instant > starts_at_instant
-                AND starts_at_local IS NULL
-                AND ends_at_local IS NULL
-                AND zone_id IS NULL
-                AND starts_on_date IS NULL
-                AND ends_on_date IS NULL
-            )
-            OR
-            (
-                time_type = 'UTC_POINT'
-                AND starts_at_instant IS NOT NULL
-                AND ends_at_instant IS NULL
-                AND starts_at_local IS NULL
-                AND ends_at_local IS NULL
-                AND zone_id IS NULL
-                AND starts_on_date IS NULL
-                AND ends_on_date IS NULL
-            )
-            OR
-            (
-                time_type = 'ZONED_LOCAL'
-                AND starts_at_instant IS NULL
-                AND ends_at_instant IS NULL
-                AND starts_at_local IS NOT NULL
-                AND ends_at_local IS NOT NULL
-                AND ends_at_local > starts_at_local
-                AND zone_id IS NOT NULL
-                AND length(zone_id) > 0
-                AND starts_on_date IS NULL
-                AND ends_on_date IS NULL
-            )
-            OR
-            (
-                time_type = 'ZONED_LOCAL_POINT'
-                AND starts_at_instant IS NULL
-                AND ends_at_instant IS NULL
-                AND starts_at_local IS NOT NULL
-                AND ends_at_local IS NULL
-                AND zone_id IS NOT NULL
-                AND length(zone_id) > 0
-                AND starts_on_date IS NULL
-                AND ends_on_date IS NULL
-            )
-            OR
-            (
-                time_type = 'ALL_DAY'
-                AND starts_at_instant IS NULL
-                AND ends_at_instant IS NULL
-                AND starts_at_local IS NULL
-                AND ends_at_local IS NULL
-                AND zone_id IS NULL
-                AND starts_on_date IS NOT NULL
-                AND ends_on_date IS NOT NULL
-                AND ends_on_date > starts_on_date
-            )
+            num_nonnulls(
+                starts_at_instant, ends_at_instant, starts_at_local, ends_at_local,
+                zone_id, starts_on_date, ends_on_date
+            ) = CASE time_type WHEN 'UTC_POINT' THEN 1 WHEN 'ZONED_LOCAL' THEN 3 ELSE 2 END
+            AND (
+                CASE time_type
+                    WHEN 'UTC_INSTANT' THEN ends_at_instant > starts_at_instant
+                    WHEN 'UTC_POINT' THEN starts_at_instant IS NOT NULL
+                    WHEN 'ZONED_LOCAL' THEN ends_at_local > starts_at_local AND length(zone_id) > 0
+                    WHEN 'ZONED_LOCAL_POINT' THEN starts_at_local IS NOT NULL AND length(zone_id) > 0
+                    WHEN 'ALL_DAY' THEN ends_on_date > starts_on_date
+                END
+            ) IS TRUE
         )
 );
 

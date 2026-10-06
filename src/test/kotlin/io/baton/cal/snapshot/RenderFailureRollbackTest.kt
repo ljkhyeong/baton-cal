@@ -96,7 +96,6 @@ class RenderFailureRollbackTest @Autowired constructor(
 
         val SNAPSHOT = ScheduleSnapshot(
             eventId = UUID.fromString("11111111-1111-1111-1111-111111111111"),
-            occurredAt = Instant.parse("2026-08-13T01:00:00Z"),
             sourceItemId = SOURCE_ITEM_ID,
             seasonId = SEASON_ID,
             revision = 0,

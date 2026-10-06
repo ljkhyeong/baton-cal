@@ -3,9 +3,9 @@ package io.baton.cal.web
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
+import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
-import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.recovery.RecoveryManifestDigest
 import io.baton.cal.recovery.RecoverySeasonState
 import io.baton.cal.support.RecoveryModeIntegrationTest
@@ -14,6 +14,7 @@ import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.jsonContent
 import io.baton.cal.support.updateSeasonCalendarMetadata
+import io.baton.cal.support.whileLocked
 import org.springframework.test.json.JsonContent
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
@@ -42,7 +43,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val repository: RecoveryManifestRepository,
     private val metadataRepository: SeasonCalendarMetadataRepository,
-    private val seasonLockRepository: SeasonProjectionLockRepository,
+    private val lockRepository: AdvisoryLockRepository,
     private val jdbcClient: JdbcClient,
     transactionManager: PlatformTransactionManager,
 ) {
@@ -195,10 +196,11 @@ class RecoveryManifestHttpTest @Autowired constructor(
     @ValueSource(strings = ["run", "state"])
     fun `복구 잠금 대기가 끝나면 503과 재시도 간격을 반환한다`(lock: String) {
         val payload = completionPayload(emptyList())
-        whileLocked(
+        transaction.whileLocked(
+            jdbcClient,
             lock = {
                 if (lock == "run") {
-                    repository.lockRecoveryRun(UUID.fromString(RECOVERY_ID))
+                    lockRepository.lockRecoveryRun(UUID.fromString(RECOVERY_ID))
                 } else {
                     jdbcClient.sql("LOCK TABLE calendar_item IN ROW EXCLUSIVE MODE").update()
                 }
@@ -222,7 +224,7 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val verified = verifySeason(state.itemCount, state.itemDigest, null, null)
         if (completed) complete(completionPayload(listOf(state)))
 
-        whileLocked(lock = { seasonLockRepository.acquire(SEASON_ID) }) {
+        transaction.whileLocked(jdbcClient, lock = { lockRepository.lockSeason(SEASON_ID) }) {
             if (completed) {
                 assertThat(verifySeason(state.itemCount, state.itemDigest, null, null)).isEqualTo(verified)
                 mockMvc.perform(seasonManifestRequest(state.itemCount, "0".repeat(64), null, null))
@@ -381,22 +383,6 @@ class RecoveryManifestHttpTest @Autowired constructor(
         mockMvc.perform(completionRequest(completionPayload(states)))
             .andExpect(status().isConflict)
             .andExpect(content().json(contractExample("api-error.recovery-manifest-mismatch.json")))
-    }
-
-    // 다른 트랜잭션이 잠금을 잡은 동안 짧은 lock_timeout으로 요청을 실행하고 그 트랜잭션은 롤백한다.
-    private fun whileLocked(lock: () -> Unit, request: () -> Unit) {
-        Executors.newSingleThreadExecutor().use { executor ->
-            transaction.executeWithoutResult {
-                lock()
-                executor.submit {
-                    transaction.executeWithoutResult { rollback ->
-                        rollback.setRollbackOnly()
-                        jdbcClient.sql("SET LOCAL lock_timeout TO '200ms'").update()
-                        request()
-                    }
-                }.get(5, TimeUnit.SECONDS)
-            }
-        }
     }
 
     private companion object {

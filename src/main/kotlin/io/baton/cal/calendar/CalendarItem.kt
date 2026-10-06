@@ -16,11 +16,25 @@ enum class CalendarItemStatus {
     CANCELLED,
 }
 
-sealed interface ScheduleWindow {
+/** 일정 시간 형태다. 이름은 계약 JSON의 `time.type`, 스냅샷 지문, `calendar_item.time_type` 값으로 쓰인다. */
+enum class ScheduleTimeType {
+    UTC_INSTANT,
+    UTC_POINT,
+    ZONED_LOCAL,
+    ZONED_LOCAL_POINT,
+    ALL_DAY,
+}
+
+sealed class ScheduleWindow(val type: ScheduleTimeType) {
+    /** IANA 시간대의 현지 시각을 쓰는 형태다. */
+    interface Zoned {
+        val zoneId: String
+    }
+
     data class UtcInstant(
         val start: Instant,
         val end: Instant,
-    ) : ScheduleWindow {
+    ) : ScheduleWindow(ScheduleTimeType.UTC_INSTANT) {
         init {
             requirePositiveSecondRange(start.truncatedTo(ChronoUnit.SECONDS), end.truncatedTo(ChronoUnit.SECONDS))
         }
@@ -28,41 +42,34 @@ sealed interface ScheduleWindow {
 
     data class UtcPoint(
         val at: Instant,
-    ) : ScheduleWindow
+    ) : ScheduleWindow(ScheduleTimeType.UTC_POINT)
 
     data class ZonedLocal(
         val start: LocalDateTime,
         val end: LocalDateTime,
-        val zoneId: String,
-    ) : ScheduleWindow {
-        internal val calendarTimeZone: TimeZone
-
+        override val zoneId: String,
+    ) : ScheduleWindow(ScheduleTimeType.ZONED_LOCAL), Zoned {
         init {
             requirePositiveSecondRange(start.truncatedTo(ChronoUnit.SECONDS), end.truncatedTo(ChronoUnit.SECONDS))
-            val zone = requireCalendarZone(zoneId)
-            calendarTimeZone = zone.calendarTimeZone
-            requireValidLocalTime(zone.zoneRules, start, "start")
-            requireValidLocalTime(zone.zoneRules, end, "end")
+            val zoneRules = CalendarTimeZones.zoneRules(zoneId)
+            requireValidLocalTime(zoneRules, start, "start")
+            requireValidLocalTime(zoneRules, end, "end")
         }
     }
 
     data class ZonedLocalPoint(
         val at: LocalDateTime,
-        val zoneId: String,
-    ) : ScheduleWindow {
-        internal val calendarTimeZone: TimeZone
-
+        override val zoneId: String,
+    ) : ScheduleWindow(ScheduleTimeType.ZONED_LOCAL_POINT), Zoned {
         init {
-            val zone = requireCalendarZone(zoneId)
-            calendarTimeZone = zone.calendarTimeZone
-            requireValidLocalTime(zone.zoneRules, at, "at")
+            requireValidLocalTime(CalendarTimeZones.zoneRules(zoneId), at, "at")
         }
     }
 
     data class AllDay(
         val startDate: LocalDate,
         val endDate: LocalDate,
-    ) : ScheduleWindow {
+    ) : ScheduleWindow(ScheduleTimeType.ALL_DAY) {
         init {
             require(endDate > startDate) { "endDate must be after startDate" }
         }
@@ -73,32 +80,27 @@ private fun <T : Comparable<T>> requirePositiveSecondRange(start: T, end: T) {
     require(end > start) { "end must be after start at iCalendar second precision" }
 }
 
-private fun requireCalendarZone(zoneId: String): CalendarZone =
-    requireNotNull(CalendarTimeZones.findExact(zoneId)) {
-        "zoneId must be preserved exactly by the calendar renderer"
-    }
-
 private fun requireValidLocalTime(zoneRules: ZoneRules, localDateTime: LocalDateTime, fieldName: String) {
     require(zoneRules.getValidOffsets(localDateTime).isNotEmpty()) {
         "$fieldName must not be in a DST gap"
     }
 }
 
-private data class CalendarZone(
-    val calendarTimeZone: TimeZone,
-    val zoneRules: ZoneRules,
-)
-
-private object CalendarTimeZones {
+/**
+ * 입력 검증과 캘린더 출력이 같은 iCal4j 시간대 데이터를 쓴다. 레지스트리가 시간대를 보관하므로 여기서는
+ * 시간대에서 만든 [ZoneRules]만 보관한다. 별칭은 다른 ID의 시간대가 되므로 거부한다.
+ */
+internal object CalendarTimeZones {
     private val registry = TimeZoneRegistryFactory.getInstance().createRegistry()
-    private val zones = ConcurrentHashMap<String, CalendarZone?>()
+    private val zoneRules = ConcurrentHashMap<String, ZoneRules>()
 
-    fun findExact(zoneId: String): CalendarZone? = zones.computeIfAbsent(zoneId) { id ->
-        val timeZone = registry.getTimeZone(id)?.takeIf { it.id == id } ?: return@computeIfAbsent null
-        CalendarZone(
-            calendarTimeZone = timeZone,
-            zoneRules = ZoneRulesBuilder().vTimeZone(timeZone.vTimeZone).build(),
-        )
+    fun timeZone(zoneId: String): TimeZone =
+        requireNotNull(registry.getTimeZone(zoneId)?.takeIf { it.id == zoneId }) {
+            "zoneId must be preserved exactly by the calendar renderer"
+        }
+
+    fun zoneRules(zoneId: String): ZoneRules = zoneRules.computeIfAbsent(zoneId) {
+        ZoneRulesBuilder().vTimeZone(timeZone(it).vTimeZone).build()
     }
 }
 
@@ -111,5 +113,4 @@ data class CalendarItem(
     val location: String?,
     val schedule: ScheduleWindow,
     val sourceUpdatedAt: Instant,
-    val acceptedAt: Instant,
 )

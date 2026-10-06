@@ -1,6 +1,8 @@
 package io.baton.cal.persistence
 
+import io.baton.cal.snapshot.ScheduleSnapshot
 import kotlin.jvm.optionals.getOrNull
+import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -10,36 +12,20 @@ import org.springframework.stereotype.Repository
 class SourceEventInboxRepository(
     private val jdbcClient: JdbcClient,
 ) {
-    fun insert(row: SourceEventInboxRow): Boolean =
+    /** 스냅샷의 수신 기록을 남긴다. 같은 `eventId`가 이미 있으면 저장하지 않고 false다. */
+    fun insert(snapshot: ScheduleSnapshot, payloadHash: String, receivedAt: Instant): Boolean =
         jdbcClient.sql(
             """
-            INSERT INTO source_event_inbox (
-                event_id,
-                payload_hash,
-                source_item_id,
-                season_id,
-                source_revision,
-                occurred_at,
-                received_at
-            ) VALUES (
-                :eventId,
-                :payloadHash,
-                :sourceItemId,
-                :seasonId,
-                :sourceRevision,
-                :occurredAt,
-                :receivedAt
-            )
+            INSERT INTO source_event_inbox (event_id, payload_hash, source_item_id, source_revision, received_at)
+            VALUES (:eventId, :payloadHash, :sourceItemId, :sourceRevision, :receivedAt)
             ON CONFLICT (event_id) DO NOTHING
             """.trimIndent(),
         )
-            .param("eventId", row.eventId)
-            .param("payloadHash", row.payloadHash)
-            .param("sourceItemId", row.sourceItemId)
-            .param("seasonId", row.seasonId)
-            .param("sourceRevision", row.sourceRevision)
-            .param("occurredAt", row.occurredAt.atOffset(ZoneOffset.UTC))
-            .param("receivedAt", row.receivedAt.atOffset(ZoneOffset.UTC))
+            .param("eventId", snapshot.eventId)
+            .param("payloadHash", payloadHash)
+            .param("sourceItemId", snapshot.sourceItemId)
+            .param("sourceRevision", snapshot.revision)
+            .param("receivedAt", receivedAt.atOffset(ZoneOffset.UTC))
             .update() == 1
 
     fun getPayloadHashByEventId(eventId: UUID): String =

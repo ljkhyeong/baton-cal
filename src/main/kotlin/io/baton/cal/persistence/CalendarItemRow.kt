@@ -2,6 +2,7 @@ package io.baton.cal.persistence
 
 import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.CalendarItemStatus
+import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.ScheduleWindow
 import io.baton.cal.snapshot.ScheduleSnapshot
 import java.time.Instant
@@ -10,9 +11,9 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 /**
- * `calendar_item` 행이다. 시간 형태마다 사용하는 열이 다르므로 [ScheduleWindow]와의 변환을 이 파일에서만 한다.
- * 새 시간 형태를 추가하면 저장([from])과 복원([toCalendarItem])을 함께 고치고 `ck_calendar_item_time_shape`를
- * 마이그레이션에서 함께 갱신한다.
+ * `calendar_item` 행이다. 시간 형태마다 사용하는 열만 채우고 나머지 시간 열은 비우므로 [ScheduleWindow]와의
+ * 변환을 이 파일에서만 한다. 새 시간 형태를 추가하면 저장([from])과 복원([toCalendarItem])을 함께 고치고
+ * `ck_calendar_item_time_shape`를 마이그레이션에서 함께 갱신한다.
  */
 data class CalendarItemRow(
     val sourceItemId: UUID,
@@ -23,15 +24,15 @@ data class CalendarItemRow(
     val description: String?,
     val location: String?,
     val timeType: ScheduleTimeType,
-    val startsAtInstant: Instant?,
-    val endsAtInstant: Instant?,
-    val startsAtLocal: LocalDateTime?,
-    val endsAtLocal: LocalDateTime?,
-    val zoneId: String?,
-    val startsOnDate: LocalDate?,
-    val endsOnDate: LocalDate?,
     val sourceUpdatedAt: Instant,
     val acceptedAt: Instant,
+    val startsAtInstant: Instant? = null,
+    val endsAtInstant: Instant? = null,
+    val startsAtLocal: LocalDateTime? = null,
+    val endsAtLocal: LocalDateTime? = null,
+    val zoneId: String? = null,
+    val startsOnDate: LocalDate? = null,
+    val endsOnDate: LocalDate? = null,
 ) {
     fun toCalendarItem(): CalendarItem = CalendarItem(
         sourceItemId = sourceItemId,
@@ -67,13 +68,11 @@ data class CalendarItemRow(
             )
         },
         sourceUpdatedAt = sourceUpdatedAt,
-        acceptedAt = acceptedAt,
     )
 
     companion object {
         fun from(snapshot: ScheduleSnapshot, acceptedAt: Instant): CalendarItemRow {
-            val columns = snapshot.schedule.toColumns()
-            return CalendarItemRow(
+            val row = CalendarItemRow(
                 sourceItemId = snapshot.sourceItemId,
                 seasonId = snapshot.seasonId,
                 revision = snapshot.revision,
@@ -81,69 +80,22 @@ data class CalendarItemRow(
                 summary = snapshot.summary,
                 description = snapshot.description,
                 location = snapshot.location,
-                timeType = columns.timeType,
-                startsAtInstant = columns.startsAtInstant,
-                endsAtInstant = columns.endsAtInstant,
-                startsAtLocal = columns.startsAtLocal,
-                endsAtLocal = columns.endsAtLocal,
-                zoneId = columns.zoneId,
-                startsOnDate = columns.startsOnDate,
-                endsOnDate = columns.endsOnDate,
+                timeType = snapshot.schedule.type,
                 sourceUpdatedAt = snapshot.sourceUpdatedAt,
                 acceptedAt = acceptedAt,
             )
+            return when (val schedule = snapshot.schedule) {
+                is ScheduleWindow.UtcInstant -> row.copy(startsAtInstant = schedule.start, endsAtInstant = schedule.end)
+                is ScheduleWindow.UtcPoint -> row.copy(startsAtInstant = schedule.at)
+                is ScheduleWindow.ZonedLocal -> row.copy(
+                    startsAtLocal = schedule.start,
+                    endsAtLocal = schedule.end,
+                    zoneId = schedule.zoneId,
+                )
+
+                is ScheduleWindow.ZonedLocalPoint -> row.copy(startsAtLocal = schedule.at, zoneId = schedule.zoneId)
+                is ScheduleWindow.AllDay -> row.copy(startsOnDate = schedule.startDate, endsOnDate = schedule.endDate)
+            }
         }
     }
 }
-
-/** `calendar_item.time_type` 열의 값이다. 도메인의 시간 형태는 [ScheduleWindow]로 표현한다. */
-enum class ScheduleTimeType {
-    UTC_INSTANT,
-    UTC_POINT,
-    ZONED_LOCAL,
-    ZONED_LOCAL_POINT,
-    ALL_DAY,
-}
-
-private fun ScheduleWindow.toColumns(): ScheduleColumns = when (this) {
-    is ScheduleWindow.UtcInstant -> ScheduleColumns(
-        timeType = ScheduleTimeType.UTC_INSTANT,
-        startsAtInstant = start,
-        endsAtInstant = end,
-    )
-
-    is ScheduleWindow.UtcPoint -> ScheduleColumns(
-        timeType = ScheduleTimeType.UTC_POINT,
-        startsAtInstant = at,
-    )
-
-    is ScheduleWindow.ZonedLocal -> ScheduleColumns(
-        timeType = ScheduleTimeType.ZONED_LOCAL,
-        startsAtLocal = start,
-        endsAtLocal = end,
-        zoneId = zoneId,
-    )
-
-    is ScheduleWindow.ZonedLocalPoint -> ScheduleColumns(
-        timeType = ScheduleTimeType.ZONED_LOCAL_POINT,
-        startsAtLocal = at,
-        zoneId = zoneId,
-    )
-
-    is ScheduleWindow.AllDay -> ScheduleColumns(
-        timeType = ScheduleTimeType.ALL_DAY,
-        startsOnDate = startDate,
-        endsOnDate = endDate,
-    )
-}
-
-private data class ScheduleColumns(
-    val timeType: ScheduleTimeType,
-    val startsAtInstant: Instant? = null,
-    val endsAtInstant: Instant? = null,
-    val startsAtLocal: LocalDateTime? = null,
-    val endsAtLocal: LocalDateTime? = null,
-    val zoneId: String? = null,
-    val startsOnDate: LocalDate? = null,
-    val endsOnDate: LocalDate? = null,
-)

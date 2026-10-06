@@ -27,7 +27,6 @@ import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.UUID
-import kotlin.uuid.toKotlinUuid
 
 data class RenderedCalendar(
     val bytes: ByteArray,
@@ -41,7 +40,7 @@ class IcsCalendarRenderer {
         items: List<CalendarItem>,
         displayName: String? = null,
     ): RenderedCalendar {
-        val sortedItems = items.sortedBy { it.sourceItemId.toKotlinUuid() }
+        val sortedItems = items.sortedBy { it.sourceItemId.toString() }
         val calendar = Calendar(
             PropertyList(
                 listOf(
@@ -62,10 +61,10 @@ class IcsCalendarRenderer {
     }
 
     private fun timeZones(items: List<CalendarItem>): List<CalendarComponent> = items
-        .mapNotNull { it.schedule.calendarTimeZoneOrNull() }
-        .distinctBy { it.id }
-        .sortedBy { it.id }
-        .map { it.vTimeZone }
+        .mapNotNull { (it.schedule as? ScheduleWindow.Zoned)?.zoneId }
+        .distinct()
+        .sorted()
+        .map { CalendarTimeZones.timeZone(it).vTimeZone }
 
     private fun event(item: CalendarItem): VEvent {
         val timeProperties: List<Property> = when (val schedule = item.schedule) {
@@ -123,13 +122,4 @@ class IcsCalendarRenderer {
         // 연속 줄의 공백을 포함해 RFC 5545의 75 옥텟 권고를 지킬 수 있다.
         const val UTF8_SAFE_FOLD_LENGTH = 25
     }
-}
-
-private fun ScheduleWindow.calendarTimeZoneOrNull() = when (this) {
-    is ScheduleWindow.ZonedLocal -> calendarTimeZone
-    is ScheduleWindow.ZonedLocalPoint -> calendarTimeZone
-    is ScheduleWindow.UtcInstant,
-    is ScheduleWindow.UtcPoint,
-    is ScheduleWindow.AllDay,
-    -> null
 }
