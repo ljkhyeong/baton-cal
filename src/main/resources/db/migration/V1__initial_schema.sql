@@ -99,18 +99,13 @@ CREATE TABLE recovery_season_manifest (
     season_id UUID NOT NULL,
     item_count INTEGER NOT NULL CHECK (item_count >= 0),
     item_digest CHAR(64) NOT NULL CHECK (item_digest ~ '^[0-9a-f]{64}$'),
-    metadata_revision INTEGER,
-    metadata_digest CHAR(64),
+    metadata_revision INTEGER CHECK (metadata_revision >= 0),
+    metadata_digest CHAR(64) CHECK (metadata_digest ~ '^[0-9a-f]{64}$'),
     verified_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (recovery_id, season_id),
+    -- 시즌 이름 개정 번호와 다이제스트는 함께 저장하거나 함께 비운다.
     CONSTRAINT ck_recovery_season_manifest_metadata
-        CHECK (
-            (metadata_revision IS NULL AND metadata_digest IS NULL)
-            OR (
-                metadata_revision >= 0
-                AND metadata_digest ~ '^[0-9a-f]{64}$'
-            )
-        )
+        CHECK (num_nulls(metadata_revision, metadata_digest) <> 1)
 );
 
 CREATE TABLE recovery_run_completion (

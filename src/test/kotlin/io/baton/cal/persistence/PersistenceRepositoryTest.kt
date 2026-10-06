@@ -3,6 +3,7 @@ package io.baton.cal.persistence
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.ScheduleTimeType
 import io.baton.cal.calendar.ScheduleWindow
+import io.baton.cal.recovery.RecoverySeasonState
 import io.baton.cal.snapshot.ScheduleSnapshot
 import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.whileLocked
@@ -28,6 +29,7 @@ class PersistenceRepositoryTest @Autowired constructor(
     private val itemRepository: CalendarItemRepository,
     private val feedRepository: SeasonFeedProjectionRepository,
     private val subscriptionRepository: CalendarSubscriptionRepository,
+    private val recoveryRepository: RecoveryManifestRepository,
     private val jdbcClient: JdbcClient,
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
@@ -111,6 +113,19 @@ class PersistenceRepositoryTest @Autowired constructor(
             .isInstanceOf(DataIntegrityViolationException::class.java)
             .rootCause()
             .hasMessageContaining("ck_calendar_item_time_shape")
+    }
+
+    @Test
+    fun `복구 매니페스트는 시즌 이름 개정 번호와 다이제스트 중 하나만 저장하지 않는다`() {
+        val state = RecoverySeasonState(SEASON_ID, 0, HASH_A, 1, HASH_B)
+
+        listOf(state.copy(metadataDigest = null), state.copy(metadataRevision = null)).forEach { invalid ->
+            assertThatThrownBy { recoveryRepository.upsertSeasonManifest(RECOVERY_ID, invalid, Instant.EPOCH) }
+                .isInstanceOf(DataIntegrityViolationException::class.java)
+                .rootCause()
+                .hasMessageContaining("ck_recovery_season_manifest_metadata")
+        }
+        assertThat(recoveryRepository.listVerifiedSeasonStates(RECOVERY_ID)).isEmpty()
     }
 
     @Test
@@ -215,6 +230,7 @@ class PersistenceRepositoryTest @Autowired constructor(
 
     private companion object {
         val SEASON_ID: UUID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        val RECOVERY_ID: UUID = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
         val UTC_INSTANT = ScheduleWindow.UtcInstant(
             start = Instant.parse("2026-09-01T01:00:00Z"),
             end = Instant.parse("2026-09-01T02:00:00Z"),
