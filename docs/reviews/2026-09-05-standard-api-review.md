@@ -13,7 +13,7 @@
 `JdbcTemplateConfiguration`이 이 빈을 공통 `JdbcTemplate`에 적용하므로 별도 JDBC 클라이언트나
 설정 복제는 필요 없다.
 
-[SeasonProjectionLockRepository](../../src/main/kotlin/io/baton/cal/persistence/SeasonProjectionLockRepository.kt)의
+`SeasonProjectionLockRepository`(현재 [AdvisoryLockRepository](../../src/main/kotlin/io/baton/cal/persistence/AdvisoryLockRepository.kt))의
 SQLSTATE `55P03` 직접 비교와 수동 예외 변환을 제거했다. 이제 복구 실행 잠금과 전체 상태 잠금도
 `CannotAcquireLockException`으로 변환돼 기존 HTTP 예외 처리기가 `503 SERVICE_BUSY`와
 `Retry-After: 1`을 반환한다. 실제 PostgreSQL 잠금 시간 초과로 두 경로를 확인했다.

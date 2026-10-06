@@ -24,6 +24,11 @@
   전까지는 V1을 직접 고친다. 시즌 잠금은 잠금 전용 테이블 대신 복구 실행과 같은 `pg_advisory_xact_lock`을 쓰고,
   경로 UUID는 `@InitBinder` 편집기로 36자 표준 형식만 받는다. 기존 V1~V8을 적용한 로컬 DB는 다시 만들어야 한다.
   표준 API 대체 검토에서 유지한 구현과 근거는 [코드 축소 검토](docs/reviews/2026-10-05-code-reduction-review.md)에 정리했다.
+- 2026-10-06 2차 정리로 운영 코드 순 313줄, 테스트 순 500줄, 스모크 스크립트·Compose 순 98줄을 줄였다. HTTP 상태·
+  헤더·오류 `code`, iCalendar 바이트·지문과 복구 다이제스트 바이트는 같고, 시즌 이름 짝이 맞지 않는 복구 매니페스트의
+  `400` `message`만 공통 문구로 바뀌었다. V1을 다시 고쳐 수신함에서 읽지 않는 `season_id`·`occurred_at`을
+  지우고 시간 형태 CHECK를 축약했으며, 복구 매니페스트 짝 CHECK가 한쪽 `NULL`을 통과시키던 결함을 고쳤다. `occurredAt`은
+  HTTP 입력 형식만 검증한다. 반영·제외 근거는 [2차 정리](docs/reviews/2026-10-05-code-reduction-review.md#2차-정리--2026-10-06)에 있다.
 - 필드가 응답 스키마와 같은 DTO는 두지 않고 일정 상태는 `AcceptedItemStatus`, 시즌 복구 진단은 `RecoverySeasonState`를
   그대로 응답한다. 스모크 스크립트는 준비 대기·내부 요청·429 헤더 확인을 curl 재시도·`--json`·`%header`로, 알림 JSON 생성을
   jq로 처리한다. 인증 401과 경로 UUID 400은 각각 한 테스트가 모든 내부 경로를 확인한다.
@@ -36,11 +41,14 @@
 - 운영 코드·테스트·스모크 스크립트·Gradle 설정의 중복을 정리해 순 442줄을 줄였다. HTTP 응답·계약·저장 열은
   같다. 공개 피드 조회 조건(ACTIVE·토큰 해시·구독 세대)은 저장소 쿼리 하나에서 공유한다. 같은 설정의 PostgreSQL
   통합 테스트는 `@CalIntegrationTest`·`@RecoveryModeIntegrationTest`로 Spring 컨텍스트를 재사용하고, 요청·계약 예시 보조
-  함수는 `support`·`contract` 테스트 패키지에 둔다. 기본값과 같아도 보안·운영 의도를 드러내는 설정은 유지했다.
-- 일정 시간 열과 `ScheduleWindow`의 양방향 변환·`ScheduleTimeType`은 `persistence/CalendarItemRow.kt`, 복구
-  대조값 계산은 `RecoveryManifestDigest`, 첫 투영의 Last-Modified는 `SeasonProjectionService`가 맡는다. 복구 서비스는
-  도메인 값만 받고 409는 모두 `ConflictException`이다. 피드 헤더 값 타입은 `SeasonFeedHeaders`이며 계약 TEXT·
-  다이제스트 입력 패턴은 `web/ContractInputPatterns.kt`에서 공유한다. 서비스가 `web` 예외·DTO를 쓰는 구조는
+  함수는 `support`·`contract` 테스트 패키지에 둔다. Boot 기본값과 같은 설정은 지우되 보안 의도를 드러내는 health 상세 숨김·
+  접근 로그 비활성화는 유지했다.
+- 시간 형태 이름은 도메인 `ScheduleTimeType`(`calendar/CalendarItem.kt`) 하나로 두고 지문·DB 행 변환이 `ScheduleWindow.type`을
+  쓴다. 일정 시간 열과 `ScheduleWindow`의 양방향 변환은 `persistence/CalendarItemRow.kt`, 수신 결과 분류는
+  `SnapshotIngestionService`, 시즌·복구 실행 advisory lock은 `AdvisoryLockRepository`, 복구 대조값 계산은
+  `RecoveryManifestDigest`, 첫 투영의 Last-Modified는 `SeasonProjectionService`가 맡는다. API 오류는 단일
+  `ApiException`과 `invalidRequest`·`conflict`·`resourceNotFound` 함수로 만든다. 피드 헤더 값 타입은 `SeasonFeedHeaders`이며
+  계약 TEXT·다이제스트 입력 패턴은 `web/ContractInputPatterns.kt`에서 공유한다. 서비스가 `web` 예외·DTO를 쓰는 구조는
   ADR-0002에 따라 유지한다.
 - 스냅샷 지문과 복구 다이제스트는 PRD-0002의 같은 필드 인코딩을 `snapshot/DigestWriter.kt` 하나로 구현한다.
   BATON과 공유하는 복구 다이제스트는 계약 예시를 벡터로 삼아 DB 없이 검증한다. 알림 채널 스모크는 이미지 고정값을
@@ -90,22 +98,18 @@
 
 ## 최근 검증
 
-- 최신 정리는 `d78cd27`에서 검증했다. `./gradlew --no-daemon --max-workers=2 check`로 일반 167개·구조 3개 테스트와
-  `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 통과했고 Spring 테스트 컨텍스트 8개(TLS 직접 기동 제외)를 유지했다. 검사 스크립트
-  회귀 테스트는 입력이 같아 재사용했다. Java 25 toolchain·PostgreSQL 18.6. 로그: `/private/tmp/baton-cal-round7-check.log`.
-  `9d26d60` 이후 운영 코드는 같은 조회 결과 재사용과 같은 지표 태그 생성만 바뀌어 아래 스모크 결과를 재사용한다.
-  이후 `1de9883`의 테스트 정리는 `SnapshotBatchHttpTest` 10개·`PersistenceRepositoryTest` 9개와
-  `ingestionLoadTest -PloadItemCount=40 -PloadBatchSize=10`으로 확인했다. 일반 테스트는 166개가 된다.
-  로그: `/private/tmp/baton-cal-round9-tests.log`, `/private/tmp/baton-cal-round9-load.log`.
-  `9d26d60`으로 `bootBuildImage --imageName=baton-cal:round6` 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
-  버전 `1`, 백업 복원, 복구 매니페스트 완료까지 통과했다. 최종 스크립트로 `./scripts/smoke-operations.sh`와
-  `bash scripts/smoke-alert-channels.sh`(4개 조합)도 통과했다. Docker 29.8.1·Compose v5.5.1. 로그:
-  `/private/tmp/baton-cal-round6-smoke.log`, `/private/tmp/baton-cal-round6-operations.log`,
-  `/private/tmp/baton-cal-round6-alert-channels.log`. 직전 운영 스모크 한 번은 Docker가 gateway에 호스트 포트를 붙이지 않아
-  `curl: (7)`로 실패했고 같은 이미지의 재실행은 통과했다.
-  통합 V1과 기존 V1~V8을 각각 PostgreSQL 18.6에 적용해 열·인덱스·제약을 비교했고, 의도한 개정 번호 상한 검사 2건 외에는 같았다.
-  BATON 교차 서비스 테스트는 HTTP 계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는 CAL Flyway
-  버전·잠금 테이블을 참조하지 않는다.
+- 2차 정리는 `c396cb3`(미커밋 없음)을 별도 작업 트리에서 검증했다. `./gradlew --max-workers=2 check`로 일반 160개·구조 3개
+  테스트, 검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 새로 실행돼 통과했다. 스파이 빈을 공유 설정으로
+  올려 별도 Spring 테스트 컨텍스트는 공유·복구 모드·공개 피드 3개가 됐다(TLS 직접 기동 제외). Java 25 toolchain·PostgreSQL 18.6.
+  같은 커밋으로 `bootBuildImage --imageName=baton-cal:sweep-c396cb3`
+  (`sha256:6cb83c216177e2e31d9ae72070d1657be34ec222ad275336e9860a56a735a3fc`) 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
+  버전 `1`, 실행 중 Java 25·비루트, 백업 복원, 복구 매니페스트 완료까지 통과했다. `./scripts/smoke-operations.sh`와
+  `bash scripts/smoke-alert-channels.sh`(4개 조합)도 통과했다. Docker 29.8.2·Compose v5.5.1. 로그:
+  `/private/tmp/baton-cal-sweep-check.log`, `/private/tmp/baton-cal-sweep-oci-smoke.log`,
+  `/private/tmp/baton-cal-sweep-operations.log`, `/private/tmp/baton-cal-sweep-alert-channels.log`.
+  중간 커밋 `bb5259c`·`4b3389a`·`8714243`의 관련·전체 `test`도 통과했다(`/private/tmp/baton-cal-sweep-*-tests.log`).
+  부하 측정과 BATON 교차 서비스 테스트는 HTTP 계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는
+  CAL 수신함 열을 참조하지 않는다. 이후 커밋은 문서와 테스트 import 순서만 바꿔 위 결과를 재사용한다(`testClasses` 컴파일 확인).
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
@@ -177,7 +181,8 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
 
 ## 현재 제한
 
-- 통합 전 V1~V8을 적용한 DB는 Flyway 검증에 실패한다. 로컬·테스트 DB만 해당하므로 볼륨을 지우고 다시 만든다.
+- 통합 전 V1~V8이나 2026-10-06 이전 V1을 적용한 DB는 Flyway 체크섬 검증에 실패한다. 로컬·테스트 DB만 해당하므로
+  볼륨을 지우고 다시 만든다.
 - Codex 자동 훅의 실제 세션 실행은 미검증이다. `.codex/hooks.json`의 세 훅을 `/hooks`에서 검토·신뢰해야
   자동 실행된다. 신뢰 전에는 AGENTS.md의 수동 파일·종료 검사를 사용한다.
 - Claude Code에는 저장소 훅을 연결하지 않았다. 파일·종료 검사는 수동으로 실행한다. Codex 전역 `baton-cal-flows`는

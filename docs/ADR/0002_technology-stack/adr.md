@@ -70,6 +70,8 @@ BATON CAL MVP는 다음 특성을 가진다.
   남겨야 하므로 `(source_item_id, source_revision)` 동일성은 시즌 잠금 안의 페이로드 해시
   비교로 판정한다.
 - 수신 결과 판정과 최신 스냅샷·투영 갱신은 한 트랜잭션에서 처리한다.
+- 수신함은 중복·개정 충돌 판정과 복구 대표 행 선택에 쓰는 `event_id`, `payload_hash`, `source_item_id`,
+  `source_revision`, `received_at`만 저장한다. 전달 생성 시각 `occurredAt`은 HTTP 입력 형식만 검증한다.
 - 타임스탬프는 PostgreSQL과 같은 마이크로초 정밀도를 사용해 해시 계산·비교·저장 결과가
   정밀도 차이로 달라지지 않게 한다.
 - 구독 행은 현재 토큰 해시 하나만 보관한다. 회전은 현재 해시를 조건으로 갱신해
@@ -158,7 +160,7 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 2. `snapshot`: 지문값, 멱등 수신과 채택한 항목 상태 조회 사용 사례
 3. `subscription`: 토큰 인코딩과 생성/회전/폐기/구독 상태·캘린더 피드 조회 사용 사례
 4. `projection`: 시즌 표시 이름 수신, 투영 재구축과 첫 투영의 Last-Modified 결정. 같은 시즌을 바꾸는 사용 사례는
-   각자 `SeasonProjectionLockRepository`로 시즌 잠금을 잡는다.
+   각자 `AdvisoryLockRepository.lockSeason`으로 시즌 잠금을 잡는다.
 5. `recovery`: 복구 대조값 다이제스트, 시즌 검증·전체 완료와 진단 조회 사용 사례
 6. `persistence`: JdbcClient SQL 행, 행과 도메인 값의 변환, 리포지토리. 다이제스트 같은 도메인 계산은 하지 않는다.
 7. `web`: 내부/공개 MVC 경로, DTO, 인증 필터와 오류 매핑
@@ -247,9 +249,9 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   고정한다.
 - Hikari 연결 초기 SQL로 PostgreSQL `lock_timeout`을 기본 5초, `statement_timeout`을 기본 30초로
   설정하고 Spring 트랜잭션 기본 제한 시간도 30초로 둔다. 환경 변수로 조정하되 자체 타이머나
-  스레드 중단 코드를 만들지 않는다. Spring의 `PessimisticLockingFailureException`으로 잠금 실패·교착 상태·
-  직렬화 실패를 함께 처리한다. 쿼리·트랜잭션 제한 시간 초과와
-  `CannotGetJdbcConnectionException`·`CannotCreateTransactionException`은 공통 오류 처리기에서
+  스레드 중단 코드를 만들지 않는다. 잠금 실패·교착 상태·직렬화 실패와 쿼리 시간 초과는 Spring의 재시도 가능 예외 계층
+  `TransientDataAccessException`으로, 트랜잭션 제한 시간 초과와 `CannotGetJdbcConnectionException`·
+  `CannotCreateTransactionException`은 각 예외로 받아 공통 오류 처리기에서
   `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`로 응답한다. 메시지 문자열로 예외를 분류하거나
   서버 내부에서 재시도하지 않는다. 데이터 제약 위반·SQL 오류 등 예상 밖 실패는 기존 `500` 처리를 유지한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
@@ -270,6 +272,8 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   `/readyz`를 제공한다. 관리 포트만 응답하는 상황을 점검에서 놓치지 않도록 한다. Spring Boot의
   생존·준비 상태를 재사용하며 준비 상태에만 기존 DB 점검을 포함한다. 별도 컨트롤러는 추가하지 않는다.
 
+쿼리 한 문장으로 끝나는 일정·구독 상태와 공개 피드 조회는 트랜잭션을 열지 않고 autocommit으로 실행한다.
+문장 제한 시간은 연결 초기 SQL의 `statement_timeout`이 맡는다.
 복구 진단 GET은 PostgreSQL `REPEATABLE READ` 읽기 전용 트랜잭션을 사용한다. 여러 조회로
 읽는 완료·검증 수 또는 일정·이름을 같은 스냅샷에서 관측하며 쓰기 잠금이나 새 실행 기록을 만들지
 않는다. 실행 기록은 과거 검증 상태이고 시즌 상태는 조회 시점의 값이므로 서로 다른 응답으로 둔다.
