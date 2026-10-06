@@ -10,7 +10,6 @@ spring:
 
 server:
   ssl:
-    enabled: true
     bundle: cal
 
 management:

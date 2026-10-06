@@ -59,7 +59,7 @@ class TlsHttpIntegrationTest {
             "--BATON_CAL_SUBSCRIPTION_GENERATION=60000000-0000-0000-0000-000000000002",
             "--BATON_CAL_TLS_CERTIFICATE=${directory.resolve("tls.crt").toUri()}",
             "--BATON_CAL_TLS_PRIVATE_KEY=${directory.resolve("tls.key").toUri()}",
-            "--SERVER_PORT=0",
+            "--server.port=0",
             "--MANAGEMENT_SERVER_PORT=0",
         ).use { context ->
             val baseUrl = "https://localhost:${context.environment.getRequiredProperty("local.server.port")}"
