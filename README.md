@@ -344,7 +344,8 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
 ```
 
-만든 이미지는 실제 `prod` 프로필과 격리된 PostgreSQL에서 스모크와 대표 복원 훈련을 실행한다.
+만든 이미지는 `compose.operations.yml`의 `app`과 PostgreSQL만 격리된 Compose 프로젝트로 띄워 실제 `prod`
+프로필에서 스모크와 대표 복원 훈련을 실행한다.
 
 ```shell
 ./scripts/smoke-oci-image.sh baton-cal:smoke

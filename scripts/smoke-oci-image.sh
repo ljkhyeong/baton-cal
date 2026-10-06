@@ -9,11 +9,8 @@ fi
 
 image_name=$1
 project_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compose_file="$project_directory/compose.smoke.yml"
 project_name="baton-cal-smoke-$(date +%s)-$$"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/baton-cal-smoke.XXXXXX")
-database_name=baton_cal_smoke
-database_user=baton_cal_smoke
 internal_token=smoke-only-internal-token-00000000000000000000000000000000
 generation_a=40000000-0000-0000-0000-000000000001
 generation_b=40000000-0000-0000-0000-000000000002
@@ -25,12 +22,22 @@ export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
 export BATON_CAL_RECOVERY_MODE=false
+unset BATON_CAL_PREVIOUS_INTERNAL_TOKEN
+export DATABASE_USERNAME=baton_cal_smoke DATABASE_PASSWORD=baton-cal-smoke-only
+# 운영 Compose의 app과 의존 서비스 postgres만 띄운다. 내부 포트는 127.0.0.1의 임시 포트에 연결한다.
+export CAL_INTERNAL_PORT=0
+# 기동하지 않는 gateway·alertmanager·blackbox의 필수 보간 값이다. 경로의 파일은 만들지 않는다.
+export CAL_TLS_DIRECTORY="$scratch/tls" CAL_ACME_DIRECTORY="$scratch/acme"
+export CAL_ALERT_WEBHOOK_URL_FILE="$scratch/webhook-url"
+database_name=baton_cal
+database_user=$DATABASE_USERNAME
 
 compose=(
   docker compose
   --ansi never
   --project-name "$project_name"
-  --file "$compose_file"
+  --file "$project_directory/compose.operations.yml"
+  --file "$project_directory/compose.operations-smoke.yml"
 )
 http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
 bearer=(--oauth2-bearer "$internal_token")
@@ -58,7 +65,6 @@ cleanup() {
     "${compose[@]}" logs --no-color >&2 || true
   fi
 
-  rm -rf "$scratch"
   echo "격리된 Compose project '$project_name'의 컨테이너와 볼륨을 정리합니다."
   if ! "${compose[@]}" down --volumes --remove-orphans; then
     echo "오류: 격리된 스모크 자원을 완전히 정리하지 못했습니다." >&2
@@ -66,6 +72,8 @@ cleanup() {
       status=1
     fi
   fi
+  # Compose가 보간하는 임시 경로를 정리 명령 뒤에 지운다.
+  rm -rf "$scratch"
 
   exit "$status"
 }
@@ -82,7 +90,7 @@ wait_for_readiness() {
   container_id=$("${compose[@]}" ps --all --quiet app)
   [[ -n "$container_id" ]] || fail "애플리케이션 컨테이너 ID를 찾을 수 없습니다."
 
-  # 강제 재생성하면 포트가 바뀌므로 매번 다시 조회한다. compose.smoke.yml은 127.0.0.1에만 연결한다.
+  # 강제 재생성하면 포트가 바뀌므로 매번 다시 조회한다. 두 포트 모두 127.0.0.1의 임시 포트에만 연결한다.
   base_url="http://$("${compose[@]}" port app 8080)"
   management_url="http://$("${compose[@]}" port app 8081)"
   readiness_url="$management_url/actuator/health/readiness"
@@ -270,7 +278,7 @@ case "$java_version" in
 esac
 
 echo "격리된 Compose project '$project_name'에서 애플리케이션을 시작합니다."
-"${compose[@]}" up --detach
+"${compose[@]}" up --detach app
 wait_for_readiness
 assert_prometheus_metrics
 assert_flyway_versions

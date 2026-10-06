@@ -24,7 +24,7 @@ description: BATON CAL의 Compose, Nginx 공개 프록시, Prometheus·Alertmana
 | --- | --- |
 | `compose.operations.yml` | 단일 Docker 호스트 운영 구성. Nginx·CAL·PostgreSQL·Prometheus·Alertmanager·Blackbox |
 | `compose.healthchecks.yml` | Healthchecks 정상 신호를 더하는 Alertmanager 덮어쓰기 |
-| `compose.operations-smoke.yml`, `compose.smoke.yml` | 스모크 전용 구성. 운영에 포함하지 않는다 |
+| `compose.operations-smoke.yml` | 운영·이미지 스모크가 운영 구성에 덧붙이는 스모크 전용 구성. 운영에 포함하지 않는다 |
 | `operations/nginx/` | 공개 프록시, 요청 제한, 내부·관리 경로 차단 |
 | `operations/prometheus/alerts.yml`, `alerts.test.yml` | 알림 규칙과 `promtool` 규칙 테스트 |
 | `operations/alertmanager/*.yml` | 일반 웹훅·Slack·Discord 단독과 Healthchecks 조합 |
