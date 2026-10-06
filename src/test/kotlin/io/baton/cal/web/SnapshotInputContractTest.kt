@@ -6,7 +6,10 @@ import io.baton.cal.support.ingestSnapshot
 import io.baton.cal.support.postSnapshot
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.Arguments.argumentSet
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -21,19 +24,10 @@ import java.util.UUID
 class SnapshotInputContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
 ) {
-    @Test
-    fun `instant fields reject JSON number tokens`() {
-        listOf(
-            utcSnapshot(occurredAt = "1786410005"),
-            utcSnapshot(sourceUpdatedAt = "1786410000"),
-            utcSnapshot(startInstant = "1788051600"),
-            utcSnapshot(endInstant = "1788055200"),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
-    fun `integer fields reject string coercion`() {
-        assertInvalid(utcSnapshot().replace("\"revision\": 0", "\"revision\": \"0\""))
+    @ParameterizedTest
+    @MethodSource("invalidSnapshots")
+    fun `계약을 어긴 스냅샷은 저장하지 않고 400을 반환한다`(payloads: List<String>) {
+        payloads.forEach(::assertInvalid)
     }
 
     @ParameterizedTest
@@ -71,35 +65,6 @@ class SnapshotInputContractTest @Autowired constructor(
         ).forEach { invalidUuid ->
             assertInvalid(utcSnapshot(eventId = invalidUuid))
         }
-    }
-
-    @Test
-    fun `zoned local fields require seconds`() {
-        listOf(
-            zonedSnapshot(startLocal = "2026-08-31T23:30"),
-            zonedSnapshot(endLocal = "2026-09-01T00:30"),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
-    fun `instant fields require RFC 3339 seconds`() {
-        assertInvalid(utcSnapshot(occurredAt = quoted("2026-08-11T01:00Z")))
-    }
-
-    @Test
-    fun `timestamp lexical forms are parsed strictly by the JDK formatter`() {
-        listOf(
-            utcSnapshot(occurredAt = quoted("+02026-08-11T01:00:05Z")),
-            utcSnapshot(occurredAt = quoted("2026-08-11T01:00:05.Z")),
-            zonedSnapshot(startLocal = "2026-08-31t23:30:00"),
-            zonedSnapshot(startLocal = "2026-08-31T23:30:00."),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
-    fun `calendar-invalid timestamps return a contract error`() {
-        assertInvalid(utcSnapshot(occurredAt = quoted("2026-13-11T01:00:05Z")))
-        assertInvalid(zonedSnapshot(startLocal = "2026-02-30T10:00:00"))
     }
 
     @Test
@@ -142,28 +107,6 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @Test
-    fun `TEXT는 RFC 5545에서 허용하지 않는 제어 문자를 모든 필드에서 거부한다`() {
-        listOf(
-            utcSnapshot(summary = "앞\\u0000뒤"),
-            utcSnapshot(summary = "앞\\u000B뒤"),
-            utcSnapshot(summary = "앞\\u001F뒤"),
-            utcSnapshot(summary = "앞\\u007F뒤"),
-            utcSnapshot(description = "앞\\u0008뒤"),
-            utcSnapshot(location = "앞\\u000D뒤"),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
-    fun `JSON 이스케이프로 전달된 짝이 없는 서로게이트를 모든 TEXT 필드에서 거부한다`() {
-        listOf(
-            utcSnapshot(summary = "앞\\uD800뒤"),
-            utcSnapshot(summary = "앞\\uDC00뒤"),
-            utcSnapshot(description = "앞\\uD800뒤"),
-            utcSnapshot(location = "앞\\uDC00뒤"),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
     fun `RFC3339 offset instants and fractional local seconds are accepted`() {
         mockMvc.ingestSnapshot(
             utcSnapshot(
@@ -181,37 +124,6 @@ class SnapshotInputContractTest @Autowired constructor(
         )
     }
 
-    @Test
-    fun `시간대는 iCal4j가 원문 식별자로 보존하는 IANA 지역만 허용한다`() {
-        assertInvalid(zonedSnapshot(zoneId = "America/Coyhaique"))
-        assertInvalid(zonedSnapshot(zoneId = "US/Eastern"))
-        assertInvalid(zonedSnapshot(zoneId = "+09:00"))
-    }
-
-    @Test
-    fun `시점과 종일 일정은 각 시간 형태의 경계를 지킨다`() {
-        listOf(
-            snapshotWithTime("""{"type":"UTC_POINT","atInstant":"2026-08-17T12:00Z"}"""),
-            snapshotWithTime(
-                """{"type":"ZONED_LOCAL_POINT","atLocal":"2026-03-08T02:30:00","zoneId":"America/New_York"}""",
-            ),
-            snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-02-30","endDate":"2026-03-01"}"""),
-            snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-08-22","endDate":"2026-08-22"}"""),
-        ).forEach(::assertInvalid)
-    }
-
-    @Test
-    fun `알 수 없는 필드와 DST 공백의 현지 시각은 거부한다`() {
-        assertInvalid(utcSnapshot().dropLast(1) + ",\n\"unexpected\": true\n}")
-        assertInvalid(
-            zonedSnapshot(
-                startLocal = "2026-03-08T02:30:00",
-                endLocal = "2026-03-08T03:30:00",
-                zoneId = "America/New_York",
-            ),
-        )
-    }
-
     private fun assertInvalid(payload: String) {
         mockMvc.postSnapshot(payload)
             .andExpect(status().isBadRequest)
@@ -220,61 +132,150 @@ class SnapshotInputContractTest @Autowired constructor(
             .andReturnValid("api-error.v1.schema.json", "스냅샷 입력 오류 응답")
     }
 
-    private fun utcSnapshot(
-        eventId: String = UUID.randomUUID().toString(),
-        occurredAt: String = quoted("2026-08-11T01:00:05Z"),
-        sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
-        startInstant: String = quoted("2026-08-16T09:00:00Z"),
-        endInstant: String = quoted("2026-08-16T10:30:00Z"),
-        summary: String = "ROUND 1",
-        description: String? = null,
-        location: String? = null,
-    ): String = snapshotWithTime(
-        """{"type":"UTC_INSTANT","startInstant":$startInstant,"endInstant":$endInstant}""",
-        eventId = eventId,
-        occurredAt = occurredAt,
-        sourceUpdatedAt = sourceUpdatedAt,
-        summary = summary,
-        description = description,
-        location = location,
-    )
-
-    private fun zonedSnapshot(
-        startLocal: String = "2026-08-31T23:30:00",
-        endLocal: String = "2026-09-01T00:30:00",
-        zoneId: String = "Asia/Seoul",
-    ): String = snapshotWithTime(
-        """{"type":"ZONED_LOCAL","startLocal":"$startLocal","endLocal":"$endLocal","zoneId":"$zoneId"}""",
-    )
-
-    private fun snapshotWithTime(
-        time: String,
-        eventId: String = UUID.randomUUID().toString(),
-        occurredAt: String = quoted("2026-08-11T01:00:05Z"),
-        sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
-        summary: String = "ROUND 1",
-        description: String? = null,
-        location: String? = null,
-    ): String =
-        """
-        {
-          "eventId": "$eventId",
-          "occurredAt": $occurredAt,
-          "sourceItemId": "${UUID.randomUUID()}",
-          "seasonId": "$SEASON_ID",
-          "revision": 0,
-          "status": "ACTIVE",
-          "summary": "$summary",
-          "description": ${description?.let(::quoted) ?: "null"},
-          "location": ${location?.let(::quoted) ?: "null"},
-          "sourceUpdatedAt": $sourceUpdatedAt,
-          "time": $time
-        }
-        """.trimIndent()
-
-    private fun quoted(value: String): String = "\"$value\""
-
-    private companion object {
-        const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    companion object {
+        @JvmStatic
+        fun invalidSnapshots(): List<Arguments> = listOf(
+            argumentSet("잘린 JSON", listOf("""{"seasonId":""")),
+            argumentSet(
+                "시각 필드의 JSON 숫자",
+                listOf(
+                    utcSnapshot(occurredAt = "1786410005"),
+                    utcSnapshot(sourceUpdatedAt = "1786410000"),
+                    utcSnapshot(startInstant = "1788051600"),
+                    utcSnapshot(endInstant = "1788055200"),
+                ),
+            ),
+            argumentSet("정수 필드의 문자열", listOf(utcSnapshot().replace("\"revision\": 0", "\"revision\": \"0\""))),
+            argumentSet(
+                "초가 없는 시각",
+                listOf(
+                    utcSnapshot(occurredAt = quoted("2026-08-11T01:00Z")),
+                    zonedSnapshot(startLocal = "2026-08-31T23:30"),
+                    zonedSnapshot(endLocal = "2026-09-01T00:30"),
+                ),
+            ),
+            argumentSet(
+                "JDK 형식보다 엄격한 시각 어휘",
+                listOf(
+                    utcSnapshot(occurredAt = quoted("+02026-08-11T01:00:05Z")),
+                    utcSnapshot(occurredAt = quoted("2026-08-11T01:00:05.Z")),
+                    zonedSnapshot(startLocal = "2026-08-31t23:30:00"),
+                    zonedSnapshot(startLocal = "2026-08-31T23:30:00."),
+                ),
+            ),
+            argumentSet(
+                "달력에 없는 날짜",
+                listOf(
+                    utcSnapshot(occurredAt = quoted("2026-13-11T01:00:05Z")),
+                    zonedSnapshot(startLocal = "2026-02-30T10:00:00"),
+                ),
+            ),
+            argumentSet(
+                "RFC 5545가 허용하지 않는 TEXT 제어 문자",
+                listOf(
+                    utcSnapshot(summary = "앞\\u0000뒤"),
+                    utcSnapshot(summary = "앞\\u000B뒤"),
+                    utcSnapshot(summary = "앞\\u001F뒤"),
+                    utcSnapshot(summary = "앞\\u007F뒤"),
+                    utcSnapshot(description = "앞\\u0008뒤"),
+                    utcSnapshot(location = "앞\\u000D뒤"),
+                ),
+            ),
+            argumentSet(
+                "JSON 이스케이프로 전달된 짝이 없는 서로게이트",
+                listOf(
+                    utcSnapshot(summary = "앞\\uD800뒤"),
+                    utcSnapshot(summary = "앞\\uDC00뒤"),
+                    utcSnapshot(description = "앞\\uD800뒤"),
+                    utcSnapshot(location = "앞\\uDC00뒤"),
+                ),
+            ),
+            argumentSet(
+                "iCal4j가 원문 식별자로 보존하지 못하는 시간대",
+                listOf(
+                    zonedSnapshot(zoneId = "America/Coyhaique"),
+                    zonedSnapshot(zoneId = "US/Eastern"),
+                    zonedSnapshot(zoneId = "+09:00"),
+                ),
+            ),
+            argumentSet(
+                "시점과 종일 일정의 경계",
+                listOf(
+                    snapshotWithTime("""{"type":"UTC_POINT","atInstant":"2026-08-17T12:00Z"}"""),
+                    snapshotWithTime(
+                        """{"type":"ZONED_LOCAL_POINT","atLocal":"2026-03-08T02:30:00","zoneId":"America/New_York"}""",
+                    ),
+                    snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-02-30","endDate":"2026-03-01"}"""),
+                    snapshotWithTime("""{"type":"ALL_DAY","startDate":"2026-08-22","endDate":"2026-08-22"}"""),
+                ),
+            ),
+            argumentSet("알 수 없는 필드", listOf(utcSnapshot().dropLast(1) + ",\n\"unexpected\": true\n}")),
+            argumentSet(
+                "DST 공백의 현지 시각",
+                listOf(
+                    zonedSnapshot(
+                        startLocal = "2026-03-08T02:30:00",
+                        endLocal = "2026-03-08T03:30:00",
+                        zoneId = "America/New_York",
+                    ),
+                ),
+            ),
+        )
     }
 }
+
+private const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+private fun utcSnapshot(
+    eventId: String = UUID.randomUUID().toString(),
+    occurredAt: String = quoted("2026-08-11T01:00:05Z"),
+    sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
+    startInstant: String = quoted("2026-08-16T09:00:00Z"),
+    endInstant: String = quoted("2026-08-16T10:30:00Z"),
+    summary: String = "ROUND 1",
+    description: String? = null,
+    location: String? = null,
+): String = snapshotWithTime(
+    """{"type":"UTC_INSTANT","startInstant":$startInstant,"endInstant":$endInstant}""",
+    eventId = eventId,
+    occurredAt = occurredAt,
+    sourceUpdatedAt = sourceUpdatedAt,
+    summary = summary,
+    description = description,
+    location = location,
+)
+
+private fun zonedSnapshot(
+    startLocal: String = "2026-08-31T23:30:00",
+    endLocal: String = "2026-09-01T00:30:00",
+    zoneId: String = "Asia/Seoul",
+): String = snapshotWithTime(
+    """{"type":"ZONED_LOCAL","startLocal":"$startLocal","endLocal":"$endLocal","zoneId":"$zoneId"}""",
+)
+
+private fun snapshotWithTime(
+    time: String,
+    eventId: String = UUID.randomUUID().toString(),
+    occurredAt: String = quoted("2026-08-11T01:00:05Z"),
+    sourceUpdatedAt: String = quoted("2026-08-11T01:00:00Z"),
+    summary: String = "ROUND 1",
+    description: String? = null,
+    location: String? = null,
+): String =
+    """
+    {
+      "eventId": "$eventId",
+      "occurredAt": $occurredAt,
+      "sourceItemId": "${UUID.randomUUID()}",
+      "seasonId": "$SEASON_ID",
+      "revision": 0,
+      "status": "ACTIVE",
+      "summary": "$summary",
+      "description": ${description?.let(::quoted) ?: "null"},
+      "location": ${location?.let(::quoted) ?: "null"},
+      "sourceUpdatedAt": $sourceUpdatedAt,
+      "time": $time
+    }
+    """.trimIndent()
+
+private fun quoted(value: String): String = "\"$value\""

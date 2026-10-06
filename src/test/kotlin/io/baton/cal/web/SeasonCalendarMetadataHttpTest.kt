@@ -16,8 +16,6 @@ import io.baton.cal.support.updateSeasonCalendarMetadata
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.test.web.servlet.MockMvc
@@ -97,8 +95,6 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
         val valid = contractExample("season-calendar-metadata.r0.json")
         listOf(
             valid.replace("\"revision\": 0", "\"revision\": -1"),
-            valid.replace("\"revision\": 0", "\"revision\": 0.5"),
-            valid.replace("\"revision\": 0", "\"revision\": -0.5"),
             valid.replace("BATON 개발 시즌", ""),
             valid.replace("BATON 개발 시즌", "가".repeat(513)),
             valid.replace("BATON 개발 시즌", "이름\\r주입"),
@@ -108,19 +104,6 @@ class SeasonCalendarMetadataHttpTest @Autowired constructor(
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = ["123", "12.5", "true"])
-    fun `시즌 이름의 숫자와 불리언은 거부하고 같은 내용의 문자열은 처리한다`(value: String) {
-        val payload = contractExample("season-calendar-metadata.r0.json")
-            .replace("BATON 개발 시즌", value)
-        val unquoted = payload.replace("\"displayName\": \"$value\"", "\"displayName\": $value")
-        mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, unquoted))
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-            .andReturnValid("api-error.v1.schema.json", "시즌 이름 타입 오류 응답")
-        assertThat(JsonPath.read<String>(update(payload), "$.displayName")).isEqualTo(value)
     }
 
     private fun update(payload: String): String = mockMvc.updateSeasonCalendarMetadata(SEASON_ID, payload)

@@ -8,9 +8,11 @@ import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredEvent
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.projection.SeasonCalendarMetadataService
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.eqArg
 import io.baton.cal.support.feedProjection
+import java.time.Instant
+import java.util.UUID
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -18,31 +20,17 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.jdbc.JdbcTestUtils
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-import org.springframework.test.context.jdbc.Sql
-import java.time.Instant
-import java.util.UUID
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=transaction-recovery-test-token-0001",
-    ],
-)
-@Sql("/reset-database.sql")
 // 투영 렌더링이 실패하면 일정 수신과 시즌 이름 저장을 함께 롤백하고 같은 요청을 다시 처리할 수 있다.
+@CalIntegrationTest
 class RenderFailureRollbackTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
     private val metadataService: SeasonCalendarMetadataService,
     private val jdbcClient: JdbcClient,
+    private val renderer: IcsCalendarRenderer,
 ) {
-    @MockitoSpyBean
-    lateinit var renderer: IcsCalendarRenderer
-
     @Test
     fun `render failure rolls back ingest and the same delivery succeeds when retried`() {
         doThrow(SimulatedRenderFailure())

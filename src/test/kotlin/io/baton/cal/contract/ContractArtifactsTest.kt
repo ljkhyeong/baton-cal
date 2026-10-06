@@ -15,17 +15,15 @@ import java.time.Instant
 class ContractArtifactsTest {
 
     @Test
-    fun `모든 JSON 스키마와 예시는 명시된 매핑으로 검증된다`() {
-        val actualSchemaFiles = jsonFileNames(ContractSchemaSupport.schemaDirectory)
-        val actualExampleFiles = jsonFileNames(ContractSchemaSupport.exampleDirectory)
-        val mappedExampleFiles = EXAMPLES_BY_SCHEMA.values.flatten()
+    fun `모든 JSON 예시는 파일명 접두사의 스키마로 검증되고 모든 스키마는 예시를 가진다`() {
+        // 예시 파일명의 첫 마디가 스키마 이름이다. 예: schedule-snapshot.utc-active.json → schedule-snapshot.v1.schema.json
+        val examplesBySchema = jsonFileNames(ContractSchemaSupport.exampleDirectory)
+            .groupBy { "${it.substringBefore('.')}.v1.schema.json" }
 
-        assertThat(EXAMPLES_BY_SCHEMA.keys)
-            .containsExactlyInAnyOrderElementsOf(actualSchemaFiles)
-        assertThat(mappedExampleFiles)
-            .containsExactlyInAnyOrderElementsOf(actualExampleFiles)
+        assertThat(examplesBySchema.keys)
+            .containsExactlyInAnyOrderElementsOf(jsonFileNames(ContractSchemaSupport.schemaDirectory))
 
-        EXAMPLES_BY_SCHEMA.forEach { (schemaFile, exampleFiles) ->
+        examplesBySchema.forEach { (schemaFile, exampleFiles) ->
             val schemaDocument = JSON_MAPPER.readTree(
                 ContractSchemaSupport.schemaDirectory.resolve(schemaFile).readText(),
             )
@@ -126,77 +124,6 @@ class ContractArtifactsTest {
         .mapTo(mutableSetOf()) { it.name }
 
     companion object {
-        private val EXAMPLES_BY_SCHEMA = linkedMapOf(
-            "schedule-snapshot-batch.v1.schema.json" to listOf("schedule-snapshot-batch.json"),
-            "schedule-snapshot-batch-result.v1.schema.json" to listOf("schedule-snapshot-batch-result.json"),
-            "api-error.v1.schema.json" to listOf(
-                "api-error.recovery-in-progress.json",
-                "api-error.recovery-manifest-mismatch.json",
-                "api-error.service-busy.json",
-                "api-error.source-revision-conflict.json",
-                "api-error.subscription-already-exists.json",
-                "api-error.subscription-scope-conflict.json",
-            ),
-            "calendar-item-status.v1.schema.json" to listOf(
-                "calendar-item-status.cancelled.json",
-            ),
-            "projection-rebuild-result.v1.schema.json" to listOf(
-                "projection-rebuild-result.json",
-            ),
-            "recovery-run-status.v1.schema.json" to listOf(
-                "recovery-run-status.in-progress.json",
-                "recovery-run-status.completed.json",
-            ),
-            "recovery-season-state.v1.schema.json" to listOf(
-                "recovery-season-state.zoned-cancelled.json",
-            ),
-            "recovery-season-manifest.v1.schema.json" to listOf(
-                "recovery-season-manifest.json",
-                "recovery-season-manifest.zoned-cancelled.json",
-            ),
-            "recovery-season-manifest-result.v1.schema.json" to listOf(
-                "recovery-season-manifest-result.json",
-            ),
-            "recovery-run-completion.v1.schema.json" to listOf(
-                "recovery-run-completion.json",
-                "recovery-run-completion.zoned-cancelled.json",
-            ),
-            "recovery-run-completion-result.v1.schema.json" to listOf(
-                "recovery-run-completion-result.json",
-            ),
-            "schedule-snapshot-result.v1.schema.json" to listOf(
-                "schedule-snapshot-result.applied.json",
-                "schedule-snapshot-result.duplicate.json",
-                "schedule-snapshot-result.stale.json",
-            ),
-            "schedule-snapshot.v1.schema.json" to listOf(
-                "schedule-snapshot.all-day-active.json",
-                "schedule-snapshot.utc-active.json",
-                "schedule-snapshot.utc-point-active.json",
-                "schedule-snapshot.zoned-active-r0.json",
-                "schedule-snapshot.zoned-active-r2.json",
-                "schedule-snapshot.zoned-cancelled.json",
-                "schedule-snapshot.zoned-point-active.json",
-                "schedule-snapshot.zoned-reactivated.json",
-            ),
-            "season-calendar-metadata.v1.schema.json" to listOf(
-                "season-calendar-metadata.r0.json",
-                "season-calendar-metadata.r2.json",
-            ),
-            "season-calendar-metadata-result.v1.schema.json" to listOf(
-                "season-calendar-metadata-result.json",
-            ),
-            "subscription-create.v1.schema.json" to listOf(
-                "subscription-create.json",
-            ),
-            "subscription-credential.v1.schema.json" to listOf(
-                "subscription-credential.json",
-            ),
-            "subscription-status.v1.schema.json" to listOf(
-                "subscription-status.generation-mismatch.json",
-            ),
-        )
-
         private val ZONED_LIFECYCLE_EXAMPLES = listOf(
             "schedule-snapshot.zoned-active-r0.json",
             "schedule-snapshot.zoned-active-r2.json",

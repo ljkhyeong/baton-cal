@@ -6,46 +6,34 @@ import io.baton.cal.calendar.calendarName
 import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
-import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.AdvisoryLockRepository
+import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.projection.SeasonCalendarMetadataService
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.runConcurrently
-import net.fortuna.ical4j.model.Property
-import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
-import org.mockito.Mockito.doAnswer
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-import org.springframework.test.context.jdbc.Sql
-import org.springframework.test.jdbc.JdbcTestUtils
-import org.springframework.test.util.AopTestUtils
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import net.fortuna.ical4j.model.Property
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.jdbc.JdbcTestUtils
+import org.springframework.test.util.AopTestUtils
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=snapshot-concurrency-test-token-0001",
-    ],
-)
-@Sql("/reset-database.sql")
+@CalIntegrationTest
 class SnapshotIngestionConcurrencyTest @Autowired constructor(
     private val ingestionService: SnapshotIngestionService,
     private val metadataService: SeasonCalendarMetadataService,
     private val itemRepository: CalendarItemRepository,
     private val jdbcClient: JdbcClient,
+    private val lockRepository: AdvisoryLockRepository,
 ) {
-    @MockitoSpyBean
-    private lateinit var lockRepository: AdvisoryLockRepository
-
     @Test
     fun `같은 시즌의 서로 다른 항목을 동시에 받아도 피드에 모두 남는다`() {
         synchronizeSeasonLockAcquisition()

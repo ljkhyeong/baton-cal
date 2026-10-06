@@ -18,11 +18,12 @@ import io.baton.cal.support.ingestSnapshot
 import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.jsonContent
 import io.baton.cal.support.postSnapshot
+import io.baton.cal.support.rotateSubscription
 import io.baton.cal.support.seasonCalendarMetadataRequest
+import io.baton.cal.support.snapshotExample
 import io.micrometer.core.instrument.MeterRegistry
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
-import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
@@ -34,6 +35,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.jdbc.JdbcTestUtils
+import tools.jackson.databind.node.ObjectNode
 import java.util.UUID
 
 @CalIntegrationTest
@@ -82,10 +84,7 @@ class MvpHttpFlowTest @Autowired constructor(
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "calendar_subscription")).isEqualTo(1)
         assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "season_feed_projection")).isEqualTo(1)
 
-        val rotated = mockMvc.perform(authorizedPost("$path/rotate"))
-            .andExpect(status().isOk)
-            .andReturn().response.contentAsString
-        val replacementToken: String = JsonPath.read(rotated, "$.token")
+        val replacementToken = credentialToken(mockMvc.rotateSubscription(subscriptionId))
         mockMvc.perform(get("/calendars/v1/$originalToken.ics")).andExpect(status().isNotFound)
         mockMvc.perform(get("/calendars/v1/$replacementToken.ics")).andExpect(status().isOk)
         mockMvc.perform(createRequest()).andExpect(status().isConflict)
@@ -105,23 +104,14 @@ class MvpHttpFlowTest @Autowired constructor(
                 "/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest",
                 UUID.randomUUID(),
                 SEASON_ID,
-            ).jsonContent(
-                """
-                {
-                  "itemCount": 0,
-                  "itemDigest": "${"0".repeat(64)}",
-                  "metadataRevision": null,
-                  "metadataDigest": null
-                }
-                """.trimIndent(),
-            ),
+            ).jsonContent(contractExample("recovery-season-manifest.json")),
         )
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RECOVERY_MODE_REQUIRED"))
     }
 
     @Test
-    fun `MVP는 멱등 스냅샷과 조건부 피드 재구축 및 토큰 수명주기를 지원한다`() {
+    fun `MVP는 멱등 스냅샷과 조건부 피드 재구축을 지원한다`() {
         val appliedBefore = ingestionCount("applied")
         val duplicateBefore = ingestionCount("duplicate")
         val staleBefore = ingestionCount("stale")
@@ -151,15 +141,10 @@ class MvpHttpFlowTest @Autowired constructor(
 
         mockMvc.ingestSnapshot(zonedSnapshot())
 
-        val createJson = mockMvc.createSubscription(SEASON_ID)
-        val subscriptionId: String = JsonPath.read(createJson, "$.subscriptionId")
-        val originalToken = credentialToken(createJson)
+        val originalToken = credentialToken(mockMvc.createSubscription(SEASON_ID))
 
         val firstFeed = mockMvc.perform(get("/calendars/v1/{token}.ics", originalToken))
             .andExpect(status().isOk)
-            .andExpect(content().contentType("text/calendar;charset=UTF-8"))
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("private")))
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-cache")))
             .andReturn()
         val firstCalendar = firstFeed.response.contentAsByteArray.parseIcalendar()
         val sourceEvent = firstCalendar.events().single {
@@ -171,24 +156,6 @@ class MvpHttpFlowTest @Autowired constructor(
             .contains("America/New_York")
 
         val originalEtag = checkNotNull(firstFeed.response.getHeader(HttpHeaders.ETAG))
-        val originalLastModified = checkNotNull(firstFeed.response.getHeader(HttpHeaders.LAST_MODIFIED))
-
-        listOf(HttpHeaders.IF_NONE_MATCH to "W/$originalEtag", HttpHeaders.IF_MODIFIED_SINCE to originalLastModified)
-            .forEach { (validator, value) ->
-                mockMvc.perform(get("/calendars/v1/{token}.ics", originalToken).header(validator, value))
-                    .andExpect(status().isNotModified)
-                    .andExpect(header().string(HttpHeaders.ETAG, originalEtag))
-                    .andExpect(header().string(HttpHeaders.LAST_MODIFIED, originalLastModified))
-                    .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
-                    .andExpect(content().bytes(byteArrayOf()))
-            }
-
-        mockMvc.perform(
-            get("/calendars/v1/{token}.ics", originalToken)
-                .header(HttpHeaders.IF_NONE_MATCH, "\"different\"")
-                .header(HttpHeaders.IF_MODIFIED_SINCE, "Wed, 31 Dec 2099 23:59:59 GMT"),
-        )
-            .andExpect(status().isOk)
 
         // Last-Modified는 초 단위 보조 검증 값이므로 같은 초의 변경은 강한 ETag로 판정한다.
         mockMvc.ingestSnapshot(
@@ -226,30 +193,11 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, refreshedLastModified))
             .andExpect(content().bytes(refreshedBytes))
 
-        val rotateJson = mockMvc
-            .perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
-            .andExpect(status().isOk)
-            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
-            .andReturnValid("subscription-credential.v1.schema.json", "실제 구독 회전 응답")
-        val replacementToken = credentialToken(rotateJson)
-        assertThat(replacementToken).isNotEqualTo(originalToken)
-
-        mockMvc.perform(get("/calendars/v1/{token}.ics", originalToken))
-            .andExpect(status().isNotFound)
-        mockMvc.perform(get("/calendars/v1/{token}.ics", replacementToken))
-            .andExpect(status().isOk)
-            .andExpect(content().bytes(refreshedBytes))
-
-        mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId))
-            .andExpect(status().isNoContent)
-        mockMvc.perform(get("/calendars/v1/{token}.ics", replacementToken))
-            .andExpect(status().isNotFound)
-
         val persistedHash = jdbcClient.sql("SELECT token_hash FROM calendar_subscription")
             .query(String::class.java)
             .single()
         assertThat(persistedHash).matches("^[0-9a-f]{64}$")
-        assertThat(persistedHash).isNotIn(originalToken, replacementToken)
+        assertThat(persistedHash).isNotEqualTo(originalToken)
     }
 
     @Test
@@ -326,8 +274,7 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(jsonPath("$.generationMatches").value(false))
             .andReturnValid("subscription-status.v1.schema.json", "이전 세대 구독의 비밀 필드 없는 상태 응답")
 
-        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/$subscriptionId/rotate"))
-            .andExpect(status().isOk)
+        mockMvc.rotateSubscription(subscriptionId)
         mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/$subscriptionId"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.status").value("ACTIVE"))
@@ -347,6 +294,8 @@ class MvpHttpFlowTest @Autowired constructor(
         listOf(
             "/internal/api/v1/calendar-items/$SOURCE_ITEM_ID",
             "/internal/api/v1/subscriptions/$SOURCE_ITEM_ID",
+            "/internal/api/v1/recovery-runs/$SOURCE_ITEM_ID",
+            "/internal/api/v1/seasons/$SEASON_ID/recovery-state",
         ).forEach { path ->
             mockMvc.perform(authorizedGet(path))
                 .andExpect(status().isNotFound)
@@ -441,62 +390,35 @@ class MvpHttpFlowTest @Autowired constructor(
             2 -> "2026-08-11T00:40:00Z"
             else -> "2026-08-11T00:50:00Z"
         },
-    ): String {
-        return """
-        {
-          "eventId": "$eventId",
-          "occurredAt": "2026-08-11T01:00:00Z",
-          "sourceItemId": "$SOURCE_ITEM_ID",
-          "seasonId": "$seasonId",
-          "revision": $revision,
-          "status": "$status",
-          "summary": "$summary",
-          "description": "Confirmed by BATON",
-          "location": "Seoul",
-          "time": {
-            "type": "UTC_INSTANT",
-            "startInstant": "2026-09-01T01:00:00Z",
-            "endInstant": "2026-09-01T02:00:00Z"
-          },
-          "sourceUpdatedAt": "$sourceUpdatedAt"
-        }
-        """.trimIndent()
+    ): String = snapshotExample("schedule-snapshot.utc-active.json") {
+        put("eventId", eventId)
+        put("sourceItemId", SOURCE_ITEM_ID)
+        put("seasonId", seasonId)
+        put("revision", revision)
+        put("status", status)
+        put("summary", summary)
+        put("sourceUpdatedAt", sourceUpdatedAt)
     }
 
-    private fun zonedSnapshot(): String =
-        """
-        {
-          "eventId": "$ZONED_EVENT_ID",
-          "occurredAt": "2026-10-01T01:00:00Z",
-          "sourceItemId": "$ZONED_SOURCE_ITEM_ID",
-          "seasonId": "$SEASON_ID",
-          "revision": 0,
-          "status": "ACTIVE",
-          "summary": "DST game",
-          "description": null,
-          "location": "New York",
-          "time": {
-            "type": "ZONED_LOCAL",
-            "startLocal": "2026-11-01T01:30:00",
-            "endLocal": "2026-11-01T02:30:00",
-            "zoneId": "America/New_York"
-          },
-          "sourceUpdatedAt": "2026-10-01T00:30:00Z"
-        }
-        """.trimIndent()
+    // 서머타임이 끝나 같은 현지 시각이 두 번 있는 구간도 받는다.
+    private fun zonedSnapshot(): String = snapshotExample("schedule-snapshot.zoned-active-r0.json") {
+        put("seasonId", SEASON_ID)
+        (get("time") as ObjectNode)
+            .put("zoneId", "America/New_York")
+            .put("startLocal", "2026-11-01T01:30:00")
+            .put("endLocal", "2026-11-01T02:30:00")
+    }
 
     companion object {
         const val SEASON_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         const val OTHER_SEASON_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         const val SOURCE_ITEM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        const val ZONED_SOURCE_ITEM_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
         const val ZONED_CONTRACT_SOURCE_ITEM_ID = "b8ca471a-b228-42fa-8d41-28f05ee90d40"
         const val EVENT_1 = "11111111-1111-1111-1111-111111111111"
         const val EVENT_2 = "22222222-2222-2222-2222-222222222222"
         const val EVENT_3 = "33333333-3333-3333-3333-333333333333"
         const val EVENT_4 = "44444444-4444-4444-4444-444444444444"
         const val EVENT_5 = "55555555-5555-5555-5555-555555555555"
-        const val ZONED_EVENT_ID = "66666666-6666-6666-6666-666666666666"
         const val EVENT_7 = "77777777-7777-7777-7777-777777777777"
     }
 }

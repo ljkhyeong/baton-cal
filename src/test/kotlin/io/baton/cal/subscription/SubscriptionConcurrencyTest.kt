@@ -5,13 +5,13 @@ import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.anyArg
 import io.baton.cal.support.runConcurrently
 import io.baton.cal.web.ApiException
 import io.baton.cal.web.SubscriptionCredential
-import java.util.concurrent.CyclicBarrier
 import java.util.UUID
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
@@ -23,31 +23,16 @@ import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doCallRealMethod
 import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.HttpStatus
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-import org.springframework.test.context.jdbc.Sql
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=subscription-concurrency-test-token",
-        "baton.cal.public-base-url=https://calendar.example.test",
-    ],
-)
-@Sql("/reset-database.sql")
+@CalIntegrationTest
 class SubscriptionConcurrencyTest @Autowired constructor(
     private val service: SubscriptionService,
     private val tokenCodec: SubscriptionTokenCodec,
     private val projectionRepository: SeasonFeedProjectionRepository,
+    private val repository: CalendarSubscriptionRepository,
+    private val renderer: IcsCalendarRenderer,
 ) {
-    @MockitoSpyBean
-    private lateinit var repository: CalendarSubscriptionRepository
-
-    @MockitoSpyBean
-    private lateinit var renderer: IcsCalendarRenderer
-
     @ParameterizedTest
     @ValueSource(booleans = [false, true])
     fun `같은 ID의 동시 생성은 한 자격 증명만 저장하고 다른 시즌 재사용을 거부한다`(differentSeason: Boolean) {
