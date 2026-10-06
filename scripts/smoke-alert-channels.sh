@@ -7,6 +7,14 @@ project_name="baton-cal-alerts-$(date +%s)-$$"
 receiver="$project_name-receiver"
 sender="$project_name-sender"
 request() { docker exec "$receiver" wget -q -T 5 -O - "$@"; }
+# 조건 명령이 성공할 때까지 1초 간격으로 최대 횟수만큼 실행한다. 조건 안에서는 errexit가 꺼지므로
+# 요청 실패가 재시도되도록 명령을 파이프나 &&로 묶는다.
+eventually() {
+  local attempts=$1
+  shift
+  for ((; attempts > 0; attempts--)); do "$@" && return 0; sleep 1; done
+  return 1
+}
 
 cleanup() {
   local result=$?
@@ -41,19 +49,20 @@ amtool() { docker run --rm --network none --entrypoint amtool "${config_volumes[
 # 실제 메시지를 보내지 않도록 외부 통신이 차단된 검증 네트워크를 사용한다.
 docker network create --internal "$project_name" > /dev/null
 receiver_url=http://127.0.0.1:8080
+sender_url=http://alert-sender:9093
 printf '%s\n' http://alert-receiver:8080/healthchecks/smoke-secret-marker > "$scratch/healthchecks-url"
 
+# 현재 조합의 전역 $channel·$configuration을 사용한다.
+message_seen() {
+  request "$receiver_url/alerts" \
+    | jq -e --arg channel "$channel" --arg title "$1" \
+      'any(.[]; .channel == $channel and .title == $title and (.text | contains("HTTPS 연결 확인")))' > /dev/null
+}
 wait_message() {
-  local title=$1
-  for ((attempt=0; attempt<40; attempt++)); do
-    request "$receiver_url/alerts" > "$scratch/events.json"
-    if jq -e --arg channel "$channel" --arg title "$title" \
-      'any(.[]; .channel == $channel and .title == $title and (.text | contains("HTTPS 연결 확인")))' \
-      "$scratch/events.json" > /dev/null; then return 0; fi
-    sleep 1
-  done
-  echo "$configuration 알림 전달 실패: $title" >&2
-  return 1
+  eventually 40 message_seen "$1" || { echo "$configuration 알림 전달 실패: $1" >&2; return 1; }
+}
+endpoints_ready() {
+  request "$receiver_url/alerts" > /dev/null 2>&1 && request "$sender_url/-/ready" > /dev/null 2>&1
 }
 
 for configuration in alertmanager slack discord slack-healthchecks discord-healthchecks; do
@@ -80,16 +89,10 @@ for configuration in alertmanager slack discord slack-healthchecks discord-healt
   docker run --detach --name "$sender" --network "$project_name" --network-alias alert-sender \
     "${config_volumes[@]}" \
     "$alertmanager_image" --config.file=/config.yml --cluster.listen-address= > /dev/null
-  sender_url=http://alert-sender:9093
-  for ((attempt=0; attempt<30; attempt++)); do
-    if request "$receiver_url/alerts" > /dev/null 2>&1 && \
-      request "$sender_url/-/ready" > /dev/null 2>&1; then break; fi
-    sleep 1
-  done
-  if ((attempt == 30)); then
+  eventually 30 endpoints_ready || {
     echo "$configuration 알림 송신기 또는 수신기가 준비되지 않았습니다." >&2
     exit 1
-  fi
+  }
   for state in firing resolved; do
     jq -n --arg state "$state" '[("CalTlsFailed", "CalWatchdog") | {
       labels: {alertname: .},
