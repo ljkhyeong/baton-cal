@@ -130,7 +130,7 @@ tasks.register<Exec>("feedbackLoopTest") {
     val result = layout.buildDirectory.file("agent-feedback-tests/passed")
     outputs.file(result)
     doLast {
-        result.get().asFile.apply { parentFile.mkdirs() }.writeText("passed\n")
+        result.get().asFile.writeText("passed\n")
     }
 }
 
