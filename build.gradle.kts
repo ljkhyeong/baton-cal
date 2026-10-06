@@ -99,7 +99,6 @@ dependencies {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
     testImplementation("io.micrometer:micrometer-observation-test")
-    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
