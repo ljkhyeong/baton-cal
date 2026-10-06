@@ -10,7 +10,7 @@ class CalProperties(
     val internalToken: String,
     val publicBaseUrl: URI = URI.create("http://localhost:8080"),
     val previousInternalToken: String? = null,
-    subscriptionGeneration: String = DEFAULT_SUBSCRIPTION_GENERATION.toString(),
+    subscriptionGeneration: String = "00000000-0000-0000-0000-000000000001",
     val recoveryMode: Boolean = false,
 ) {
     val subscriptionGeneration: UUID = StandardUuid.parse(subscriptionGeneration)
@@ -38,16 +38,9 @@ class CalProperties(
             "publicBaseUrl에는 쿼리나 프래그먼트를 넣을 수 없다"
         }
         require(publicBaseUrl.userInfo == null) { "publicBaseUrl에는 사용자 이름이나 비밀번호를 넣을 수 없다" }
-        require(this.subscriptionGeneration != NIL_UUID) {
+        require(this.subscriptionGeneration != UUID(0, 0)) {
             "subscriptionGeneration은 모든 자릿수가 0인 UUID일 수 없다"
         }
-    }
-
-    companion object {
-        val DEFAULT_SUBSCRIPTION_GENERATION: UUID =
-            UUID.fromString("00000000-0000-0000-0000-000000000001")
-
-        private val NIL_UUID: UUID = UUID(0, 0)
     }
 }
 

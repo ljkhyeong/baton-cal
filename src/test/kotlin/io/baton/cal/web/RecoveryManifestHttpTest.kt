@@ -100,6 +100,21 @@ class RecoveryManifestHttpTest @Autowired constructor(
         verifySeason(0, state.itemDigest, 2, state.metadataDigest)
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = [false, true])
+    fun `시즌 이름 개정 번호와 다이제스트 중 하나만 보내면 검증 기록을 남기지 않는다`(withRevision: Boolean) {
+        updateMetadata()
+        val state = currentState()
+        val revision = state.metadataRevision.takeIf { withRevision }
+        val digest = state.metadataDigest.takeUnless { withRevision }
+        mockMvc.perform(seasonManifestRequest(0, state.itemDigest, revision, digest))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturnValid("api-error.v1.schema.json", "복구 시즌 이름 짝 오류 응답")
+        assertThat(repository.listVerifiedSeasonStates(UUID.fromString(RECOVERY_ID))).isEmpty()
+        verifySeason(0, state.itemDigest, state.metadataRevision, state.metadataDigest)
+    }
+
     @Test
     fun `소수인 시즌 수는 복구 완료 기록을 남기지 않는다`() {
         val payload = completionPayload(emptyList())

@@ -1,6 +1,7 @@
 package io.baton.cal.web
 
 import io.baton.cal.recovery.RecoverySeasonState
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Pattern
 import java.time.Instant
@@ -26,18 +27,12 @@ data class RecoverySeasonManifestRequest(
     @field:Pattern(regexp = SHA256_HEX)
     val metadataDigest: String?,
 ) {
-    fun toState(seasonId: UUID): RecoverySeasonState {
-        if ((metadataRevision == null) != (metadataDigest == null)) {
-            throw InvalidApiRequestException("시즌 이름 개정 번호와 다이제스트는 함께 전달해야 합니다")
-        }
-        return RecoverySeasonState(
-            seasonId = seasonId,
-            itemCount = itemCount,
-            itemDigest = itemDigest,
-            metadataRevision = metadataRevision,
-            metadataDigest = metadataDigest,
-        )
-    }
+    /** 시즌 이름 개정 번호와 다이제스트는 함께 전달하거나 함께 생략한다. */
+    @get:AssertTrue
+    private val isMetadataPaired: Boolean
+        get() = (metadataRevision == null) == (metadataDigest == null)
+
+    fun toState(seasonId: UUID) = RecoverySeasonState(seasonId, itemCount, itemDigest, metadataRevision, metadataDigest)
 }
 
 data class RecoverySeasonManifestResponse(

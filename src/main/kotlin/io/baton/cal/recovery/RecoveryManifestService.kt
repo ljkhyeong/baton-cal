@@ -5,8 +5,8 @@ import io.baton.cal.persistence.RecoveryManifestRepository
 import io.baton.cal.persistence.RecoveryRunCompletionRow
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonProjectionLockRepository
-import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.ConflictException
+import io.baton.cal.web.resourceNotFound
+import io.baton.cal.web.conflict
 import io.baton.cal.web.RecoveryRunCompletionResponse
 import io.baton.cal.web.RecoveryRunStatus
 import io.baton.cal.web.RecoveryRunStatusResponse
@@ -31,7 +31,7 @@ class RecoveryManifestService(
         val completion = repository.findCompletion(recoveryId)
         val verifiedSeasonCount = completion?.seasonCount ?: repository.countSeasonManifests(recoveryId)
         if (completion == null && verifiedSeasonCount == 0) {
-            throw InternalResourceNotFoundException("저장된 복구 실행을 찾을 수 없습니다")
+            throw resourceNotFound("저장된 복구 실행을 찾을 수 없습니다")
         }
         return RecoveryRunStatusResponse(
             recoveryId = recoveryId,
@@ -46,7 +46,7 @@ class RecoveryManifestService(
     fun getSeasonState(seasonId: UUID): RecoverySeasonState {
         val state = currentSeasonState(seasonId)
         if (state.itemCount == 0 && state.metadataRevision == null) {
-            throw InternalResourceNotFoundException("시즌의 일정과 이름 수신 기록이 없습니다")
+            throw resourceNotFound("시즌의 일정과 이름 수신 기록이 없습니다")
         }
         return state
     }
@@ -116,22 +116,19 @@ class RecoveryManifestService(
     }
 
     private fun requireRecoveryMode() {
-        if (!properties.recoveryMode) throw modeRequired()
+        if (!properties.recoveryMode) {
+            throw conflict("RECOVERY_MODE_REQUIRED", "recovery manifest verification requires recovery mode")
+        }
     }
 
-    private fun manifestMismatch() = ConflictException(
+    private fun manifestMismatch() = conflict(
         code = "RECOVERY_MANIFEST_MISMATCH",
         message = "recovery manifest does not match the current calendar state",
     )
 
-    private fun runConflict() = ConflictException(
+    private fun runConflict() = conflict(
         code = "RECOVERY_RUN_CONFLICT",
         message = "recoveryId already represents another manifest",
-    )
-
-    private fun modeRequired() = ConflictException(
-        code = "RECOVERY_MODE_REQUIRED",
-        message = "recovery manifest verification requires recovery mode",
     )
 
     private fun RecoveryRunCompletionRow.toResponse() = RecoveryRunCompletionResponse(

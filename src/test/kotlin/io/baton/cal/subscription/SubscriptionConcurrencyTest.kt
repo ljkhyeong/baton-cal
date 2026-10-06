@@ -8,8 +8,7 @@ import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.support.PostgreSqlTestContainer
 import io.baton.cal.support.anyArg
 import io.baton.cal.support.runConcurrently
-import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.ConflictException
+import io.baton.cal.web.ApiException
 import io.baton.cal.web.SubscriptionCredential
 import java.util.concurrent.CyclicBarrier
 import java.util.UUID
@@ -25,6 +24,7 @@ import org.mockito.Mockito.doCallRealMethod
 import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.http.HttpStatus
 import org.springframework.boot.testcontainers.context.ImportTestcontainers
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.context.jdbc.Sql
@@ -70,7 +70,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 
         val winner = outcomes.single { it.isSuccess }.getOrThrow()
         assertThat(outcomes.single { it.isFailure }.exceptionOrNull())
-            .isInstanceOfSatisfying(ConflictException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
                 assertThat(it.code).isEqualTo(
                     if (differentSeason) "SUBSCRIPTION_SCOPE_CONFLICT" else "SUBSCRIPTION_ALREADY_EXISTS",
                 )
@@ -87,7 +88,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             .`when`(renderer).render(otherSeasonId, emptyList(), null)
 
         assertThatThrownBy { service.create(otherSeasonId, initial.subscriptionId) }
-            .isInstanceOfSatisfying(ConflictException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
                 assertThat(it.code).isEqualTo("SUBSCRIPTION_SCOPE_CONFLICT")
             }
 
@@ -165,7 +167,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         assertThat(service.findFeed(initial.token)).isNull()
 
         assertThatThrownBy { service.rotate(initial.subscriptionId) }
-            .isInstanceOfSatisfying(InternalResourceNotFoundException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.NOT_FOUND)
                 assertThat(it.code).isEqualTo("RESOURCE_NOT_FOUND")
             }
     }
@@ -183,7 +186,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
     }
 
     private fun assertSubscriptionConflict(error: Throwable?) {
-        assertThat(error).isInstanceOfSatisfying(ConflictException::class.java) {
+        assertThat(error).isInstanceOfSatisfying(ApiException::class.java) {
+            assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
             assertThat(it.code).isEqualTo("SUBSCRIPTION_CONFLICT")
         }
     }

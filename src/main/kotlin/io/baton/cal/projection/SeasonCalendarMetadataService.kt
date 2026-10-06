@@ -4,7 +4,7 @@ import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRow
 import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.baton.cal.web.SeasonCalendarMetadataResponse
-import io.baton.cal.web.ConflictException
+import io.baton.cal.web.conflict
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -24,7 +24,7 @@ class SeasonCalendarMetadataService(
         val current = repository.findBySeasonId(seasonId)
         if (current != null && revision <= current.revision) {
             if (revision == current.revision && displayName != current.displayName) {
-                throw ConflictException(
+                throw conflict(
                     "SEASON_METADATA_REVISION_CONFLICT",
                     "같은 시즌 정보 개정 번호에 다른 표시 이름을 사용할 수 없습니다",
                 )

@@ -29,6 +29,7 @@ private class StandardUuidEditor : PropertyEditorSupport() {
 internal object StandardUuid {
     const val ERROR_MESSAGE = "UUID는 하이픈을 포함한 36자 표준 문자열이어야 합니다"
 
-    fun parse(value: String): UUID =
-        requireNotNull(Uuid.parseHexDashOrNull(value)) { ERROR_MESSAGE }.toJavaUuid()
+    fun parse(value: String): UUID = requireNotNull(parseOrNull(value)) { ERROR_MESSAGE }
+
+    fun parseOrNull(value: String): UUID? = Uuid.parseHexDashOrNull(value)?.toJavaUuid()
 }

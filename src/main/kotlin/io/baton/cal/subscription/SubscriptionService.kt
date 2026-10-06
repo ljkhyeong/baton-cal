@@ -7,11 +7,12 @@ import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
-import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.RecoveryInProgressException
-import io.baton.cal.web.ConflictException
+import io.baton.cal.web.ApiException
 import io.baton.cal.web.SubscriptionCredential
 import io.baton.cal.web.SubscriptionStatusResponse
+import io.baton.cal.web.conflict
+import io.baton.cal.web.resourceNotFound
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.util.UriComponentsBuilder
@@ -25,10 +26,9 @@ class SubscriptionService(
     private val tokenCodec: SubscriptionTokenCodec,
     private val properties: CalProperties,
 ) {
-    @Transactional(readOnly = true)
     fun getStatus(subscriptionId: UUID): SubscriptionStatusResponse {
         val subscription = repository.findById(subscriptionId)
-            ?: throw InternalResourceNotFoundException("구독을 찾을 수 없습니다")
+            ?: throw resourceNotFound("구독을 찾을 수 없습니다")
         return SubscriptionStatusResponse(
             subscriptionId = subscription.id,
             seasonId = subscription.seasonId,
@@ -60,12 +60,12 @@ class SubscriptionService(
 
     private fun rejectExistingSubscription(existing: CalendarSubscriptionRow, seasonId: UUID): Nothing {
         if (existing.seasonId != seasonId) {
-            throw ConflictException(
+            throw conflict(
                 code = "SUBSCRIPTION_SCOPE_CONFLICT",
                 message = "같은 구독 ID를 다른 시즌에 사용할 수 없습니다",
             )
         }
-        throw ConflictException(
+        throw conflict(
             code = "SUBSCRIPTION_ALREADY_EXISTS",
             message = "이미 생성된 구독입니다. 상태를 조회한 뒤 필요한 경우 토큰을 다시 발급하세요",
         )
@@ -76,7 +76,7 @@ class SubscriptionService(
         ensureCredentialIssuanceAllowed()
         val current = repository.findById(subscriptionId)
             ?.takeIf { it.status == CalendarSubscriptionStatus.ACTIVE }
-            ?: throw InternalResourceNotFoundException("active subscription was not found")
+            ?: throw resourceNotFound("active subscription was not found")
 
         val token = tokenCodec.generate()
         val replacementHash = tokenCodec.hash(token)
@@ -90,32 +90,36 @@ class SubscriptionService(
     @Transactional
     fun revoke(subscriptionId: UUID) {
         val current = repository.findById(subscriptionId)
-            ?: throw InternalResourceNotFoundException("subscription was not found")
+            ?: throw resourceNotFound("subscription was not found")
         if (current.status == CalendarSubscriptionStatus.REVOKED) return
         if (!repository.revoke(subscriptionId, current.tokenHash)) throw concurrentChange()
     }
 
-    @Transactional(readOnly = true)
     fun findFeed(token: String): SeasonFeedProjectionRow? =
         repository.findProjectionByActiveTokenHash(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,
         )
 
-    @Transactional(readOnly = true)
     fun findFeedHeaders(token: String): SeasonFeedHeaders? =
         repository.findProjectionHeadersByActiveTokenHash(
             tokenCodec.hash(token),
             properties.subscriptionGeneration,
         )
 
-    private fun concurrentChange() = ConflictException(
+    private fun concurrentChange() = conflict(
         code = "SUBSCRIPTION_CONFLICT",
         message = "subscription was changed concurrently",
     )
 
     private fun ensureCredentialIssuanceAllowed() {
-        if (properties.recoveryMode) throw RecoveryInProgressException()
+        if (properties.recoveryMode) {
+            throw ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "RECOVERY_IN_PROGRESS",
+                "subscription issuance is disabled during recovery",
+            )
+        }
     }
 
     private fun feedUri(token: String): URI = UriComponentsBuilder

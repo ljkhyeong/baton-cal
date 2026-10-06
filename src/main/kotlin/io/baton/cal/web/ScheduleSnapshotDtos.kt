@@ -58,9 +58,9 @@ data class ScheduleSnapshotRequest(
             sourceUpdatedAt = parseInstant(sourceUpdatedAt),
         )
     } catch (exception: DateTimeParseException) {
-        throw InvalidApiRequestException("snapshot contains an invalid timestamp")
+        throw invalidRequest("snapshot contains an invalid timestamp")
     } catch (exception: IllegalArgumentException) {
-        throw InvalidApiRequestException(exception.message ?: "snapshot violates the contract")
+        throw invalidRequest(exception.message ?: "snapshot violates the contract")
     }
 }
 
