@@ -9,11 +9,8 @@ fi
 
 image_name=$1
 project_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compose_file="$project_directory/compose.smoke.yml"
 project_name="baton-cal-smoke-$(date +%s)-$$"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/baton-cal-smoke.XXXXXX")
-database_name=baton_cal_smoke
-database_user=baton_cal_smoke
 internal_token=smoke-only-internal-token-00000000000000000000000000000000
 generation_a=40000000-0000-0000-0000-000000000001
 generation_b=40000000-0000-0000-0000-000000000002
@@ -25,12 +22,22 @@ export BATON_CAL_IMAGE="$image_name"
 export BATON_CAL_INTERNAL_TOKEN="$internal_token"
 export BATON_CAL_SUBSCRIPTION_GENERATION="$generation_a"
 export BATON_CAL_RECOVERY_MODE=false
+unset BATON_CAL_PREVIOUS_INTERNAL_TOKEN
+export DATABASE_USERNAME=baton_cal_smoke DATABASE_PASSWORD=baton-cal-smoke-only
+# 운영 Compose의 app과 의존 서비스 postgres만 띄운다. 내부 포트는 127.0.0.1의 임시 포트에 연결한다.
+export CAL_INTERNAL_PORT=0
+# 기동하지 않는 gateway·alertmanager·blackbox의 필수 보간 값이다. 경로의 파일은 만들지 않는다.
+export CAL_TLS_DIRECTORY="$scratch/tls" CAL_ACME_DIRECTORY="$scratch/acme"
+export CAL_ALERT_WEBHOOK_URL_FILE="$scratch/webhook-url"
+database_name=baton_cal
+database_user=$DATABASE_USERNAME
 
 compose=(
   docker compose
   --ansi never
   --project-name "$project_name"
-  --file "$compose_file"
+  --file "$project_directory/compose.operations.yml"
+  --file "$project_directory/compose.operations-smoke.yml"
 )
 http_request=(curl --silent --show-error --connect-timeout 2 --max-time 60)
 bearer=(--oauth2-bearer "$internal_token")
@@ -58,7 +65,6 @@ cleanup() {
     "${compose[@]}" logs --no-color >&2 || true
   fi
 
-  rm -rf "$scratch"
   echo "격리된 Compose project '$project_name'의 컨테이너와 볼륨을 정리합니다."
   if ! "${compose[@]}" down --volumes --remove-orphans; then
     echo "오류: 격리된 스모크 자원을 완전히 정리하지 못했습니다." >&2
@@ -66,6 +72,8 @@ cleanup() {
       status=1
     fi
   fi
+  # Compose가 보간하는 임시 경로를 정리 명령 뒤에 지운다.
+  rm -rf "$scratch"
 
   exit "$status"
 }
@@ -82,53 +90,30 @@ wait_for_readiness() {
   container_id=$("${compose[@]}" ps --all --quiet app)
   [[ -n "$container_id" ]] || fail "애플리케이션 컨테이너 ID를 찾을 수 없습니다."
 
-  # 강제 재생성하면 포트가 바뀌므로 매번 다시 조회한다. compose.smoke.yml은 127.0.0.1에만 연결한다.
+  # 강제 재생성하면 포트가 바뀌므로 매번 다시 조회한다. 두 포트 모두 127.0.0.1의 임시 포트에만 연결한다.
   base_url="http://$("${compose[@]}" port app 8080)"
   management_url="http://$("${compose[@]}" port app 8081)"
   readiness_url="$management_url/actuator/health/readiness"
 
-  local readiness_status=000
-  local ready=false
-  local running
-  for ((attempt = 1; attempt <= 60; attempt++)); do
-    readiness_status=$(
-      curl --silent \
-        --output "$scratch/readiness" \
-        --write-out '%{http_code}' \
-        --connect-timeout 1 \
-        --max-time 2 \
-        "$readiness_url" || true
-    )
-
-    if [[ "$readiness_status" == 200 ]] \
-      && jq --exit-status '.status == "UP"' "$scratch/readiness" >/dev/null 2>&1; then
-      ready=true
-      break
-    fi
-
-    running=$(docker inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null || true)
-    [[ "$running" == true ]] || break
-    sleep 2
-  done
-
-  if [[ "$ready" != true ]]; then
-    echo "마지막 readiness HTTP 상태: $readiness_status" >&2
-    if [[ -s "$scratch/readiness" ]]; then
-      echo "마지막 readiness 응답:" >&2
-      sed -n '1,40p' "$scratch/readiness" >&2
-    fi
-    fail "readiness가 제한 시간 안에 HTTP 200과 UP을 반환하지 않았습니다."
-  fi
+  # readiness 그룹은 DB 점검을 포함하므로 200이면 준비된 상태다. 연결 거부와 503은 2초 간격으로
+  # 60번 다시 묻고, 시작 중의 중간 오류는 출력하지 않는다.
+  curl --silent --show-error --connect-timeout 1 --max-time 2 \
+    --fail --retry 60 --retry-delay 2 --retry-all-errors \
+    "$readiness_url" 2>/dev/null | jq --exit-status '.status == "UP"' >/dev/null \
+    || fail "readiness가 제한 시간 안에 HTTP 200과 UP을 반환하지 않았습니다."
   echo "readiness HTTP 200/UP 확인: $readiness_url"
 }
 
+# jvm_info의 version 태그는 실행 중인 JVM의 java.runtime.version(예: 25.0.3+9-LTS)이다.
 assert_prometheus_metrics() {
   local status
-  status=$(http_status "$scratch/readiness" "$management_url/actuator/prometheus")
+  status=$(http_status "$scratch/metrics" "$management_url/actuator/prometheus")
   [[ "$status" == 200 ]] || fail "Prometheus 메트릭이 HTTP 200이 아닌 $status를 반환했습니다."
-  grep --quiet '^jvm_info' "$scratch/readiness" \
+  grep --quiet '^jvm_info' "$scratch/metrics" \
     || fail "Prometheus 메트릭에서 JVM 런타임 정보를 찾을 수 없습니다."
-  echo "Prometheus 메트릭 HTTP 200과 JVM 런타임 정보를 확인했습니다."
+  grep --quiet --extended-regexp '^jvm_info\{.*version="25([.+-]|")' "$scratch/metrics" \
+    || fail "실행 중인 JVM이 Java 25 런타임이 아닙니다: $(grep --max-count=1 '^jvm_info' "$scratch/metrics")"
+  echo "Prometheus 메트릭 HTTP 200과 실행 중인 Java 25 런타임을 확인했습니다."
 }
 
 database_scalar() {
@@ -144,14 +129,13 @@ database_scalar() {
 
 assert_flyway_versions() {
   # 체크아웃의 마이그레이션 파일과 이미지가 실제로 적용한 버전이 정확히 같아야 한다.
-  local expected_versions successful_versions
+  local expected_versions
   expected_versions=$(cd "$project_directory/src/main/resources/db/migration" && printf '%s\n' V*__*.sql \
     | sed -E 's/^V([0-9]+)__.*/\1/' | sort -n | paste -sd, -)
-  successful_versions=$(database_scalar \
-    "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;")
-  [[ "$successful_versions" == "$expected_versions" ]] \
-    || fail "성공한 Flyway 버전 '${successful_versions:-<비어 있음>}'이 마이그레이션 파일 '$expected_versions'과 다릅니다."
-  echo "Flyway 성공 버전 확인: $successful_versions"
+  assert_database_value "$expected_versions" \
+    "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success IS TRUE;" \
+    "성공한 Flyway 버전이 마이그레이션 파일 '$expected_versions'과 다릅니다"
+  echo "Flyway 성공 버전 확인: $expected_versions"
 }
 
 # DB 조회 결과가 기대값과 같은지 확인한다.
@@ -163,17 +147,11 @@ assert_database_value() {
 
 post_snapshot() {
   local fixture_name=$1
-  local response
-  if ! response=$(
-    "${http_request[@]}" "${bearer[@]}" --fail \
-      --json "@$examples/$fixture_name" \
-      "$base_url/internal/api/v1/schedule-snapshots"
-  ); then
-    fail "일정 스냅샷 '$fixture_name' 수신 요청에 실패했습니다."
-  fi
-  printf '%s' "$response" \
+  "${http_request[@]}" "${bearer[@]}" --fail \
+    --json "@$examples/$fixture_name" \
+    "$base_url/internal/api/v1/schedule-snapshots" \
     | jq --exit-status '.result == "APPLIED"' >/dev/null \
-    || fail "일정 스냅샷 '$fixture_name'이 APPLIED로 처리되지 않았습니다."
+    || fail "일정 스냅샷 '$fixture_name' 수신 요청이 실패했거나 결과가 APPLIED가 아닙니다."
   echo "일정 스냅샷 APPLIED 확인: $fixture_name"
 }
 
@@ -226,51 +204,20 @@ assert_public_ok() {
   [[ "$status" == 200 ]] || fail "현재 세대 공개 피드가 HTTP 200이 아닌 $status를 반환했습니다."
 }
 
+# 본문과 Content-Type이 없는 일반 404인지 상태·본문 크기·Content-Type을 한 번에 비교한다.
 assert_public_not_found() {
   local token=$1
-  local status
-  status=$(
-    http_status "$scratch/response-body" --dump-header "$scratch/response-headers" "$base_url/calendars/v1/$token.ics"
+  local actual
+  actual=$(
+    "${http_request[@]}" --output /dev/null --write-out '%{http_code} %{size_download} %{content_type}' \
+      "$base_url/calendars/v1/$token.ics"
   )
-  [[ "$status" == 404 ]] || fail "이전 세대 공개 피드가 HTTP 404가 아닌 $status를 반환했습니다."
-  [[ ! -s "$scratch/response-body" ]] || fail "이전 세대 공개 피드의 404 응답 본문이 비어 있지 않습니다."
-  if grep --ignore-case --quiet '^content-type:' "$scratch/response-headers"; then
-    fail "이전 세대 공개 피드의 404 응답에 Content-Type이 포함되었습니다."
-  fi
+  [[ "$actual" == "404 0 " ]] \
+    || fail "이전 세대 공개 피드가 본문과 Content-Type 없는 HTTP 404가 아닙니다(상태 본문크기 Content-Type): '$actual'"
 }
 
-configured_user=$(docker image inspect --format '{{.Config.User}}' "$image_name")
-configured_principal=${configured_user%%:*}
-case "$configured_principal" in
-  "" | 0 | root)
-    fail "이미지 Config.User가 비루트 사용자를 지정하지 않았습니다: '${configured_user:-<비어 있음>}'"
-    ;;
-esac
-echo "이미지 Config.User 비루트 확인: $configured_user"
-
-java_version_output=$(
-  docker run --rm \
-    --env BPL_JAVA_NMT_ENABLED=false \
-    --entrypoint /cnb/lifecycle/launcher \
-    "$image_name" \
-    -- java -version 2>&1
-)
-printf '%s\n' "$java_version_output"
-java_version=$(
-  printf '%s\n' "$java_version_output" \
-    | awk -F'"' '/^(openjdk|java) version "/ { print $2; exit }'
-)
-case "$java_version" in
-  25 | 25.* | 25-*)
-    echo "Java 25 런타임 확인: $java_version"
-    ;;
-  *)
-    fail "이미지의 Java 런타임이 25가 아닙니다: '${java_version:-확인 불가}'"
-    ;;
-esac
-
 echo "격리된 Compose project '$project_name'에서 애플리케이션을 시작합니다."
-"${compose[@]}" up --detach
+"${compose[@]}" up --detach app
 wait_for_readiness
 assert_prometheus_metrics
 assert_flyway_versions
@@ -288,16 +235,13 @@ echo "실행 중인 컨테이너 PID 1 비루트 확인: UID $pid1_uid"
 post_snapshot schedule-snapshot.zoned-active-r0.json
 put_season_metadata season-calendar-metadata.r0.json
 
-if ! initial_credential=$(
+initial_credential=$(
   "${http_request[@]}" "${bearer[@]}" --fail \
     --json "@$examples/subscription-create.json" \
     "$base_url/internal/api/v1/subscriptions"
-); then
-  fail "초기 캘린더 구독 생성에 실패했습니다."
-fi
+) || fail "초기 캘린더 구독 생성에 실패했습니다."
 subscription_id=$(printf '%s' "$initial_credential" | jq --exit-status --raw-output '.subscriptionId')
 token_t1=$(printf '%s' "$initial_credential" | jq --exit-status --raw-output '.token')
-initial_credential=
 assert_public_ok "$token_t1"
 echo "세대 A 구독과 공개 피드 HTTP 200을 확인했습니다."
 
@@ -381,14 +325,11 @@ export BATON_CAL_RECOVERY_MODE=false
 wait_for_readiness
 assert_public_not_found "$token_t1"
 
-if ! rotated_credential=$(
+rotated_credential=$(
   "${http_request[@]}" "${bearer[@]}" --fail --request POST \
     "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
-); then
-  fail "복원된 구독을 현재 세대로 회전하지 못했습니다."
-fi
+) || fail "복원된 구독을 현재 세대로 회전하지 못했습니다."
 token_t2=$(printf '%s' "$rotated_credential" | jq --exit-status --raw-output '.token')
-rotated_credential=
 
 final_feed_status=$(http_status "$scratch/feed" "$base_url/calendars/v1/$token_t2.ics")
 [[ "$final_feed_status" == 200 ]] \

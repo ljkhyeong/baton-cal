@@ -1,6 +1,5 @@
 package io.baton.cal.projection
 
-import io.baton.cal.calendar.CalendarItem
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
@@ -8,7 +7,7 @@ import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
-import io.baton.cal.persistence.SeasonProjectionLockRepository
+import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.web.ProjectionRebuildResponse
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
@@ -24,7 +23,7 @@ import java.util.function.Supplier
 
 @Service
 class SeasonProjectionService(
-    private val lockRepository: SeasonProjectionLockRepository,
+    private val lockRepository: AdvisoryLockRepository,
     private val itemRepository: CalendarItemRepository,
     private val projectionRepository: SeasonFeedProjectionRepository,
     private val metadataRepository: SeasonCalendarMetadataRepository,
@@ -48,7 +47,7 @@ class SeasonProjectionService(
 
     @Transactional
     fun rebuild(seasonId: UUID): ProjectionRebuildResponse {
-        lockRepository.acquire(seasonId)
+        lockRepository.lockSeason(seasonId)
         return rebuildWhileLocked(seasonId)
     }
 
@@ -58,7 +57,7 @@ class SeasonProjectionService(
             return
         }
 
-        lockRepository.acquire(seasonId)
+        lockRepository.lockSeason(seasonId)
         if (projectionRepository.findHeadersBySeasonId(seasonId) == null) {
             rebuildWhileLocked(seasonId, existing = null)
         }
@@ -73,42 +72,26 @@ class SeasonProjectionService(
         existing: SeasonFeedHeaders?,
     ): ProjectionRebuildResponse =
         rebuildTimer.record(Supplier {
-            val items = itemRepository.listBySeasonId(seasonId).map(CalendarItemRow::toCalendarItem)
+            val rows = itemRepository.listBySeasonId(seasonId)
             val metadata = metadataRepository.findBySeasonId(seasonId)
-            val rendered = renderer.render(seasonId = seasonId, items = items, displayName = metadata?.displayName)
-            // 처음 만드는 투영은 항목과 시즌 이름 중 가장 늦은 채택 시각을 초 단위로 쓰고, 둘 다 없으면 Unix epoch를 쓴다.
-            val initialLastModified = (items.map(CalendarItem::acceptedAt) + listOfNotNull(metadata?.acceptedAt))
-                .maxOrNull()
-                ?.truncatedTo(ChronoUnit.SECONDS)
-                ?: Instant.EPOCH
-            projectionRepository.upsert(
-                SeasonFeedProjectionRow(
-                    seasonId = seasonId,
-                    representation = rendered.bytes,
-                    etag = rendered.etag,
-                    lastModified = resolveLastModified(
-                        existing,
-                        rendered.etag,
-                        initialLastModified,
-                    ),
-                ),
-            )
-            itemCountSummary.record(items.size.toDouble())
-            byteSizeSummary.record(rendered.bytes.size.toDouble())
-            ProjectionRebuildResponse(
+            val rendered = renderer.render(
                 seasonId = seasonId,
-                etag = rendered.etag,
-                itemCount = items.size,
+                items = rows.map(CalendarItemRow::toCalendarItem),
+                displayName = metadata?.displayName,
             )
-        })
+            val lastModified = when {
+                // 처음 만드는 투영은 항목과 시즌 이름 중 가장 늦은 채택 시각을 초 단위로 쓰고, 둘 다 없으면 Unix epoch를 쓴다.
+                existing == null -> (rows.map(CalendarItemRow::acceptedAt) + listOfNotNull(metadata?.acceptedAt))
+                    .maxOrNull()
+                    ?.truncatedTo(ChronoUnit.SECONDS)
+                    ?: Instant.EPOCH
 
-    private fun resolveLastModified(
-        existing: SeasonFeedHeaders?,
-        etag: String,
-        renderedLastModified: Instant,
-    ): Instant = when {
-        existing == null -> renderedLastModified
-        existing.etag == etag -> existing.lastModified
-        else -> clock.instant().truncatedTo(ChronoUnit.SECONDS)
-    }
+                existing.etag == rendered.etag -> existing.lastModified
+                else -> clock.instant().truncatedTo(ChronoUnit.SECONDS)
+            }
+            projectionRepository.upsert(SeasonFeedProjectionRow(seasonId, rendered.bytes, rendered.etag, lastModified))
+            itemCountSummary.record(rows.size.toDouble())
+            byteSizeSummary.record(rendered.bytes.size.toDouble())
+            ProjectionRebuildResponse(seasonId = seasonId, etag = rendered.etag, itemCount = rows.size)
+        })
 }

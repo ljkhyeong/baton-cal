@@ -46,6 +46,14 @@ fun MockMvc.createSubscription(seasonId: String): String = perform(
     .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
     .andReturnValid("subscription-credential.v1.schema.json", "구독 생성 응답")
 
+/** 구독 토큰을 회전하고 계약 스키마를 통과한 자격 증명 JSON을 반환한다. */
+fun MockMvc.rotateSubscription(subscriptionId: Any): String = perform(
+    authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId),
+)
+    .andExpect(status().isOk)
+    .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+    .andReturnValid("subscription-credential.v1.schema.json", "구독 회전 응답")
+
 /** 일정 스냅샷을 보낸다. 오류 응답은 호출자가 확인한다. */
 fun MockMvc.postSnapshot(payload: String): ResultActions = perform(authorizedPost(SNAPSHOT_PATH).jsonContent(payload))
 

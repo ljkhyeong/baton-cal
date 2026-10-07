@@ -127,24 +127,28 @@ wait
 [[ "$(grep -h '^429 ' "$scratch"/rate-* | sort -u)" == '429 1 no-store' ]]
 echo "HTTPS, 피드 200·304, 내부 경로 차단, ACME 경로와 요청 초과 429를 확인했습니다."
 
-for ((attempt=0; attempt<30; attempt++)); do
-  "${request[@]}" --fail --get --data-urlencode 'query=up{job="baton-cal"}' \
-    "$prometheus_url/api/v1/query" > "$scratch/query.json"
-  jq -e '.data.result[0].value[1] == "1"' "$scratch/query.json" >/dev/null && break
-  sleep 1
-done
-jq -e '.data.result[0].value[1] == "1"' "$scratch/query.json" >/dev/null
-
-wait_alert() {
-  local name=$1 expected=$2
-  for ((attempt=0; attempt<100; attempt++)); do
-    "${request[@]}" --fail "$receiver_url/alerts" > "$scratch/alerts.json"
-    if jq -e --arg name "$name" --arg state "$expected" --argjson offset "$alert_offset" 'any(.[$offset:][]; .alertname == $name and .status == $state)' \
-      "$scratch/alerts.json" >/dev/null; then return 0; fi
-    sleep 1
-  done
-  echo "$name 알림의 $expected 전달을 확인하지 못했습니다." >&2
+# 조건 명령이 성공할 때까지 1초 간격으로 최대 횟수만큼 실행한다. 조건 안에서는 errexit가 꺼지므로
+# curl 실패가 재시도되도록 명령을 파이프나 &&로 묶는다.
+eventually() {
+  local attempts=$1
+  shift
+  for ((; attempts > 0; attempts--)); do "$@" && return 0; sleep 1; done
   return 1
+}
+
+prometheus_up() {
+  "${request[@]}" --fail --get --data-urlencode 'query=up{job="baton-cal"}' \
+    "$prometheus_url/api/v1/query" | jq -e '.data.result[0].value[1] == "1"' >/dev/null
+}
+eventually 30 prometheus_up || { echo "Prometheus의 CAL 수집 대상이 up이 되지 않았습니다." >&2; exit 1; }
+
+alert_seen() {
+  "${request[@]}" --fail "$receiver_url/alerts" \
+    | jq -e --arg name "$1" --arg state "$2" --argjson offset "$alert_offset" \
+      'any(.[$offset:][]; .alertname == $name and .status == $state)' >/dev/null
+}
+wait_alert() {
+  eventually 100 alert_seen "$1" "$2" || { echo "$1 알림의 $2 전달을 확인하지 못했습니다." >&2; return 1; }
 }
 alert_offset=$("${request[@]}" --fail "$receiver_url/alerts" | jq length)
 "${compose[@]}" stop app
@@ -170,14 +174,9 @@ echo "CAL 재시작 뒤 알림 해제 전달을 확인했습니다."
 heartbeat_count() {
   "${request[@]}" --fail "$receiver_url/alerts" | jq '[.[] | select(.channel == "healthchecks")] | length'
 }
+heartbeat_reached() { local count; count=$(heartbeat_count) && ((count >= $1)); }
 wait_heartbeat() {
-  local expected=$1
-  for ((attempt=0; attempt<80; attempt++)); do
-    if (( $(heartbeat_count) >= expected )); then return 0; fi
-    sleep 1
-  done
-  echo "외부 정상 신호 대기 시간을 넘었습니다." >&2
-  return 1
+  eventually 80 heartbeat_reached "$1" || { echo "외부 정상 신호 대기 시간을 넘었습니다." >&2; return 1; }
 }
 wait_heartbeat 2
 # 다음 신호를 받은 직후 원본 갱신을 멈추고 만료시켜, 진행 중인 전송과 경합하지 않는다.

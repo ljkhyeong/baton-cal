@@ -44,9 +44,10 @@ data class ScheduleSnapshotRequest(
     val sourceUpdatedAt: String,
 ) {
     fun toDomain(): ScheduleSnapshot = try {
+        // occurredAt은 계약상 필수 RFC 3339 시각이지만 지문과 저장에 쓰지 않으므로 형식만 검증한다.
+        parseInstant(occurredAt)
         ScheduleSnapshot(
             eventId = eventId,
-            occurredAt = parseInstant(occurredAt),
             sourceItemId = sourceItemId,
             seasonId = seasonId,
             revision = revision,
@@ -58,9 +59,9 @@ data class ScheduleSnapshotRequest(
             sourceUpdatedAt = parseInstant(sourceUpdatedAt),
         )
     } catch (exception: DateTimeParseException) {
-        throw InvalidApiRequestException("snapshot contains an invalid timestamp")
+        throw invalidRequest("snapshot contains an invalid timestamp")
     } catch (exception: IllegalArgumentException) {
-        throw InvalidApiRequestException(exception.message ?: "snapshot violates the contract")
+        throw invalidRequest(exception.message ?: "snapshot violates the contract")
     }
 }
 

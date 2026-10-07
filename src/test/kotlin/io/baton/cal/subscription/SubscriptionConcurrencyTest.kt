@@ -5,14 +5,13 @@ import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.CalendarSubscriptionRow
 import io.baton.cal.persistence.CalendarSubscriptionStatus
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.anyArg
 import io.baton.cal.support.runConcurrently
-import io.baton.cal.web.InternalResourceNotFoundException
-import io.baton.cal.web.ConflictException
+import io.baton.cal.web.ApiException
 import io.baton.cal.web.SubscriptionCredential
-import java.util.concurrent.CyclicBarrier
 import java.util.UUID
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
@@ -24,30 +23,16 @@ import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doCallRealMethod
 import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-import org.springframework.test.context.jdbc.Sql
+import org.springframework.http.HttpStatus
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=subscription-concurrency-test-token",
-        "baton.cal.public-base-url=https://calendar.example.test",
-    ],
-)
-@Sql("/reset-database.sql")
+@CalIntegrationTest
 class SubscriptionConcurrencyTest @Autowired constructor(
     private val service: SubscriptionService,
     private val tokenCodec: SubscriptionTokenCodec,
     private val projectionRepository: SeasonFeedProjectionRepository,
+    private val repository: CalendarSubscriptionRepository,
+    private val renderer: IcsCalendarRenderer,
 ) {
-    @MockitoSpyBean
-    private lateinit var repository: CalendarSubscriptionRepository
-
-    @MockitoSpyBean
-    private lateinit var renderer: IcsCalendarRenderer
-
     @ParameterizedTest
     @ValueSource(booleans = [false, true])
     fun `같은 ID의 동시 생성은 한 자격 증명만 저장하고 다른 시즌 재사용을 거부한다`(differentSeason: Boolean) {
@@ -70,7 +55,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
 
         val winner = outcomes.single { it.isSuccess }.getOrThrow()
         assertThat(outcomes.single { it.isFailure }.exceptionOrNull())
-            .isInstanceOfSatisfying(ConflictException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
                 assertThat(it.code).isEqualTo(
                     if (differentSeason) "SUBSCRIPTION_SCOPE_CONFLICT" else "SUBSCRIPTION_ALREADY_EXISTS",
                 )
@@ -87,7 +73,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             .`when`(renderer).render(otherSeasonId, emptyList(), null)
 
         assertThatThrownBy { service.create(otherSeasonId, initial.subscriptionId) }
-            .isInstanceOfSatisfying(ConflictException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
                 assertThat(it.code).isEqualTo("SUBSCRIPTION_SCOPE_CONFLICT")
             }
 
@@ -165,7 +152,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
         assertThat(service.findFeed(initial.token)).isNull()
 
         assertThatThrownBy { service.rotate(initial.subscriptionId) }
-            .isInstanceOfSatisfying(InternalResourceNotFoundException::class.java) {
+            .isInstanceOfSatisfying(ApiException::class.java) {
+                assertThat(it.status).isEqualTo(HttpStatus.NOT_FOUND)
                 assertThat(it.code).isEqualTo("RESOURCE_NOT_FOUND")
             }
     }
@@ -183,7 +171,8 @@ class SubscriptionConcurrencyTest @Autowired constructor(
     }
 
     private fun assertSubscriptionConflict(error: Throwable?) {
-        assertThat(error).isInstanceOfSatisfying(ConflictException::class.java) {
+        assertThat(error).isInstanceOfSatisfying(ApiException::class.java) {
+            assertThat(it.status).isEqualTo(HttpStatus.CONFLICT)
             assertThat(it.code).isEqualTo("SUBSCRIPTION_CONFLICT")
         }
     }

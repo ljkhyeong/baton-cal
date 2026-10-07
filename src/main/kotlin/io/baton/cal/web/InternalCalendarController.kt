@@ -6,7 +6,6 @@ import io.baton.cal.recovery.RecoveryManifestService
 import io.baton.cal.snapshot.SnapshotIngestionService
 import io.baton.cal.snapshot.SnapshotIngestionResult
 import io.baton.cal.subscription.SubscriptionService
-import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -32,13 +31,8 @@ class InternalCalendarController(
     meterRegistry: MeterRegistry,
 ) {
     // 서비스 트랜잭션이 커밋된 뒤 증가시켜 롤백된 묶음 수신의 앞 항목을 집계하지 않는다.
-    private val ingestionCounters: Map<SnapshotIngestionResult, Counter> =
-        SnapshotIngestionResult.entries.associateWith { result ->
-            Counter.builder(INGESTION_METRIC)
-                .description("일정 스냅샷 수신 판정")
-                .tag("result", result.name.lowercase())
-                .register(meterRegistry)
-        }
+    private val ingestionCounters =
+        meterRegistry.resultCounters<SnapshotIngestionResult>(INGESTION_METRIC, "일정 스냅샷 수신 판정")
 
     @PostMapping("/schedule-snapshots")
     fun ingestSnapshot(

@@ -3,23 +3,6 @@ package io.baton.cal.persistence
 import java.time.Instant
 import java.util.UUID
 
-data class SourceEventInboxRow(
-    val eventId: UUID,
-    val payloadHash: String,
-    val sourceItemId: UUID,
-    val seasonId: UUID,
-    val sourceRevision: Int,
-    val occurredAt: Instant,
-    val receivedAt: Instant,
-)
-
-enum class CalendarItemApplyOutcome {
-    APPLIED,
-    STALE,
-    SCOPE_CONFLICT,
-    REVISION_CONFLICT,
-}
-
 data class SeasonFeedProjectionRow(
     val seasonId: UUID,
     val representation: ByteArray,

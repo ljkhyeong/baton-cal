@@ -344,7 +344,8 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 ./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke
 ```
 
-만든 이미지는 실제 `prod` 프로필과 격리된 PostgreSQL에서 스모크와 대표 복원 훈련을 실행한다.
+만든 이미지는 `compose.operations.yml`의 `app`과 PostgreSQL만 격리된 Compose 프로젝트로 띄워 실제 `prod`
+프로필에서 스모크와 대표 복원 훈련을 실행한다.
 
 ```shell
 ./scripts/smoke-oci-image.sh baton-cal:smoke
@@ -354,7 +355,7 @@ Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달
 readiness 반복 확인은 연결 1초·전체 요청 2초 제한을 사용한다. 구독 생성·회전 POST는
 응답을 받지 못해도 서버에서 처리됐을 수 있으므로 자동 재시도하지 않는다.
 
-스모크는 이미지의 Java 25와 비루트 실행, 체크아웃과 같은 Flyway 마이그레이션 적용, 분리된 관리 포트의 DB 포함 준비 상태와
+스모크는 실행 중인 JVM의 Java 25와 비루트 실행, 체크아웃과 같은 Flyway 마이그레이션 적용, 분리된 관리 포트의 DB 포함 준비 상태와
 Prometheus 메트릭, 35초 유예 안의 SIGTERM 정상 종료와 SIGKILL·OOM 미발생을 확인한다. 세대 A를 유지한 채
 애플리케이션 컨테이너를 실제로 재생성해
 기존 공개 피드가 계속 `200`인지 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고

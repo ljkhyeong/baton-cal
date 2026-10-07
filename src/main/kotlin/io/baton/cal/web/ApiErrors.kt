@@ -7,36 +7,16 @@ data class ApiErrorResponse(
     val message: String,
 )
 
-open class ApiException(
+/** 계약의 오류 응답으로 바로 바뀌는 요청 실패다. 처리기는 `status`·`code`·`message`만 응답한다. */
+class ApiException(
     val status: HttpStatus,
     val code: String,
     override val message: String,
 ) : RuntimeException(message)
 
-class InvalidApiRequestException(message: String) : ApiException(
-    status = HttpStatus.BAD_REQUEST,
-    code = "INVALID_REQUEST",
-    message = message,
-)
+fun invalidRequest(message: String) = ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", message)
 
 /** 이미 저장된 상태와 맞지 않는 요청이다. 구체적인 원인은 `code`로 구분한다. */
-class ConflictException(
-    code: String,
-    message: String,
-) : ApiException(
-    status = HttpStatus.CONFLICT,
-    code = code,
-    message = message,
-)
+fun conflict(code: String, message: String) = ApiException(HttpStatus.CONFLICT, code, message)
 
-class InternalResourceNotFoundException(message: String) : ApiException(
-    status = HttpStatus.NOT_FOUND,
-    code = "RESOURCE_NOT_FOUND",
-    message = message,
-)
-
-class RecoveryInProgressException : ApiException(
-    status = HttpStatus.SERVICE_UNAVAILABLE,
-    code = "RECOVERY_IN_PROGRESS",
-    message = "subscription issuance is disabled during recovery",
-)
+fun resourceNotFound(message: String) = ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)

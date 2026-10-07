@@ -2,28 +2,25 @@ package io.baton.cal.contract
 
 import com.networknt.schema.InputFormat
 import com.networknt.schema.Schema
+import com.networknt.schema.SchemaLocation
 import com.networknt.schema.SchemaRegistry
 import com.networknt.schema.SchemaRegistryConfig
 import com.networknt.schema.SpecificationVersion
 import org.assertj.core.api.Assertions.assertThat
 import org.springframework.test.web.servlet.ResultActions
-import kotlin.io.path.inputStream
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.readText
 import java.nio.file.Path
-import java.util.concurrent.ConcurrentHashMap
 
 internal object ContractSchemaSupport {
+    private const val SCHEMA_BASE_URI = "https://cal.baton/contracts/schemas/"
 
     val schemaDirectory: Path = Path.of("contracts/schemas")
     val exampleDirectory: Path = Path.of("contracts/examples")
 
-    fun loadSchema(fileName: String): Schema = schemas.computeIfAbsent(fileName) {
-        schemaDirectory.resolve(it).inputStream()
-            .use(schemaRegistry::getSchema)
-            .also(Schema::initializeValidators)
-    }
+    /** 등록한 스키마를 `$id`로 찾는다. 스키마 객체는 검증기의 기본 캐시가 보관한다. */
+    fun loadSchema(fileName: String): Schema = schemaRegistry.getSchema(SchemaLocation.of("$SCHEMA_BASE_URI$fileName"))
 
     fun assertValid(
         schemaFileName: String,
@@ -41,7 +38,7 @@ internal object ContractSchemaSupport {
         SpecificationVersion.DRAFT_2020_12,
     ) { builder ->
         builder.schemas(schemaDirectory.listDirectoryEntries("*.json").associate {
-            "https://cal.baton/contracts/schemas/${it.name}" to it.readText()
+            "$SCHEMA_BASE_URI${it.name}" to it.readText()
         })
         builder.schemaRegistryConfig(
             SchemaRegistryConfig.builder()
@@ -49,8 +46,6 @@ internal object ContractSchemaSupport {
                 .build(),
         )
     }
-
-    private val schemas = ConcurrentHashMap<String, Schema>()
 }
 
 /** 응답 본문이 계약 스키마를 통과하는지 확인하고 본문을 반환한다. */

@@ -99,7 +99,6 @@ dependencies {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
     testImplementation("io.micrometer:micrometer-observation-test")
-    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -131,7 +130,7 @@ tasks.register<Exec>("feedbackLoopTest") {
     val result = layout.buildDirectory.file("agent-feedback-tests/passed")
     outputs.file(result)
     doLast {
-        result.get().asFile.apply { parentFile.mkdirs() }.writeText("passed\n")
+        result.get().asFile.writeText("passed\n")
     }
 }
 

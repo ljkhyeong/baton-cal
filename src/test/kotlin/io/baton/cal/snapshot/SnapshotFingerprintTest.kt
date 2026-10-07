@@ -32,17 +32,11 @@ class SnapshotFingerprintTest {
     )
 
     @Test
-    fun `전달 봉투 필드는 원본 스냅샷 지문을 바꾸지 않는다`() {
+    fun `전달 식별자는 원본 스냅샷 지문을 바꾸지 않는다`() {
         val original = snapshot()
-        val originalHash = SnapshotFingerprint.sha256(original)
-        val changedEnvelopes = listOf(
-            original.copy(eventId = UUID.fromString("22222222-2222-2222-2222-222222222222")),
-            original.copy(occurredAt = Instant.parse("2026-08-11T01:01:00Z")),
-        )
+        val redelivered = original.copy(eventId = UUID.fromString("22222222-2222-2222-2222-222222222222"))
 
-        changedEnvelopes.forEach { changed ->
-            assertThat(SnapshotFingerprint.sha256(changed)).isEqualTo(originalHash)
-        }
+        assertThat(SnapshotFingerprint.sha256(redelivered)).isEqualTo(SnapshotFingerprint.sha256(original))
     }
 
     @Test
@@ -119,7 +113,6 @@ class SnapshotFingerprintTest {
 
     private fun snapshot(): ScheduleSnapshot = ScheduleSnapshot(
         eventId = UUID.fromString("11111111-1111-1111-1111-111111111111"),
-        occurredAt = Instant.parse("2026-08-11T01:00:00Z"),
         sourceItemId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         seasonId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         revision = 3,

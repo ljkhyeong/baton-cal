@@ -4,17 +4,17 @@ import io.baton.cal.calendar.events
 import io.baton.cal.calendar.parseIcalendar
 import io.baton.cal.calendar.requiredPropertyValue
 import io.baton.cal.contract.ContractSchemaSupport
+import io.baton.cal.contract.andReturnValid
 import io.baton.cal.projection.SeasonProjectionService
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.jsonContent
 import io.baton.cal.support.numberedSnapshot
 import io.baton.cal.support.runConcurrently
+import java.util.UUID
 import java.util.concurrent.CyclicBarrier
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
-import org.springframework.test.jdbc.JdbcTestUtils
+import java.util.concurrent.TimeUnit
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -27,32 +27,21 @@ import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-import org.springframework.test.context.jdbc.Sql
+import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.ObjectNode
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@Sql("/reset-database.sql")
-@SpringBootTest(properties = ["baton.cal.internal-token=$TEST_INTERNAL_TOKEN"])
+@CalIntegrationTest
 class SnapshotBatchHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbc: JdbcClient,
+    private val projectionService: SeasonProjectionService,
 ) {
-    @MockitoSpyBean
-    private lateinit var projectionService: SeasonProjectionService
-
     @Test
     fun `100건을 한 번에 반영하고 재전달은 캘린더를 다시 만들지 않는다`() {
         val snapshots = (1..100).map { snapshot(it) }
@@ -159,15 +148,14 @@ class SnapshotBatchHttpTest @Autowired constructor(
         }
     }
 
-    private fun submit(body: String, expectedStatus: Int): JsonNode {
-        val response = mockMvc.perform(authorizedPost(PATH).jsonContent(body))
-            .andExpect(status().`is`(expectedStatus)).andReturn().response.contentAsString
-        ContractSchemaSupport.assertValid(
-            if (expectedStatus == 200) "schedule-snapshot-batch-result.v1.schema.json" else "api-error.v1.schema.json",
-            response, "묶음 수신 응답",
-        )
-        return JSON.readTree(response)
-    }
+    private fun submit(body: String, expectedStatus: Int): JsonNode = JSON.readTree(
+        mockMvc.perform(authorizedPost(PATH).jsonContent(body))
+            .andExpect(status().`is`(expectedStatus))
+            .andReturnValid(
+                if (expectedStatus == 200) "schedule-snapshot-batch-result.v1.schema.json" else "api-error.v1.schema.json",
+                "묶음 수신 응답",
+            ),
+    )
 
     private fun batch(snapshots: List<JsonNode>): String = JSON.writeValueAsString(mapOf("snapshots" to snapshots))
 

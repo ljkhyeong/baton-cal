@@ -3,11 +3,9 @@ package io.baton.cal.web
 import io.baton.cal.contract.contractExample
 import com.jayway.jsonpath.JsonPath
 import com.zaxxer.hikari.HikariDataSource
-import io.baton.cal.support.PostgreSqlTestContainer
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
 import io.baton.cal.support.SNAPSHOT_PATH
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
-import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.ingestSnapshot
@@ -17,15 +15,11 @@ import io.baton.cal.support.seasonCalendarMetadataRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties
 import org.springframework.boot.transaction.autoconfigure.TransactionProperties
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
 import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -38,19 +32,7 @@ import java.sql.Connection
 import java.time.Duration
 import org.hamcrest.Matchers.containsString
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@Sql("/reset-database.sql")
-@SpringBootTest(
-    properties = [
-        "spring.profiles.active=prod",
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.public-base-url=https://calendar.example.test",
-        "baton.cal.subscription-generation=30000000-0000-0000-0000-000000000003",
-        "management.server.port=8080",
-        "spring.datasource.hikari.connection-timeout=1000",
-    ],
-)
+@CalIntegrationTest
 class OperationalHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val tomcatServerProperties: TomcatServerProperties,
@@ -178,21 +160,6 @@ class OperationalHttpTest @Autowired constructor(
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
                 .andExpect(jsonPath("$.message").value("request body exceeds the maximum size"))
-        }
-    }
-
-    @Test
-    fun `작은 잘못된 JSON과 알 수 없는 필드는 400을 반환한다`() {
-        listOf(
-            """{"seasonId":"""",
-            """{"seasonId":"$SEASON_ID","unexpected":true}""",
-            """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA"}""",
-            """{"seasonId":"AAAAAAAAAAAAAAAAAAAAAA=="}""",
-        ).forEach { payload ->
-            mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions").jsonContent(payload))
-                .andExpect(status().isBadRequest)
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
     }
 

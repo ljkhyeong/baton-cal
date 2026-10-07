@@ -3,15 +3,15 @@ package io.baton.cal.projection
 import io.baton.cal.calendar.CalendarItemStatus
 import io.baton.cal.calendar.IcsCalendarRenderer
 import io.baton.cal.calendar.RenderedCalendar
+import io.baton.cal.calendar.ScheduleTimeType
+import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.persistence.CalendarItemRepository
 import io.baton.cal.persistence.CalendarItemRow
-import io.baton.cal.persistence.ScheduleTimeType
 import io.baton.cal.persistence.SeasonCalendarMetadataRepository
 import io.baton.cal.persistence.SeasonCalendarMetadataRow
 import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
-import io.baton.cal.persistence.SeasonProjectionLockRepository
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -31,7 +31,7 @@ class SeasonProjectionServiceTest {
     private val itemRepository = mock(CalendarItemRepository::class.java)
     private val projectionRepository = mock(SeasonFeedProjectionRepository::class.java)
     private val metadataRepository = mock(SeasonCalendarMetadataRepository::class.java)
-    private val lockRepository = mock(SeasonProjectionLockRepository::class.java)
+    private val lockRepository = mock(AdvisoryLockRepository::class.java)
     private val renderer = mock(IcsCalendarRenderer::class.java)
     private val meterRegistry = SimpleMeterRegistry()
     private val service = SeasonProjectionService(
@@ -51,7 +51,7 @@ class SeasonProjectionServiceTest {
 
         service.ensureProjection(SEASON_ID)
 
-        verify(lockRepository, never()).acquire(SEASON_ID)
+        verify(lockRepository, never()).lockSeason(SEASON_ID)
     }
 
     @Test
@@ -63,7 +63,7 @@ class SeasonProjectionServiceTest {
 
         val calls = inOrder(projectionRepository, lockRepository)
         calls.verify(projectionRepository).findHeadersBySeasonId(SEASON_ID)
-        calls.verify(lockRepository).acquire(SEASON_ID)
+        calls.verify(lockRepository).lockSeason(SEASON_ID)
         calls.verify(projectionRepository).findHeadersBySeasonId(SEASON_ID)
         verifyNoInteractions(itemRepository, renderer)
     }
@@ -157,15 +157,10 @@ class SeasonProjectionServiceTest {
         description = null,
         location = null,
         timeType = ScheduleTimeType.UTC_INSTANT,
-        startsAtInstant = Instant.parse("2026-09-01T01:00:00Z"),
-        endsAtInstant = Instant.parse("2026-09-01T02:00:00Z"),
-        startsAtLocal = null,
-        endsAtLocal = null,
-        zoneId = null,
-        startsOnDate = null,
-        endsOnDate = null,
         sourceUpdatedAt = Instant.parse("2026-08-20T00:00:00Z"),
         acceptedAt = Instant.parse(acceptedAt),
+        startsAtInstant = Instant.parse("2026-09-01T01:00:00Z"),
+        endsAtInstant = Instant.parse("2026-09-01T02:00:00Z"),
     )
 
     private fun savedProjection(): SeasonFeedProjectionRow {

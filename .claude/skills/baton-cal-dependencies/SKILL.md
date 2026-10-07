@@ -35,7 +35,7 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 
 | 변경 | 추가 확인 |
 | --- | --- |
-| Spring Boot·Jackson | `web.SnapshotInputContractTest`의 입력 엄격성, `web.ApiExceptionHandlerTest`의 오류 응답 |
+| Spring Boot·Jackson | `web.SnapshotInputContractTest`의 입력 엄격성, `web.ApiExceptionHandlerTest`의 오류 응답, 설정에 적지 않고 기본값에 맡긴 health probes(`web.OperationalHttpTest`)·TLS 활성화(`config.TlsHttpIntegrationTest`)·`server.shutdown=graceful`(Boot 설정 메타데이터 기본값) |
 | iCal4j | 아래 골든·시간대 검토. 출력이나 허용 TZID가 바뀌면 새 계약 후보가 필요하다 |
 | JSON Schema 검증기 | `contract.ContractArtifactsTest`의 `format` 평가와 거부 사례 |
 | Flyway·PostgreSQL 드라이버·Testcontainers | `persistence.PersistenceRepositoryTest` |

@@ -1,17 +1,22 @@
 package io.baton.cal.web
 
-import com.jayway.jsonpath.JsonPath
 import io.baton.cal.calendar.goldenIcalendarFixture
 import io.baton.cal.persistence.CalendarSubscriptionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
-import io.baton.cal.support.PostgreSqlTestContainer
-import io.baton.cal.support.TEST_INTERNAL_TOKEN
+import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.authorizedDelete
 import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.eqArg
+import io.baton.cal.support.rotateSubscription
+import com.jayway.jsonpath.JsonPath
 import io.micrometer.observation.tck.TestObservationRegistry
 import io.micrometer.observation.tck.TestObservationRegistryAssert
+import java.security.MessageDigest
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.UUID
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
@@ -22,17 +27,13 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.testcontainers.context.ImportTestcontainers
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpHeaders
 import org.springframework.http.server.observation.ServerRequestObservationContext
 import org.springframework.jdbc.core.simple.JdbcClient
-import org.springframework.test.context.jdbc.Sql
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -41,30 +42,15 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import java.security.MessageDigest
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
-import java.util.UUID
 
-@ImportTestcontainers(PostgreSqlTestContainer::class)
-@AutoConfigureMockMvc
-@SpringBootTest(
-    properties = [
-        "baton.cal.internal-token=$TEST_INTERNAL_TOKEN",
-        "baton.cal.public-base-url=https://calendar.example.test",
-        "baton.cal.subscription-generation=20000000-0000-0000-0000-000000000002",
-    ],
-)
-@Sql("/reset-database.sql")
+@TestPropertySource(properties = ["baton.cal.subscription-generation=20000000-0000-0000-0000-000000000002"])
+@CalIntegrationTest
 class PublicCalendarContractTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbcClient: JdbcClient,
     private val observationRegistry: TestObservationRegistry,
+    private val subscriptionRepository: CalendarSubscriptionRepository,
 ) {
-    @MockitoSpyBean
-    lateinit var subscriptionRepository: CalendarSubscriptionRepository
-
     @Test
     fun `empty season feed preserves canonical bytes validators and conditional responses across rebuild`() {
         val token = createToken()
@@ -82,11 +68,15 @@ class PublicCalendarContractTest @Autowired constructor(
             .andExpect(content().bytes(golden))
 
         clearInvocations(subscriptionRepository)
-        val validators = listOf(HttpHeaders.IF_NONE_MATCH to expectedEtag, HttpHeaders.IF_MODIFIED_SINCE to EPOCH_HTTP_DATE)
+        val validators = listOf(
+            HttpHeaders.IF_NONE_MATCH to expectedEtag,
+            HttpHeaders.IF_NONE_MATCH to "W/$expectedEtag",
+            HttpHeaders.IF_MODIFIED_SINCE to EPOCH_HTTP_DATE,
+        )
         for ((name, value) in validators) {
             assertNotModified(get("/calendars/v1/{token}.ics", token).header(name, value), expectedEtag, EPOCH_HTTP_DATE)
         }
-        verifyBodyNotRead(metadataReads = 2)
+        verifyBodyNotRead(metadataReads = 3)
 
         mockMvc.perform(authorizedPost("/internal/api/v1/projections/seasons/{seasonId}/rebuild", SEASON_ID))
             .andExpect(status().isOk)
@@ -225,7 +215,7 @@ class PublicCalendarContractTest @Autowired constructor(
         val subscriptionId: String = JsonPath.read(credential, "$.subscriptionId")
         val originalToken: String = JsonPath.read(credential, "$.token")
 
-        val replacementToken = rotate(subscriptionId)
+        val replacementToken: String = JsonPath.read(mockMvc.rotateSubscription(subscriptionId), "$.token")
         assertPublicNotFound(originalToken)
 
         mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId))
@@ -253,7 +243,7 @@ class PublicCalendarContractTest @Autowired constructor(
 
         assertPublicNotFound(restoredToken)
 
-        val currentToken = rotate(subscriptionId)
+        val currentToken: String = JsonPath.read(mockMvc.rotateSubscription(subscriptionId), "$.token")
 
         assertPublicNotFound(restoredToken)
         mockMvc.perform(get("/calendars/v1/{token}.ics", currentToken))
@@ -286,13 +276,6 @@ class PublicCalendarContractTest @Autowired constructor(
     }
 
     private fun createToken(): String = JsonPath.read(mockMvc.createSubscription(SEASON_ID), "$.token")
-
-    private fun rotate(subscriptionId: String): String = JsonPath.read(
-        mockMvc.perform(authorizedPost("/internal/api/v1/subscriptions/{subscriptionId}/rotate", subscriptionId))
-            .andExpect(status().isOk)
-            .andReturn().response.contentAsString,
-        "$.token",
-    )
 
     private fun verifyBodyNotRead(metadataReads: Int) {
         verify(subscriptionRepository, times(metadataReads))

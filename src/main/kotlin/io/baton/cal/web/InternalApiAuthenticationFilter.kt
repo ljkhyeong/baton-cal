@@ -4,7 +4,6 @@ import io.baton.cal.config.CalProperties
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.web.servlet.FilterRegistration
 import org.springframework.http.HttpHeaders
@@ -25,13 +24,8 @@ class InternalApiAuthenticationFilter(
         put(AuthenticationResult.CURRENT, properties.internalToken.encodeToByteArray())
         properties.previousInternalToken?.let { put(AuthenticationResult.PREVIOUS, it.encodeToByteArray()) }
     }
-    private val authenticationCounters: Map<AuthenticationResult, Counter> =
-        AuthenticationResult.entries.associateWith { result ->
-            Counter.builder(AUTHENTICATION_METRIC)
-                .description("내부 API 인증 결과")
-                .tag("result", result.name.lowercase())
-                .register(meterRegistry)
-        }
+    private val authenticationCounters =
+        meterRegistry.resultCounters<AuthenticationResult>(AUTHENTICATION_METRIC, "내부 API 인증 결과")
 
     override fun doFilterInternal(
         request: HttpServletRequest,

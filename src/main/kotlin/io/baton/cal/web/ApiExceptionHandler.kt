@@ -1,8 +1,7 @@
 package io.baton.cal.web
 
 import org.slf4j.LoggerFactory
-import org.springframework.dao.PessimisticLockingFailureException
-import org.springframework.dao.QueryTimeoutException
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -24,12 +23,10 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ApiException::class)
     fun handleApiException(exception: ApiException): ResponseEntity<ApiErrorResponse> = ResponseEntity
         .status(exception.status)
-        .cacheControl(CacheControl.noStore())
         .body(ApiErrorResponse(exception.code, exception.message))
 
     @ExceptionHandler(
-        PessimisticLockingFailureException::class,
-        QueryTimeoutException::class,
+        TransientDataAccessException::class,
         TransactionTimedOutException::class,
         CannotGetJdbcConnectionException::class,
         CannotCreateTransactionException::class,
