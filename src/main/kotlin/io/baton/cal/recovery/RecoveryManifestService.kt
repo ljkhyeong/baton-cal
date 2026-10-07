@@ -29,7 +29,7 @@ class RecoveryManifestService(
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     fun getStatus(recoveryId: UUID): RecoveryRunStatusResponse {
         val completion = repository.findCompletion(recoveryId)
-        val verifiedSeasonCount = completion?.seasonCount ?: repository.listVerifiedSeasonStates(recoveryId).size
+        val verifiedSeasonCount = completion?.seasonCount ?: repository.countSeasonManifests(recoveryId)
         if (completion == null && verifiedSeasonCount == 0) {
             throw resourceNotFound("저장된 복구 실행을 찾을 수 없습니다")
         }

@@ -21,6 +21,13 @@ data class RecoveryRunCompletionRow(
 class RecoveryManifestRepository(
     private val jdbcClient: JdbcClient,
 ) {
+    fun countSeasonManifests(recoveryId: UUID): Int = jdbcClient.sql(
+        "SELECT count(*) FROM recovery_season_manifest WHERE recovery_id = :recoveryId",
+    )
+        .param("recoveryId", recoveryId)
+        .query(Int::class.java)
+        .single()
+
     /** 시즌의 현재 항목마다 채택한 개정 번호를 처음 수신한 스냅샷 지문과 함께 조회한다. */
     fun listItemStates(seasonId: UUID): List<RecoveryItemState> = jdbcClient.sql(
         """
