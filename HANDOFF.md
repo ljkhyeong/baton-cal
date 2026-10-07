@@ -110,8 +110,9 @@
   중간 커밋 `bb5259c`·`4b3389a`·`8714243`의 관련·전체 `test`도 통과했다(`/private/tmp/baton-cal-sweep-*-tests.log`).
   부하 측정과 BATON 교차 서비스 테스트는 HTTP 계약이 같아 실행하지 않았다. BATON의 `ops/tests/calendar-consumer-contract.sh`는
   CAL 수신함 열을 참조하지 않는다. 이후 커밋은 문서와 테스트 import 순서만 바꿔 위 결과를 재사용한다(`testClasses` 컴파일 확인).
-  PR #35 리뷰에 따라 완료 후 매니페스트 재시도를 기본 키 단건 조회로 되돌린 뒤 `RecoveryManifestHttpTest`·`RecoveryModeHttpTest`·
-  `PersistenceRepositoryTest` 23개가 새로 실행돼 통과했다. 로그: `/private/tmp/baton-cal-pr35-review-tests.log`.
+  PR #35 리뷰에 따라 완료 후 매니페스트 재시도를 기본 키 단건 조회로, 진행 중 상태 조회를 `count(*)`로 되돌렸다.
+  `RecoveryManifestHttpTest`·`RecoveryModeHttpTest`·`PersistenceRepositoryTest` 23개와 이후 복구 HTTP 테스트 16개가 새로
+  실행돼 통과했다. 로그: `/private/tmp/baton-cal-pr35-review-tests.log`, `/private/tmp/baton-cal-pr35-count-tests.log`.
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
