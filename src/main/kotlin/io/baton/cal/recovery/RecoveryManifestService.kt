@@ -57,7 +57,7 @@ class RecoveryManifestService(
         lockRepository.lockRecoveryRun(recoveryId)
         val completion = repository.findCompletion(recoveryId)
         if (completion != null) {
-            if (expected !in repository.listVerifiedSeasonStates(recoveryId)) throw runConflict()
+            if (repository.findVerifiedSeasonState(recoveryId, seasonId) != expected) throw runConflict()
             return expected.toResponse(recoveryId)
         }
         requireRecoveryMode()

@@ -70,6 +70,20 @@ class RecoveryManifestRepository(
             .update()
     }
 
+    /** 완료 후 재시도는 시즌마다 들어오므로 기본 키로 한 시즌의 검증값만 읽는다. */
+    fun findVerifiedSeasonState(recoveryId: UUID, seasonId: UUID): RecoverySeasonState? = jdbcClient.sql(
+        """
+        SELECT season_id, item_count, item_digest, metadata_revision, metadata_digest
+        FROM recovery_season_manifest
+        WHERE recovery_id = :recoveryId AND season_id = :seasonId
+        """.trimIndent(),
+    )
+        .param("recoveryId", recoveryId)
+        .param("seasonId", seasonId)
+        .query(RecoverySeasonState::class.java)
+        .optional()
+        .getOrNull()
+
     fun listVerifiedSeasonStates(recoveryId: UUID): List<RecoverySeasonState> = jdbcClient.sql(
         """
         SELECT season_id, item_count, item_digest, metadata_revision, metadata_digest
