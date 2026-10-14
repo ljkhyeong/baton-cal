@@ -125,6 +125,9 @@ class InternalCalendarController(
         @PathVariable seasonId: UUID,
     ) = projectionService.rebuild(seasonId)
 
+    @PostMapping("/projections/rebuild")
+    fun rebuildAllProjections() = projectionService.rebuildAll()
+
     private companion object {
         const val INGESTION_METRIC = "baton.cal.snapshot.ingestion"
     }

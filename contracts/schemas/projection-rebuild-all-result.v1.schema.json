@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/projection-rebuild-all-result.v1.schema.json",
+  "title": "ProjectionRebuildAllResultV1",
+  "description": "투영이 저장된 모든 시즌을 다시 만든 결과입니다. 바뀐 시즌 수는 처리한 시즌 수를 넘지 않습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seasonCount",
+    "changedSeasonCount"
+  ],
+  "properties": {
+    "seasonCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "changedSeasonCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  }
+}

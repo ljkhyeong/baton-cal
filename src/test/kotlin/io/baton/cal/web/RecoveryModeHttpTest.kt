@@ -88,6 +88,10 @@ class RecoveryModeHttpTest @Autowired constructor(
         mockMvc.perform(authorizedPost("/internal/api/v1/projections/seasons/$SEASON_ID/rebuild"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.itemCount").value(1))
+        mockMvc.perform(authorizedPost("/internal/api/v1/projections/rebuild"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.seasonCount").value(1))
+            .andExpect(jsonPath("$.changedSeasonCount").value(0))
 
         val feed = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isOk)

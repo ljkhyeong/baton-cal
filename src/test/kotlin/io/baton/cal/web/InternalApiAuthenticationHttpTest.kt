@@ -41,6 +41,7 @@ class InternalApiAuthenticationHttpTest @Autowired constructor(
             delete("/internal/api/v1/subscriptions/{subscriptionId}", ID),
             put(SEASON_CALENDAR_METADATA_PATH, ID),
             post("/internal/api/v1/projections/seasons/{seasonId}/rebuild", ID),
+            post("/internal/api/v1/projections/rebuild"),
             get("/internal/api/v1/recovery-runs/{recoveryId}", ID),
             get("/internal/api/v1/seasons/{seasonId}/recovery-state", ID),
             put("/internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest", ID, ID),

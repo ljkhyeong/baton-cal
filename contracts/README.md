@@ -20,6 +20,7 @@
 | `PUT /internal/api/v1/subscriptions/{subscriptionId}` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | 같은 생성 예시와 `examples/api-error.subscription-*.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
+| `POST /internal/api/v1/projections/rebuild` | 본문 없음 | `schemas/projection-rebuild-all-result.v1.schema.json` | `examples/projection-rebuild-all-result.json` |
 | 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json`, `examples/api-error.recovery-in-progress.json` |
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
@@ -63,6 +64,11 @@ BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `
 개정 번호는 저장하지 않고 현재 값을 반환한다. 현재 개정 번호에 다른 이름을 보내면
 `409 SEASON_METADATA_REVISION_CONFLICT`다. 이름 미수신 시즌은 기존 `BATON season {seasonId}`를
 유지한다. 이름을 받으면 iCal4j로 `X-WR-CALNAME`에 반영하며 일정 UID·SEQUENCE와 토큰은 바꾸지 않는다.
+
+전체 재생성은 투영이 저장된 모든 시즌을 시즌마다 따로 커밋해 다시 만들고 `{seasonCount, changedSeasonCount}`를
+반환한다. iCal4j 직렬화나 내장 시간대 데이터를 바꾼 배포 뒤 운영자가 호출해 일정 수신이 없는 시즌도 새 출력을
+제공하게 하며 BATON의 일정 전달에는 필요하지 않다. 출력이 같은 시즌은 바이트·ETag·Last-Modified를 유지하고,
+실패 뒤 같은 요청을 다시 보내면 남은 시즌을 처리한다.
 
 복구 모드의 시즌 매니페스트는 현재 일정 항목의 수·다이제스트와 선택적인 시즌 이름 개정·
 다이제스트를 대조한다. 전체 완료 요청은 검증한 시즌 수·전체 다이제스트가 현재 CAL 데이터의 시즌
@@ -194,8 +200,8 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
 `1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. `1.1.0-rc.2`는 ID 지정 구독 생성, 중복·시즌 충돌
 응답과 고정된 복원 다이제스트 예시를 추가했고 게시·BATON 고정을 마쳤다. 현재 작업 후보 `1.1.0-rc.3`은
-계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명만 정리하며 아직 게시하지 않았다. 기존 안정 기준은
-`1.0.0`이다.
+기존 경로의 계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명을 정리하며 전체 시즌 투영 재생성 경로를
+추가한다. 아직 게시하지 않았다. 기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.
@@ -251,3 +257,6 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 ./gradlew --no-daemon test
 ./gradlew --no-daemon bootJar
 ```
+
+저장된 시즌 피드는 만든 시점의 출력이다. 변경을 모든 인스턴스에 배포한 뒤 PRD-0002의
+`POST /internal/api/v1/projections/rebuild`로 모든 시즌을 다시 만들고 `changedSeasonCount`를 기록한다.

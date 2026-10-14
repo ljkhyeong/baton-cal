@@ -22,6 +22,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -40,6 +41,7 @@ class SeasonProjectionServiceTest {
         projectionRepository = projectionRepository,
         metadataRepository = metadataRepository,
         renderer = renderer,
+        transaction = TransactionOperations.withoutTransaction(),
         clock = Clock.fixed(NOW, ZoneOffset.UTC),
         meterRegistry = meterRegistry,
     )

@@ -8,6 +8,7 @@ import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.persistence.AdvisoryLockRepository
+import io.baton.cal.web.ProjectionRebuildAllResponse
 import io.baton.cal.web.ProjectionRebuildResponse
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
@@ -15,6 +16,7 @@ import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -28,6 +30,7 @@ class SeasonProjectionService(
     private val projectionRepository: SeasonFeedProjectionRepository,
     private val metadataRepository: SeasonCalendarMetadataRepository,
     private val renderer: IcsCalendarRenderer,
+    private val transaction: TransactionOperations,
     private val clock: Clock,
     meterRegistry: MeterRegistry,
 ) {
@@ -49,6 +52,23 @@ class SeasonProjectionService(
     fun rebuild(seasonId: UUID): ProjectionRebuildResponse {
         lockRepository.lockSeason(seasonId)
         return rebuildWhileLocked(seasonId)
+    }
+
+    /**
+     * 저장된 모든 시즌 투영을 현재 렌더러로 다시 만든다. 렌더러나 내장 시간대 데이터를 바꾼 배포 뒤 일정 수신이 없는
+     * 시즌도 새 출력을 쓰게 한다. 한 번에 한 시즌만 잠그도록 시즌마다 따로 커밋하고, 같은 잠금 안에서 ETag를 비교해
+     * 바뀐 시즌을 센다. 호출자 트랜잭션에 묶이지 않도록 트랜잭션 밖에서 호출한다.
+     */
+    fun rebuildAll(): ProjectionRebuildAllResponse {
+        val seasonIds = projectionRepository.listSeasonIds()
+        val changedSeasonCount = seasonIds.count { seasonId ->
+            transaction.execute {
+                lockRepository.lockSeason(seasonId)
+                val existing = projectionRepository.findHeadersBySeasonId(seasonId)
+                rebuildWhileLocked(seasonId, existing).etag != existing?.etag
+            } == true
+        }
+        return ProjectionRebuildAllResponse(seasonCount = seasonIds.size, changedSeasonCount = changedSeasonCount)
     }
 
     @Transactional
