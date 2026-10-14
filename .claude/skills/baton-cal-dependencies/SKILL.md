@@ -47,6 +47,8 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 - 골든이 달라져도 테스트에서 자동으로 덮어쓰지 않는다. 후보 `.ics`를 임시 위치에 만들어 속성·컴포넌트 순서,
   TEXT 재파싱 결과, TZID·`VTIMEZONE`, UTF-8 물리 줄 길이, `ETag` 변화를 검토한다.
 - 의도한 호환성 변화만 `contracts/golden/*.ics.b64`에 반영하고 전체 테스트와 `bootJar`를 확인한다.
+- 저장된 피드는 배포 전 출력으로 남는다. 운영 배포 뒤 README의 `캘린더 출력 변경 배포` 절차로 전체 재생성을
+  실행하도록 PR·인수인계에 적는다. 내장 데이터가 같은지는 JAR의 `zoneinfo/**/*.ics`를 비교해 확인한다.
 - iCal4j 버전이나 내장 Olson 데이터가 바뀌면 PRD-0002·ADR-0002·`contracts/README.md`·README의
   `iCal4j 4.3.0`·`2025a` 표기를 함께 고치고 baton-cal-contract-release에 따라 새 계약 후보를 만든다.
 
