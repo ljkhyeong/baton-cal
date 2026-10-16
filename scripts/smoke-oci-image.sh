@@ -301,6 +301,13 @@ assert_recovery_blocked \
 assert_recovery_blocked "$base_url/internal/api/v1/subscriptions/$subscription_id/rotate"
 echo "복구 모드에서 구독 생성과 회전의 HTTP 503 차단을 확인했습니다."
 
+# 복원된 피드는 백업 시점 버전의 출력이고 같은 개정의 재전달은 피드를 다시 만들지 않는다.
+# 같은 이미지로 복원했으므로 모든 시즌을 다시 만들어도 바뀐 시즌이 없어야 한다.
+"${http_request[@]}" "${bearer[@]}" --fail --request POST "$base_url/internal/api/v1/projections/rebuild" \
+  | jq --exit-status '.seasonCount == 1 and .changedSeasonCount == 0' >/dev/null \
+  || fail "복원 DB의 전체 시즌 투영 재생성 결과가 시즌 1개·변경 0개가 아닙니다."
+echo "복구 모드에서 복원 DB의 전체 시즌 투영 재생성을 확인했습니다."
+
 post_snapshot schedule-snapshot.zoned-active-r2.json
 assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 409 RECOVERY_MANIFEST_MISMATCH
 assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 409 RECOVERY_MANIFEST_MISMATCH
