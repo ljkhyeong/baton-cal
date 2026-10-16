@@ -79,8 +79,13 @@
   건너뛰며 기록 실패는 피드 응답 대신 `baton.cal.subscription.fetch.record.failures`로 센다. 회전·폐기는 값을
   비우고 이전 세대 구독은 `null`이다. 조회 시각·IP·클라이언트 정보는 저장하지 않는다. BATON 화면 연결은 남아 있다.
 - iCal4j를 4.4.0으로 올렸다. 내장 Olson `2025a`·`tz.alias`가 같고 골든 바이트·ETag가 유지되며 시간대 외부 갱신은
-  계속 꺼져 있다. Dependabot [PR #39](https://github.com/ljkhyeong/baton-cal/pull/39)는 이 변경이 main에 들어가면
-  대체된다.
+  계속 꺼져 있다. 위 세 변경은 [PR #40](https://github.com/ljkhyeong/baton-cal/pull/40)으로 `c7370b0`에 병합됐고
+  Dependabot #39는 자동으로 닫혔다.
+- 남아 있던 Dependabot 13건을 종류별 커밋으로 반영했다. GitHub Actions 5종(checkout v7·setup-java v6·login-action v4
+  포함)은 태그 커밋 SHA를, Compose 이미지 4종은 레지스트리 digest를, Gradle Wrapper 9.8.0은 공식 해시를 대조했다.
+  Kotlin 2.4.20·ArchUnit 1.5.1·JSON Schema 검증기 3.0.8은 잠금 파일·검증 메타데이터를 다시 쓰고 쓰지 않는 이전 항목을
+  지웠다. Dependabot이 CRLF로 올린 `gradlew.bat`은 저장소 규칙대로 LF로 정규화했다. `docker/login-action` v4는
+  `main` 게시 작업에서만 실행되므로 병합 뒤 `main` CI에서 확인한다.
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
   [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
@@ -112,22 +117,21 @@
 
 ## 최근 검증
 
-- `da9eabd`(이후 커밋은 문서만 변경)에서 `./gradlew --no-daemon --max-workers=2 check bootJar`로 일반 166개·구조 3개
-  테스트, 검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 새로 실행돼 통과했다. iCal4j 4.4.0에서는
-  렌더러 골든 7개·시간대 3개·계약 산출물 5개 테스트를 먼저 확인했고, 최근 조회일 기록에서 `SKIP LOCKED`를 지운 변형으로
-  잠금 테스트가 실패하는 것도 확인한 뒤 되돌렸다. Java 25 toolchain·PostgreSQL 18.6(Testcontainers)·Docker 29.8.2.
-  로그: `/private/tmp/baton-cal-feature-review-check.log`, `/private/tmp/baton-cal-ical4j-440-golden.log`,
-  `/private/tmp/baton-cal-activity-tests.log`, `/private/tmp/baton-cal-activity-mutation.log`. 바꾼 Markdown·스킬의 링크·스킬
-  검사도 통과했다.
-- 같은 커밋으로 `bootBuildImage --imageName=baton-cal:feature-review-da9eabd`
-  (`sha256:981df2b69a174c23cc0e13993c0e215533d3ddb93e2c349cc5d4e8f209c0bf62`) 뒤 `./scripts/smoke-oci-image.sh`가 Flyway 적용
-  버전 `1`, 실행 중 Java 25·비루트, 백업 복원, 복구 모드 전체 재생성의 시즌 1개·변경 0개, 복구 매니페스트 완료까지
-  통과했다. `./scripts/smoke-operations.sh`는 HTTPS 프록시의 피드 200·304, 요청 초과 429, 알림 발생·해제와 토큰 비노출을
-  확인했다. 알림 채널 스모크는 Alertmanager 설정·이미지가 같아 `c396cb3` 결과를 재사용한다
-  (`/private/tmp/baton-cal-sweep-alert-channels.log`). 로그: `/private/tmp/baton-cal-feature-review-image.log`,
-  `/private/tmp/baton-cal-feature-review-oci-smoke.log`, `/private/tmp/baton-cal-feature-review-operations.log`.
-  부하 측정과 BATON 교차 서비스 테스트는 실행하지 않았다. 기존 경로 계약은 같고, 공개 조회에 기록 문장이 더해진
-  부하 영향은 측정하지 않았다.
+- 의존성 갱신은 `c9e8db6`(이후 커밋은 문서만 변경)을 빈 `GRADLE_USER_HOME`에서 `./gradlew --no-daemon --max-workers=2 check bootJar`로
+  검증했다. 일반 166개·구조 3개 테스트, 검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 새로 실행돼
+  통과했고 검증 메타데이터 누락은 없었다. 컴파일은 같은 의존성으로 앞선 빈 저장소 실행에서 끝나 `UP-TO-DATE`였다.
+  Gradle 9.8.0·Kotlin 2.4.20·Java 25 toolchain·PostgreSQL 18.6(Testcontainers)·Docker 29.8.2. 같은 커밋으로
+  `bootBuildImage --imageName=baton-cal:deps-c9e8db6`(`sha256:83923485c3e4ee6fce2fc577087a750b2b0de0024e6c072fc4f05890bdbc534d`) 뒤
+  `./scripts/smoke-oci-image.sh`(Flyway 적용 버전 `1`, Java 25·비루트, 백업 복원과 복구 모드 전체 재생성, 매니페스트 완료),
+  `./scripts/smoke-operations.sh`(Nginx 1.31.6·Prometheus 3.15.0·Alertmanager 0.34.1), `bash scripts/smoke-alert-channels.sh`
+  (4개 조합, Python 3.14.8 모의 수신기)가 통과했다. 로그: `/private/tmp/baton-cal-deps-check.log`,
+  `/private/tmp/baton-cal-deps-image.log`, `/private/tmp/baton-cal-deps-oci-smoke.log`, `/private/tmp/baton-cal-deps-operations.log`,
+  `/private/tmp/baton-cal-deps-alert-channels.log`. `docker/login-action` v4는 PR CI에서 실행되지 않으므로 병합 뒤 `main` CI로 확인한다.
+  부하 측정과 BATON 교차 서비스 테스트는 실행하지 않았다.
+- PR #40은 PR CI(`2d80174`)의 테스트·OCI·운영·알림 채널 스모크를 통과한 뒤 `c7370b0`으로 병합됐다. `main` CI
+  ([실행](https://github.com/ljkhyeong/baton-cal/actions/runs/38875933724))가 같은 검증과
+  `ghcr.io/ljkhyeong/baton-cal:c7370b0d814d69d7553cbf07df368c945aaa0872` 게시까지 통과했다. 기능별 검증 근거는
+  [기능 검토](docs/reviews/2026-10-14-feature-review.md#후속-진행--2026-10-16)에 있다.
 - `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
   운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
   `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
@@ -198,9 +202,8 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
    [전체 재생성](README.md#캘린더-출력-변경-배포)을 실행한다. iCal4j 4.4.0도 내장 데이터는 Olson `2025a`다.
 7. BATON이 `1.1.0-rc.3` 이상을 고정한 뒤 구독 화면에서 최근 조회일 경로를 호출해 앱 등록·갱신 중단 안내를 연결한다.
    날짜가 이어서 갱신되는지로 판단하며 파일 가져오기의 한 번 조회와 구분한다.
-8. Dependabot 대기열을 정리한다. CI가 통과한 8건은 병합 여부를 정하고, Gradle 3건(#38·#33·#25)은
-   [의존성 절차](.claude/skills/baton-cal-dependencies/SKILL.md)로 잠금 파일·검증 메타데이터를 갱신한다.
-   8월에 실패한 Actions 2건(#10·#9)은 최신 main 기준으로 다시 검증한다.
+8. 새 Dependabot PR은 [의존성 절차](.claude/skills/baton-cal-dependencies/SKILL.md)로 처리한다. Gradle 생태계 PR은
+   잠금 파일·검증 메타데이터를 함께 바꾸지 않아 CI가 실패하므로 깨끗한 Gradle 저장소에서 두 파일을 다시 쓴다.
 
 ## 현재 제한
 

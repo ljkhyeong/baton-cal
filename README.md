@@ -263,7 +263,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 
 ## 기술 스택
 
-- Kotlin 2.4.10, Java 25, Gradle 9.7.1
+- Kotlin 2.4.20, Java 25, Gradle 9.8.0
 - Spring Boot 4.1.1, Spring MVC, `JdbcClient`, Bean Validation
 - Spring Boot Actuator, Micrometer Prometheus
 - PostgreSQL 18.6, Flyway, Testcontainers
