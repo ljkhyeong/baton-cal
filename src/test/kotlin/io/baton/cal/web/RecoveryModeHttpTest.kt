@@ -32,6 +32,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 @RecoveryModeIntegrationTest
@@ -88,6 +90,10 @@ class RecoveryModeHttpTest @Autowired constructor(
         mockMvc.perform(authorizedPost("/internal/api/v1/projections/seasons/$SEASON_ID/rebuild"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.itemCount").value(1))
+        mockMvc.perform(authorizedPost("/internal/api/v1/projections/rebuild"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.seasonCount").value(1))
+            .andExpect(jsonPath("$.changedSeasonCount").value(0))
 
         val feed = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
             .andExpect(status().isOk)
@@ -100,6 +106,9 @@ class RecoveryModeHttpTest @Autowired constructor(
                 .header(HttpHeaders.IF_NONE_MATCH, requireNotNull(feed.getHeader(HttpHeaders.ETAG))),
         )
             .andExpect(status().isNotModified)
+        mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/{subscriptionId}/activity", subscription.id))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.lastFetchedOn").value(LocalDate.now(ZoneOffset.UTC).toString()))
 
         mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id))
             .andExpect(status().isNoContent)

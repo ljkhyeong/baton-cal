@@ -1,6 +1,7 @@
 package io.baton.cal.persistence
 
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 data class SeasonFeedProjectionRow(
@@ -27,4 +28,5 @@ data class CalendarSubscriptionRow(
     val tokenHash: String,
     val credentialGeneration: UUID,
     val status: CalendarSubscriptionStatus,
+    val lastFetchedOn: LocalDate? = null,
 )

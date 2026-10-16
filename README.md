@@ -40,6 +40,7 @@ CAL이 담당한다.
 
 - 작업공간 키, 계정 세션, ROUND 권한 증서와 제공자 자격 증명을 캘린더 URL에 넣지 않는다.
 - 구독 토큰 원문은 저장하지 않고 로그나 메트릭 레이블에 남기지 않는다.
+- 공개 조회는 구독별 최근 조회일(UTC 날짜)만 남기고 조회 시각·IP·경로·클라이언트 정보는 기록하지 않는다.
 - 캘린더 설명에는 최소 정보와 권한이 필요 없는 위치 식별자만 포함한다.
 - 캘린더 클라이언트의 조회는 BATON의 권한 판단을 우회하지 않는다.
 
@@ -97,9 +98,10 @@ CAL이 담당한다.
   `503 RECOVERY_IN_PROGRESS`로 차단하고 수신·재구축·폐기·공개 피드·readiness는 유지한다.
   복구 모드는 기존 URL을 무효화하지 않으므로 과거 DB 복원 때의 구독 세대 교체도 반드시 수행한다.
   설정 변경에는 모든 인스턴스의 재시작이 필요하며 자동 해제하지 않는다.
-- 시간대 지정 현지 시각은 iCal4j 4.3.0 내장 Olson `2025a`가 원문 식별자로 제공하는 TZID만
+- 시간대 지정 현지 시각은 iCal4j 4.4.0 내장 Olson `2025a`가 원문 식별자로 제공하는 TZID만
   허용한다. DST 공백도 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 판정해 Java 런타임의 별도 TZDB와
-  규칙을 섞지 않는다. iCal4j나 내장 시간대 데이터를 올릴 때는 골든 바이트와 ETag를 검토한다.
+  규칙을 섞지 않는다. iCal4j나 내장 시간대 데이터를 올릴 때는 골든 바이트와 ETag를 검토하고, 배포 뒤
+  [전체 재생성](#캘린더-출력-변경-배포)으로 저장된 피드를 바꾼다.
 
 실제 역방향 프록시와 추적 내보내기의 경로·쿼리·헤더 삭제 처리는 공개 배포 전에 실제 환경에서
 검증해야 한다.
@@ -122,6 +124,25 @@ Prometheus에서는 `sum(increase(baton_cal_internal_authentication_total{result
 확인한다. BATON 전환 뒤 `CalInternalAuthenticationFailed` 알림이 발생하면 BATON이 등록되지 않은 값을 쓰는 것이므로
 이전 값을 제거하지 않고 BATON 설정부터 확인한다.
 
+### 캘린더 출력 변경 배포
+
+저장된 시즌 피드는 만든 시점의 iCal4j 직렬화와 내장 시간대 데이터로 만든 바이트다. 골든 바이트·ETag 검토를
+마친 iCal4j·시간대 데이터 변경은 모든 인스턴스에 배포한 뒤 다음 요청으로 저장된 모든 시즌에 반영한다.
+`CAL_INTERNAL_BASE_URL`은 공개 프록시를 거치지 않는 인증된 내부 연결 주소다.
+
+```shell
+curl --fail-with-body --silent --show-error -X POST \
+  -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
+  "$CAL_INTERNAL_BASE_URL/internal/api/v1/projections/rebuild"
+```
+
+응답의 `changedSeasonCount`는 바이트가 바뀐 시즌 수다. 바뀐 시즌만 ETag와 Last-Modified가 갱신되어 캘린더
+앱이 다음 조회에서 새 피드를 받는다. 출력이 같은 배포는 `0`이며 피드를 다시 쓰지 않는다. 시즌마다 따로
+커밋하므로 `503 SERVICE_BUSY`나 응답 유실 뒤에는 같은 요청을 다시 보낸다. `500`은 같은 요청으로 해결되지 않는
+오류이므로 재요청하지 않고 배포한 변경이 저장된 일정을 렌더링하는지 확인한다. 배포 중 이전 버전이 수신한 시즌은
+이전 출력으로 저장될 수 있으므로 모든 인스턴스를 바꾼 뒤 호출한다. 처리 시간은 전체 일정 수에 비례하며
+세부 계약은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)의 HTTP 경로 절을 따른다.
+
 ### 과거 DB 백업 복원
 
 과거 백업을 복원할 때는 CAL을 중지한 상태로 두고 다음 순서를 지킨다. 표준 UUID 생성 명령은
@@ -137,7 +158,8 @@ uuidgen
    새 값으로 바꾸고 `BATON_CAL_RECOVERY_MODE=true`를 설정한다.
 3. CAL이 중지된 상태에서 과거 DB를 복원한다.
 4. 새 세대와 복구 모드 설정으로 CAL을 시작한다. 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`로
-   차단되며 일정 수신과 재구축은 가능하다.
+   차단되며 일정 수신과 재구축은 가능하다. 복원된 피드는 백업 시점 버전의 출력이고 같은 개정의 재전달은
+   피드를 다시 만들지 않으므로 [전체 재생성](#캘린더-출력-변경-배포)으로 현재 버전의 출력에 맞춘다.
 5. BATON에서 새 `recoveryId`를 정하고 전달을 끈 상태로 최신 전체 일정·필요한 취소·시즌 이름을
    재전달 대기에 넣는다. 같은 `recoveryId`로 전달을 켜면 BATON이 모든 최신 아웃박스의 전달 완료를
    확인한 뒤 시즌별 매니페스트와 전체 완료 신호를 보낸다.
@@ -185,6 +207,9 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 
 - `GET /internal/api/v1/calendar-items/{sourceItemId}`: CAL이 채택한 개정 번호, 일정 상태와 원본 수정 시각.
 - `GET /internal/api/v1/subscriptions/{subscriptionId}`: 구독 상태와 현재 인스턴스의 구독 세대 일치 여부.
+- `GET /internal/api/v1/subscriptions/{subscriptionId}/activity`: 현재 세대 자격 증명으로 공개 피드를 마지막으로
+  조회한 UTC 날짜. 공개 GET·HEAD·`304`마다 하루 한 번 앞으로만 기록하고 회전·폐기 때 비운다. 조회 시각·IP·
+  클라이언트 정보는 저장하지 않으며 기록 실패는 `baton.cal.subscription.fetch.record.failures`로 센다.
 - `GET /internal/api/v1/recovery-runs/{recoveryId}`: 저장된 진행·완료 상태, 검증한 시즌 수, 최초 완료
   시각과 이 인스턴스의 복구 모드. 완료 기록은 이후 원본 변경에도 유지한다.
 - `GET /internal/api/v1/seasons/{seasonId}/recovery-state`: 현재 일정 수·다이제스트와 이름 개정·
@@ -242,7 +267,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - Spring Boot 4.1.1, Spring MVC, `JdbcClient`, Bean Validation
 - Spring Boot Actuator, Micrometer Prometheus
 - PostgreSQL 18.6, Flyway, Testcontainers
-- iCal4j 4.3.0
+- iCal4j 4.4.0
 
 ## 로컬 실행
 
@@ -330,8 +355,9 @@ ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 입력·응답 �
 BATON `7a064bcd`에 버전·해시를 고정했다. 클라이언트 29개·실제 컨테이너 교차 서비스 5개 테스트가 통과했다.
 실제 캘린더 앱 검증·운영 활성화와 BATON의 묶음 전송은 남아 있다. 게시된 ZIP을 바꾸는 후속 변경은 새 버전으로 만든다.
 
-작업 후보 `1.1.0-rc.3`은 HTTP 요청·응답, 스키마, 다이제스트와 iCalendar 바이트를 바꾸지 않는다. 운영 전 DB
-마이그레이션을 V1 하나로 합치면서 PRD-0002의 구버전 배포 순서 설명을 지웠다. 아직 게시하지 않았다.
+작업 후보 `1.1.0-rc.3`은 기존 경로의 HTTP 요청·응답, 스키마, 다이제스트와 iCalendar 바이트를 바꾸지 않는다.
+운영 전 DB 마이그레이션을 V1 하나로 합치면서 PRD-0002의 구버전 배포 순서 설명을 지웠고, 출력 변경 배포 뒤
+저장된 피드를 바꾸는 전체 시즌 투영 재생성 경로를 추가했다. 아직 게시하지 않았다.
 [릴리스 노트 초안](docs/releases/contracts-v1.1.0-rc.3.md)
 
 ## OCI 이미지 검증
@@ -361,8 +387,9 @@ Prometheus 메트릭, 35초 유예 안의 SIGTERM 정상 종료와 SIGKILL·OOM 
 기존 공개 피드가 계속 `200`인지 확인한다. 이어 세대 A에서 만든 일정과 구독을 `pg_dump -Fc`로 백업하고
 아카이브를 확인한 뒤, 애플리케이션을 중지한 상태에서 세대 B로 먼저 바꿔
 `pg_restore --clean --create --exit-on-error`로 복원한다. 복원된 기존 토큰의 본문 없는 일반 `404`,
-복구 모드의 생성·회전 `503` 차단, 대표 계약 픽스처의 최신 변경·취소·시즌 이름 재전달, 재전달 뒤에도 발급
-차단 유지, 고정 매니페스트의 `VERIFIED`·`COMPLETED`와 완료 재시도 시 최초 시각 보존을 확인한다.
+복구 모드의 생성·회전 `503` 차단, 복원 DB 전체 재생성의 변경 0개, 대표 계약 픽스처의 최신 변경·취소·
+시즌 이름 재전달, 재전달 뒤에도 발급 차단 유지, 고정 매니페스트의 `VERIFIED`·`COMPLETED`와 완료 재시도 시
+최초 시각 보존을 확인한다.
 취소·최신 이름이 빠지면 검증을 거부하고, `COMPLETED`를 확인한 뒤에만 같은 세대에서 모드를
 해제·재시작한다. 이어 기존 구독 rotate, 새 토큰의 `200`과
 `STATUS:CANCELLED`·`SEQUENCE:3`과 최신 이름까지 검증한다. 전용 Compose 프로젝트·네트워크·볼륨과 임시 백업만

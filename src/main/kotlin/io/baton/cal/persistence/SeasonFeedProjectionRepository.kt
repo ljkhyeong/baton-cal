@@ -40,6 +40,12 @@ class SeasonFeedProjectionRepository(
             .update()
     }
 
+    fun listSeasonIds(): List<UUID> =
+        jdbcClient.sql("SELECT season_id FROM season_feed_projection ORDER BY season_id")
+            .query(UUID::class.java)
+            .list()
+            .requireNoNulls()
+
     fun findHeadersBySeasonId(seasonId: UUID): SeasonFeedHeaders? =
         jdbcClient.sql(
             """

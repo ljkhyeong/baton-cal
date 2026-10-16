@@ -1,6 +1,7 @@
 package io.baton.cal.persistence
 
 import kotlin.jvm.optionals.getOrNull
+import java.time.LocalDate
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
@@ -38,7 +39,7 @@ class CalendarSubscriptionRepository(
     fun findById(id: UUID): CalendarSubscriptionRow? =
         jdbcClient.sql(
             """
-            SELECT id, season_id, token_hash, credential_generation, status
+            SELECT id, season_id, token_hash, credential_generation, status, last_fetched_on
             FROM calendar_subscription
             WHERE id = :id
             """.trimIndent(),
@@ -77,7 +78,8 @@ class CalendarSubscriptionRepository(
             """
             UPDATE calendar_subscription
             SET token_hash = :replacementTokenHash,
-                credential_generation = :replacementCredentialGeneration
+                credential_generation = :replacementCredentialGeneration,
+                last_fetched_on = NULL
             WHERE id = :id
               AND status = 'ACTIVE'
               AND token_hash = :expectedTokenHash
@@ -96,13 +98,43 @@ class CalendarSubscriptionRepository(
         jdbcClient.sql(
             """
             UPDATE calendar_subscription
-            SET status = 'REVOKED'
+            SET status = 'REVOKED',
+                last_fetched_on = NULL
             WHERE id = :id
               AND token_hash = :expectedTokenHash
             """.trimIndent(),
         )
             .param("id", id)
             .param("expectedTokenHash", expectedTokenHash)
+            .update() == 1
+
+    /**
+     * 공개 피드를 조회한 활성 자격 증명의 최근 조회일을 앞으로만 옮긴다. 같은 날의 반복 조회는 쓰지 않고,
+     * 회전·폐기가 잡은 행은 기다리지 않고 건너뛴다. 기록했으면 true다.
+     */
+    fun recordFetch(
+        tokenHash: String,
+        expectedCredentialGeneration: UUID,
+        fetchedOn: LocalDate,
+    ): Boolean =
+        jdbcClient.sql(
+            """
+            UPDATE calendar_subscription
+            SET last_fetched_on = :fetchedOn
+            WHERE id = (
+                SELECT id
+                FROM calendar_subscription
+                WHERE token_hash = :tokenHash
+                  AND status = 'ACTIVE'
+                  AND credential_generation = :expectedCredentialGeneration
+                  AND (last_fetched_on IS NULL OR last_fetched_on < :fetchedOn)
+                FOR UPDATE SKIP LOCKED
+            )
+            """.trimIndent(),
+        )
+            .param("tokenHash", tokenHash)
+            .param("expectedCredentialGeneration", expectedCredentialGeneration)
+            .param("fetchedOn", fetchedOn)
             .update() == 1
 
     // 공개 피드 조회는 활성 상태·토큰 해시·현재 구독 세대가 모두 일치해야 한다.

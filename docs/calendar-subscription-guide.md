@@ -86,6 +86,8 @@ BATON 개발 브랜치의 오늘 화면 **내 캘린더에 추가**에서 발급
    설정에서 주입한다. 관리 API를 공개 프록시에 추가하지 않는다.
 4. 아래 요청은 저장소 루트에서 실행한다. 응답 코드와 `APPLIED`를 확인하고 다음 단계로 넘어간다.
    구독 URL·토큰은 보고서·스크린샷·공유 터미널 기록에 남기지 않는다.
+5. 앱 등록 뒤 `GET /internal/api/v1/subscriptions/{subscriptionId}/activity`의 `lastFetchedOn`으로 앱이 피드를
+   가져간 UTC 날짜를 확인한다. 날짜 단위이므로 반영 지연은 앱 화면의 확인 시각으로 기록한다.
 
 ```shell
 curl --fail-with-body --silent --show-error \

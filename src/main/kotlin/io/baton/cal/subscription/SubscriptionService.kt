@@ -8,15 +8,22 @@ import io.baton.cal.persistence.SeasonFeedHeaders
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.projection.SeasonProjectionService
 import io.baton.cal.web.ApiException
+import io.baton.cal.web.SubscriptionActivityResponse
 import io.baton.cal.web.SubscriptionCredential
 import io.baton.cal.web.SubscriptionStatusResponse
 import io.baton.cal.web.conflict
 import io.baton.cal.web.resourceNotFound
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.util.UriComponentsBuilder
 import java.net.URI
+import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Service
@@ -25,17 +32,36 @@ class SubscriptionService(
     private val projectionService: SeasonProjectionService,
     private val tokenCodec: SubscriptionTokenCodec,
     private val properties: CalProperties,
+    private val clock: Clock,
+    meterRegistry: MeterRegistry,
 ) {
+    private val fetchRecordFailures: Counter = Counter.builder("baton.cal.subscription.fetch.record.failures")
+        .description("구독 최근 조회일을 기록하지 못한 공개 피드 조회")
+        .register(meterRegistry)
+
     fun getStatus(subscriptionId: UUID): SubscriptionStatusResponse {
-        val subscription = repository.findById(subscriptionId)
-            ?: throw resourceNotFound("구독을 찾을 수 없습니다")
+        val subscription = findSubscription(subscriptionId)
         return SubscriptionStatusResponse(
             subscriptionId = subscription.id,
             seasonId = subscription.seasonId,
             status = subscription.status,
-            generationMatches = subscription.credentialGeneration == properties.subscriptionGeneration,
+            generationMatches = subscription.generationMatches(),
         )
     }
+
+    /** 이전 구독 세대의 날짜는 백업에서 복원된 기록이므로 현재 세대 자격 증명의 최근 조회일만 보고한다. */
+    fun getActivity(subscriptionId: UUID): SubscriptionActivityResponse {
+        val subscription = findSubscription(subscriptionId)
+        return SubscriptionActivityResponse(
+            subscriptionId = subscription.id,
+            lastFetchedOn = subscription.lastFetchedOn.takeIf { subscription.generationMatches() },
+        )
+    }
+
+    private fun findSubscription(subscriptionId: UUID): CalendarSubscriptionRow =
+        repository.findById(subscriptionId) ?: throw resourceNotFound("구독을 찾을 수 없습니다")
+
+    private fun CalendarSubscriptionRow.generationMatches() = credentialGeneration == properties.subscriptionGeneration
 
     @Transactional
     fun create(seasonId: UUID, subscriptionId: UUID = UUID.randomUUID()): SubscriptionCredential {
@@ -95,17 +121,30 @@ class SubscriptionService(
         if (!repository.revoke(subscriptionId, current.tokenHash)) throw concurrentChange()
     }
 
-    fun findFeed(token: String): SeasonFeedProjectionRow? =
-        repository.findProjectionByActiveTokenHash(
-            tokenCodec.hash(token),
-            properties.subscriptionGeneration,
-        )
+    fun findFeed(token: String): SeasonFeedProjectionRow? {
+        val tokenHash = tokenCodec.hash(token)
+        return repository.findProjectionByActiveTokenHash(tokenHash, properties.subscriptionGeneration)
+            ?.also { recordFetch(tokenHash) }
+    }
 
-    fun findFeedHeaders(token: String): SeasonFeedHeaders? =
-        repository.findProjectionHeadersByActiveTokenHash(
-            tokenCodec.hash(token),
-            properties.subscriptionGeneration,
-        )
+    fun findFeedHeaders(token: String): SeasonFeedHeaders? {
+        val tokenHash = tokenCodec.hash(token)
+        return repository.findProjectionHeadersByActiveTokenHash(tokenHash, properties.subscriptionGeneration)
+            ?.also { recordFetch(tokenHash) }
+    }
+
+    // 최근 조회일은 진단 값이므로 피드 조회와 다른 문장으로 기록하고, 기록하지 못해도 피드는 그대로 응답한다.
+    private fun recordFetch(tokenHash: String) {
+        try {
+            repository.recordFetch(
+                tokenHash,
+                properties.subscriptionGeneration,
+                LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC),
+            )
+        } catch (exception: DataAccessException) {
+            fetchRecordFailures.increment()
+        }
+    }
 
     private fun concurrentChange() = conflict(
         code = "SUBSCRIPTION_CONFLICT",

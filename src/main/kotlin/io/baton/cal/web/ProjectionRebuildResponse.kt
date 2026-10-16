@@ -7,3 +7,8 @@ data class ProjectionRebuildResponse(
     val etag: String,
     val itemCount: Int,
 )
+
+data class ProjectionRebuildAllResponse(
+    val seasonCount: Int,
+    val changedSeasonCount: Int,
+)

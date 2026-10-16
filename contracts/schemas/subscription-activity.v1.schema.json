@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cal.baton/contracts/schemas/subscription-activity.v1.schema.json",
+  "title": "SubscriptionActivityV1",
+  "description": "현재 구독 세대의 자격 증명으로 공개 피드를 마지막으로 조회한 UTC 날짜입니다. 조회 시각, IP와 클라이언트 정보는 기록하지 않습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "subscriptionId",
+    "lastFetchedOn"
+  ],
+  "properties": {
+    "subscriptionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "lastFetchedOn": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date",
+      "description": "발급·회전 뒤 조회 기록이 없거나, 폐기됐거나, 이전 구독 세대의 자격 증명이면 null입니다."
+    }
+  }
+}

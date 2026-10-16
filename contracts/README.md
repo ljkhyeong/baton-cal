@@ -11,6 +11,7 @@
 | `POST /internal/api/v1/schedule-snapshots/batch` | `schemas/schedule-snapshot-batch.v1.schema.json` | `schemas/schedule-snapshot-batch-result.v1.schema.json` | `examples/schedule-snapshot-batch.json`, `examples/schedule-snapshot-batch-result.json` |
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
+| `GET /internal/api/v1/subscriptions/{subscriptionId}/activity` | 본문 없음 | `schemas/subscription-activity.v1.schema.json` | `examples/subscription-activity.*.json` |
 | `GET /internal/api/v1/recovery-runs/{recoveryId}` | 본문 없음 | `schemas/recovery-run-status.v1.schema.json` | `examples/recovery-run-status.*.json` |
 | `GET /internal/api/v1/seasons/{seasonId}/recovery-state` | 본문 없음 | `schemas/recovery-season-state.v1.schema.json` | `examples/recovery-season-state.zoned-cancelled.json` |
 | `PUT /internal/api/v1/seasons/{seasonId}/calendar-metadata` | `schemas/season-calendar-metadata.v1.schema.json` | `schemas/season-calendar-metadata-result.v1.schema.json` | `examples/season-calendar-metadata.*.json`, `examples/season-calendar-metadata-result.json` |
@@ -20,6 +21,7 @@
 | `PUT /internal/api/v1/subscriptions/{subscriptionId}` | `schemas/subscription-create.v1.schema.json` | `schemas/subscription-credential.v1.schema.json` | 같은 생성 예시와 `examples/api-error.subscription-*.json` |
 | `POST /internal/api/v1/subscriptions/{subscriptionId}/rotate` | 본문 없음 | `schemas/subscription-credential.v1.schema.json` | `examples/subscription-credential.json` |
 | `POST /internal/api/v1/projections/seasons/{seasonId}/rebuild` | 본문 없음 | `schemas/projection-rebuild-result.v1.schema.json` | `examples/projection-rebuild-result.json` |
+| `POST /internal/api/v1/projections/rebuild` | 본문 없음 | `schemas/projection-rebuild-all-result.v1.schema.json` | `examples/projection-rebuild-all-result.json` |
 | 내부 오류 | - | `schemas/api-error.v1.schema.json` | `examples/api-error.source-revision-conflict.json`, `examples/api-error.service-busy.json`, `examples/api-error.recovery-in-progress.json` |
 
 `DELETE /internal/api/v1/subscriptions/{subscriptionId}`는 요청/응답 본문이 없고 `204`를
@@ -33,6 +35,11 @@ GET·HEAD의 `200` 응답은 UTF-8 바이트 수를 `Content-Length`로 제공�
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
 반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
 오류는 PRD-0002의 각 경로 계약을 따른다.
+
+구독 최근 조회일은 현재 세대 자격 증명으로 공개 피드를 마지막으로 조회한 UTC 날짜 `lastFetchedOn`을
+반환한다. 조회가 없었거나 회전·폐기 뒤, 또는 이전 세대 구독이면 `null`이다. 날짜만 기록하며 조회 시각·IP·
+클라이언트 정보는 반환하거나 저장하지 않는다. `subscription-status.v1`은 바꾸지 않았으므로 BATON은 필요할 때 이
+경로를 따로 호출한다.
 
 복구 실행 조회는 저장된 `IN_PROGRESS`·`COMPLETED`, 검증한 시즌 수·최초 완료 시각과 현재
 인스턴스의 복구 모드를 반환한다. 시즌 진단은 현재 일정 수·다이제스트와 이름 개정·다이제스트를
@@ -63,6 +70,11 @@ BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `
 개정 번호는 저장하지 않고 현재 값을 반환한다. 현재 개정 번호에 다른 이름을 보내면
 `409 SEASON_METADATA_REVISION_CONFLICT`다. 이름 미수신 시즌은 기존 `BATON season {seasonId}`를
 유지한다. 이름을 받으면 iCal4j로 `X-WR-CALNAME`에 반영하며 일정 UID·SEQUENCE와 토큰은 바꾸지 않는다.
+
+전체 재생성은 투영이 저장된 모든 시즌을 시즌마다 따로 커밋해 다시 만들고 `{seasonCount, changedSeasonCount}`를
+반환한다. iCal4j 직렬화나 내장 시간대 데이터를 바꾼 배포 뒤 운영자가 호출해 일정 수신이 없는 시즌도 새 출력을
+제공하게 하며 BATON의 일정 전달에는 필요하지 않다. 출력이 같은 시즌은 바이트·ETag·Last-Modified를 유지하고,
+실패 뒤 같은 요청을 다시 보내면 남은 시즌을 처리한다.
 
 복구 모드의 시즌 매니페스트는 현재 일정 항목의 수·다이제스트와 선택적인 시즌 이름 개정·
 다이제스트를 대조한다. 전체 완료 요청은 검증한 시즌 수·전체 다이제스트가 현재 CAL 데이터의 시즌
@@ -95,7 +107,7 @@ BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `
 - v1 절대 시각은 명시적 오프셋이 있는 RFC 3339이고 로컬 날짜·시간은 오프셋 없이 보낸다.
   초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
   정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
-- JSON Schema만으로 표현하지 못하는 구간의 `end > start`, NFC, iCal4j 4.3.0에 내장된 Olson
+- JSON Schema만으로 표현하지 못하는 구간의 `end > start`, NFC, iCal4j 4.4.0에 내장된 Olson
   `2025a`의 원본 시간대 식별자,
   항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
   관계는 애플리케이션 검증 대상이다.
@@ -194,8 +206,8 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
 `1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. `1.1.0-rc.2`는 ID 지정 구독 생성, 중복·시즌 충돌
 응답과 고정된 복원 다이제스트 예시를 추가했고 게시·BATON 고정을 마쳤다. 현재 작업 후보 `1.1.0-rc.3`은
-계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명만 정리하며 아직 게시하지 않았다. 기존 안정 기준은
-`1.0.0`이다.
+기존 경로의 계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명을 정리하며 전체 시즌 투영 재생성 경로를
+추가한다. 아직 게시하지 않았다. 기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.
@@ -220,7 +232,7 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
   iCal4j 줄 접기 경계에 놓이는 UTC 활성 항목
 - `golden/season-point-and-all-day.ics.b64`: `DTEND`가 없는 UTC 시점과 `VALUE=DATE`인 종일 날짜 구간
 
-시간대 입력 검증과 `VTIMEZONE` 출력은 모두 iCal4j 4.3.0 내장 Olson `2025a`의 규칙을 따른다.
+시간대 입력 검증과 `VTIMEZONE` 출력은 모두 iCal4j 4.4.0 내장 Olson `2025a`의 규칙을 따른다.
 iCal4j 또는 시간대 데이터를 올려 픽스처 바이트가 바뀌면 자동 갱신하지 않고 변경점과 캘린더
 호환성 영향을 먼저 검토한다.
 
@@ -251,3 +263,6 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 ./gradlew --no-daemon test
 ./gradlew --no-daemon bootJar
 ```
+
+저장된 시즌 피드는 만든 시점의 출력이다. 변경을 모든 인스턴스에 배포한 뒤 PRD-0002의
+`POST /internal/api/v1/projections/rebuild`로 모든 시즌을 다시 만들고 `changedSeasonCount`를 기록한다.
