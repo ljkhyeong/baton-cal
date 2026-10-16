@@ -97,7 +97,7 @@ CAL이 담당한다.
   `503 RECOVERY_IN_PROGRESS`로 차단하고 수신·재구축·폐기·공개 피드·readiness는 유지한다.
   복구 모드는 기존 URL을 무효화하지 않으므로 과거 DB 복원 때의 구독 세대 교체도 반드시 수행한다.
   설정 변경에는 모든 인스턴스의 재시작이 필요하며 자동 해제하지 않는다.
-- 시간대 지정 현지 시각은 iCal4j 4.3.0 내장 Olson `2025a`가 원문 식별자로 제공하는 TZID만
+- 시간대 지정 현지 시각은 iCal4j 4.4.0 내장 Olson `2025a`가 원문 식별자로 제공하는 TZID만
   허용한다. DST 공백도 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 판정해 Java 런타임의 별도 TZDB와
   규칙을 섞지 않는다. iCal4j나 내장 시간대 데이터를 올릴 때는 골든 바이트와 ETag를 검토하고, 배포 뒤
   [전체 재생성](#캘린더-출력-변경-배포)으로 저장된 피드를 바꾼다.
@@ -262,7 +262,7 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - Spring Boot 4.1.1, Spring MVC, `JdbcClient`, Bean Validation
 - Spring Boot Actuator, Micrometer Prometheus
 - PostgreSQL 18.6, Flyway, Testcontainers
-- iCal4j 4.3.0
+- iCal4j 4.4.0
 
 ## 로컬 실행
 

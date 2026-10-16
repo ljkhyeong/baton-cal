@@ -135,7 +135,7 @@ class IcsCalendarRendererTest {
 
         assertThat(rendered.bytes)
             .isEqualTo(goldenIcalendarFixture("season-zoned-midnight-cancellation.ics.b64"))
-        assertThat(timeZone.timeZoneId.value).isEqualTo("America/New_York")
+        assertThat(timeZone.requiredPropertyValue(Property.TZID)).isEqualTo("America/New_York")
         assertThat(timeZone.observances.map { it.name }).contains("DAYLIGHT", "STANDARD")
         assertThat(event.requiredPropertyValue(Property.UID))
             .isEqualTo("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@cal.baton")

@@ -41,7 +41,7 @@ HTTPS를 선택할 수 있도록 준비했다. [API·웹훅 실행 입력](integ
 반영하며 발급·갱신 도구와 실제 Secret 마운트는 운영에서 연결한다. [인증서 갱신 반영](integration-runtime.md#인증서-갱신-반영)
 
 버전 확인은 [기존 Dependabot 설정](../.github/dependabot.yml)을 사용한다. 원격 작업의 실행 상태나
-자동 병합을 이번 검토에서 확인·변경하지 않았다. 고정한 iCal4j 4.3.0의 시간대 외부 갱신은 기본값이
+자동 병합을 이번 검토에서 확인·변경하지 않았다. 고정한 iCal4j 4.4.0의 시간대 외부 갱신은 기본값이
 `false`이며 프로젝트에서도 활성화하지 않는다. 자동 갱신으로 같은 일정의 캘린더 바이트·ETag가 달라지는
 것을 피하고, 시간대 데이터 변경은 기존 라이브러리 갱신·회귀 검증 절차로 처리한다.
 
@@ -111,7 +111,7 @@ Google의 공식 URL 등록 화면과 앱별 공식 페이지를 새 탭으로 �
 ## 공식 근거
 
 - [GitHub: Dependabot 버전 확인과 PR](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates)
-- [iCal4j 4.3.0: 시간대 외부 갱신 기본값과 처리](https://github.com/ical4j/ical4j/blob/ical4j-4.3.0/src/main/java/net/fortuna/ical4j/model/TimeZoneUpdater.java)
+- [iCal4j 4.4.0: 시간대 외부 갱신 기본값과 처리](https://github.com/ical4j/ical4j/blob/ical4j-4.4.0/src/main/java/net/fortuna/ical4j/model/TimeZoneUpdater.java)
 - [Spring Boot: Secret 파일 설정](https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.files.configtree)
 - [Kubernetes: Secret 파일 마운트](https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod)
 - [Healthchecks.io: 무료 플랜](https://healthchecks.io/pricing/)

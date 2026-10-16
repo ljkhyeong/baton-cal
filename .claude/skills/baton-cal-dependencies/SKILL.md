@@ -49,8 +49,10 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 - 의도한 호환성 변화만 `contracts/golden/*.ics.b64`에 반영하고 전체 테스트와 `bootJar`를 확인한다.
 - 저장된 피드는 배포 전 출력으로 남는다. 운영 배포 뒤 README의 `캘린더 출력 변경 배포` 절차로 전체 재생성을
   실행하도록 PR·인수인계에 적는다. 내장 데이터가 같은지는 JAR의 `zoneinfo/**/*.ics`를 비교해 확인한다.
-- iCal4j 버전이나 내장 Olson 데이터가 바뀌면 PRD-0002·ADR-0002·`contracts/README.md`·README의
-  `iCal4j 4.3.0`·`2025a` 표기를 함께 고치고 baton-cal-contract-release에 따라 새 계약 후보를 만든다.
+- iCal4j 버전이나 내장 Olson 데이터가 바뀌면 `rg -n 'iCal4j [0-9]'`로 찾은 현재 버전·`2025a` 표기를
+  함께 고치고 baton-cal-contract-release에 따라 새 계약 후보를 만든다. 과거 릴리스 노트·검토의 표기는 바꾸지 않는다.
+- 새 버전도 시간대 외부 갱신(`net.fortuna.ical4j.timezone.update.enabled`) 기본값이 꺼져 있는지 소스나
+  `javap`로 확인한다. 켜지면 실행 중 외부 호출과 캘린더 바이트 변동이 생긴다.
 
 ## Dependabot PR
 

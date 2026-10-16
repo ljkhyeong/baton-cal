@@ -101,7 +101,7 @@ BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `
 - v1 절대 시각은 명시적 오프셋이 있는 RFC 3339이고 로컬 날짜·시간은 오프셋 없이 보낸다.
   초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
   정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
-- JSON Schema만으로 표현하지 못하는 구간의 `end > start`, NFC, iCal4j 4.3.0에 내장된 Olson
+- JSON Schema만으로 표현하지 못하는 구간의 `end > start`, NFC, iCal4j 4.4.0에 내장된 Olson
   `2025a`의 원본 시간대 식별자,
   항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
   관계는 애플리케이션 검증 대상이다.
@@ -226,7 +226,7 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
   iCal4j 줄 접기 경계에 놓이는 UTC 활성 항목
 - `golden/season-point-and-all-day.ics.b64`: `DTEND`가 없는 UTC 시점과 `VALUE=DATE`인 종일 날짜 구간
 
-시간대 입력 검증과 `VTIMEZONE` 출력은 모두 iCal4j 4.3.0 내장 Olson `2025a`의 규칙을 따른다.
+시간대 입력 검증과 `VTIMEZONE` 출력은 모두 iCal4j 4.4.0 내장 Olson `2025a`의 규칙을 따른다.
 iCal4j 또는 시간대 데이터를 올려 픽스처 바이트가 바뀌면 자동 갱신하지 않고 변경점과 캘린더
 호환성 영향을 먼저 검토한다.
 

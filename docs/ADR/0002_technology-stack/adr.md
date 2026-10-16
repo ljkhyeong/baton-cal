@@ -129,10 +129,10 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 
 ### iCalendar
 
-- iCal4j 4.3.0의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
+- iCal4j 4.4.0의 `Calendar`, `PropertyList`, `ComponentList`, `VEvent`와 속성 타입으로
   캘린더 모델을 만들고 `CalendarOutputter`로 TEXT 이스케이프, DATE-TIME, UTF-8, CRLF와 마지막
   CRLF를 직렬화한다. 생성 결과를 다시 파싱하는 실행 중 검증은 하지 않는다.
-- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.3.0의
+- CAL은 속성과 컴포넌트를 정렬된 목록으로 전달해 UID와 출력 순서를 결정한다. iCal4j 4.4.0의
   줄 접기는 UTF-8 옥텟이 아니라 UTF-16 문자를 세므로 줄 접기 길이를 25로 고정해 연속 줄
   공백을 포함한 모든 물리 줄이 75 옥텟 이하가 되게 한다.
 - iCal4j `TimeZoneRegistryFactory`가 만든 레지스트리에서 사용하는 TZID의 전체 `VTIMEZONE`을

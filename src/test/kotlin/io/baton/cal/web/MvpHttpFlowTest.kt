@@ -152,7 +152,7 @@ class MvpHttpFlowTest @Autowired constructor(
         }
         assertThat(sourceEvent.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("2")
         assertThat(sourceEvent.requiredPropertyValue(Property.STATUS)).isEqualTo("CANCELLED")
-        assertThat(firstCalendar.timeZones().map { it.timeZoneId.value })
+        assertThat(firstCalendar.timeZones().map { it.requiredPropertyValue(Property.TZID) })
             .contains("America/New_York")
 
         val originalEtag = checkNotNull(firstFeed.response.getHeader(HttpHeaders.ETAG))
