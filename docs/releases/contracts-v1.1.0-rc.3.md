@@ -26,10 +26,8 @@
 배포 뒤 호출하며 BATON의 일정 전달에는 필요하지 않다. 최근 조회일 경로는 BATON이 구독 화면에 표시하려 할 때만
 이 후보를 고정해 호출한다. 기존 경로의 계약 의미가 같으므로 BATON이 고정 버전을 올릴지는 다음 안정 승격과 함께 정한다.
 
-CAL의 `calendar_subscription`에 `last_fetched_on` 열을 추가하려고 운영 전 V1을 다시 고쳤다. 기존 V1을 적용한
-로컬·테스트 DB는 Flyway 검증에서 실패하므로 다시 만든다.
-
-CAL 쪽에서는 기존 V1~V8을 적용한 DB가 Flyway 검증에서 실패한다. 운영 DB가 없으므로 로컬·테스트 DB만 다시 만든다.
+CAL 쪽에서는 기존 V1~V8이나 `calendar_subscription.last_fetched_on` 추가 전 V1을 적용한 DB가 Flyway 검증에서
+실패한다. 운영 DB가 없으므로 로컬·테스트 DB만 다시 만든다.
 
 ## 적용 순서
 
