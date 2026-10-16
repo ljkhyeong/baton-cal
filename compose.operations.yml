@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   gateway:
-    image: nginx:1.31.4-alpine-slim@sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9
+    image: nginx:1.31.6-alpine-slim@sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7
     environment:
       CAL_REQUEST_RATE: ${CAL_REQUEST_RATE:-10r/s}
       CAL_REQUEST_BURST: ${CAL_REQUEST_BURST:-20}
@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v3.13.1-distroless@sha256:214f8427c8fba80c327bb94a75feb802ae12f2d6ca30812aa6e7d22f09bbea80
+    image: prom/prometheus:v3.15.0-distroless@sha256:b2a413d5a03ea6a76782a508d1c7947440bba3b973931a25676e278431891b01
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
@@ -66,7 +66,7 @@ services:
     restart: unless-stopped
 
   alertmanager:
-    image: prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
     command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
     volumes:
       - ${CAL_ALERTMANAGER_CONFIG_FILE:-./operations/alertmanager/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro

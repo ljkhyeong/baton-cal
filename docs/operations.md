@@ -318,14 +318,14 @@ API를 사용한다. 채널별 단독·Healthchecks 조합에서 메시지 형�
 `503`으로 거부하고 이후 수신을 확인한다. 성공한 메시지만 수신 건수에 포함해 재전송 시도를 성공으로
 잘못 세거나 같은 메시지의 중복 수신을 놓치지 않는다.
 
-고정한 Alertmanager `v0.32.1`의 Slack·Discord·일반 웹훅 전송기는 통신 오류와 `5xx`를 재시도 대상으로
+고정한 Alertmanager `v0.34.1`의 Slack·Discord·일반 웹훅 전송기는 통신 오류와 `5xx`를 재시도 대상으로
 분류한다. `429`는 해당 전송 시도를 실패로 끝내므로 같은 재시도 정책으로 취급하지 않는다.
 스모크는 이후 알림 전송에서 수신이 재개되는 것까지 확인한다. 제공자의 `Retry-After` 대기 시간을
 그대로 적용하는지는 이 검증에 포함하지 않는다.
-[기본 재시도 판정](https://github.com/prometheus/alertmanager/blob/v0.32.1/notify/util.go),
-[Slack](https://github.com/prometheus/alertmanager/blob/v0.32.1/notify/slack/slack.go),
-[Discord](https://github.com/prometheus/alertmanager/blob/v0.32.1/notify/discord/discord.go),
-[일반 웹훅](https://github.com/prometheus/alertmanager/blob/v0.32.1/notify/webhook/webhook.go)
+[기본 재시도 판정](https://github.com/prometheus/alertmanager/blob/v0.34.1/notify/util.go),
+[Slack](https://github.com/prometheus/alertmanager/blob/v0.34.1/notify/slack/slack.go),
+[Discord](https://github.com/prometheus/alertmanager/blob/v0.34.1/notify/discord/discord.go),
+[일반 웹훅](https://github.com/prometheus/alertmanager/blob/v0.34.1/notify/webhook/webhook.go)
 
 운영 스모크는 Healthchecks 연결 설정과 모의 API도 사용한다. 외부 서비스의 누락 판정·실제 알림 도착은
 계정 연결 후 확인해야 하며, 로컬 검증 결과에 포함하지 않는다.
