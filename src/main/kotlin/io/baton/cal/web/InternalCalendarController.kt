@@ -65,6 +65,11 @@ class InternalCalendarController(
         @PathVariable subscriptionId: UUID,
     ) = subscriptionService.getStatus(subscriptionId)
 
+    @GetMapping("/subscriptions/{subscriptionId}/activity")
+    fun getSubscriptionActivity(
+        @PathVariable subscriptionId: UUID,
+    ) = subscriptionService.getActivity(subscriptionId)
+
     @PutMapping("/seasons/{seasonId}/calendar-metadata")
     fun updateSeasonCalendarMetadata(
         @PathVariable seasonId: UUID,

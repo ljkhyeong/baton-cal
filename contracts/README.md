@@ -11,6 +11,7 @@
 | `POST /internal/api/v1/schedule-snapshots/batch` | `schemas/schedule-snapshot-batch.v1.schema.json` | `schemas/schedule-snapshot-batch-result.v1.schema.json` | `examples/schedule-snapshot-batch.json`, `examples/schedule-snapshot-batch-result.json` |
 | `GET /internal/api/v1/calendar-items/{sourceItemId}` | 본문 없음 | `schemas/calendar-item-status.v1.schema.json` | `examples/calendar-item-status.cancelled.json` |
 | `GET /internal/api/v1/subscriptions/{subscriptionId}` | 본문 없음 | `schemas/subscription-status.v1.schema.json` | `examples/subscription-status.generation-mismatch.json` |
+| `GET /internal/api/v1/subscriptions/{subscriptionId}/activity` | 본문 없음 | `schemas/subscription-activity.v1.schema.json` | `examples/subscription-activity.*.json` |
 | `GET /internal/api/v1/recovery-runs/{recoveryId}` | 본문 없음 | `schemas/recovery-run-status.v1.schema.json` | `examples/recovery-run-status.*.json` |
 | `GET /internal/api/v1/seasons/{seasonId}/recovery-state` | 본문 없음 | `schemas/recovery-season-state.v1.schema.json` | `examples/recovery-season-state.zoned-cancelled.json` |
 | `PUT /internal/api/v1/seasons/{seasonId}/calendar-metadata` | `schemas/season-calendar-metadata.v1.schema.json` | `schemas/season-calendar-metadata-result.v1.schema.json` | `examples/season-calendar-metadata.*.json`, `examples/season-calendar-metadata-result.json` |
@@ -34,6 +35,11 @@ GET·HEAD의 `200` 응답은 UTF-8 바이트 수를 `Content-Length`로 제공�
 반환한다. 취소 일정·폐기 구독·세대 불일치 구독도 조회할 수 있다. 토큰·해시·피드 URL·세대 UUID는
 반환하지 않으며 전체 재전달 완료를 증명하거나 유실된 자격 증명을 복구하지 않는다. 세부 의미와
 오류는 PRD-0002의 각 경로 계약을 따른다.
+
+구독 최근 조회일은 현재 세대 자격 증명으로 공개 피드를 마지막으로 조회한 UTC 날짜 `lastFetchedOn`을
+반환한다. 조회가 없었거나 회전·폐기 뒤, 또는 이전 세대 구독이면 `null`이다. 날짜만 기록하며 조회 시각·IP·
+클라이언트 정보는 반환하거나 저장하지 않는다. `subscription-status.v1`은 바꾸지 않았으므로 BATON은 필요할 때 이
+경로를 따로 호출한다.
 
 복구 실행 조회는 저장된 `IN_PROGRESS`·`COMPLETED`, 검증한 시즌 수·최초 완료 시각과 현재
 인스턴스의 복구 모드를 반환한다. 시즌 진단은 현재 일정 수·다이제스트와 이름 개정·다이제스트를

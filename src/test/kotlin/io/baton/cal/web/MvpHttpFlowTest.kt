@@ -215,6 +215,7 @@ class MvpHttpFlowTest @Autowired constructor(
         listOf(
             authorizedGet("/internal/api/v1/calendar-items/1-1-1-1-1"),
             authorizedGet("/internal/api/v1/subscriptions/1-1-1-1-1"),
+            authorizedGet("/internal/api/v1/subscriptions/1-1-1-1-1/activity"),
             authorizedPost("/internal/api/v1/subscriptions/1-1-1-1-1/rotate"),
             authorizedPut("/internal/api/v1/subscriptions/1-1-1-1-1").jsonContent("""{"seasonId":"$SEASON_ID"}"""),
             authorizedDelete("/internal/api/v1/subscriptions/1-1-1-1-1"),

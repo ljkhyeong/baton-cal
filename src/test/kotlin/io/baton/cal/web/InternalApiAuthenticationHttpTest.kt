@@ -36,6 +36,7 @@ class InternalApiAuthenticationHttpTest @Autowired constructor(
             get("/internal/api/v1/calendar-items/{sourceItemId}", ID),
             post("/internal/api/v1/subscriptions"),
             get("/internal/api/v1/subscriptions/{subscriptionId}", ID),
+            get("/internal/api/v1/subscriptions/{subscriptionId}/activity", ID),
             put("/internal/api/v1/subscriptions/{subscriptionId}", ID),
             post("/internal/api/v1/subscriptions/{subscriptionId}/rotate", ID),
             delete("/internal/api/v1/subscriptions/{subscriptionId}", ID),

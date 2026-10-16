@@ -72,12 +72,14 @@ CREATE TABLE season_feed_projection (
 );
 
 -- 구독은 시즌 투영을 만든 뒤에만 추가되므로 투영 없는 구독을 DB가 막는다.
+-- last_fetched_on은 현재 자격 증명으로 공개 피드를 마지막으로 조회한 UTC 날짜이며 회전·폐기 때 비운다.
 CREATE TABLE calendar_subscription (
     id UUID PRIMARY KEY,
     season_id UUID NOT NULL,
     token_hash CHAR(64) NOT NULL UNIQUE,
     credential_generation UUID NOT NULL,
     status VARCHAR(16) NOT NULL,
+    last_fetched_on DATE,
     CONSTRAINT ck_calendar_subscription_token_hash
         CHECK (token_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT ck_calendar_subscription_status

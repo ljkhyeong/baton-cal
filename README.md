@@ -40,6 +40,7 @@ CAL이 담당한다.
 
 - 작업공간 키, 계정 세션, ROUND 권한 증서와 제공자 자격 증명을 캘린더 URL에 넣지 않는다.
 - 구독 토큰 원문은 저장하지 않고 로그나 메트릭 레이블에 남기지 않는다.
+- 공개 조회는 구독별 최근 조회일(UTC 날짜)만 남기고 조회 시각·IP·경로·클라이언트 정보는 기록하지 않는다.
 - 캘린더 설명에는 최소 정보와 권한이 필요 없는 위치 식별자만 포함한다.
 - 캘린더 클라이언트의 조회는 BATON의 권한 판단을 우회하지 않는다.
 
@@ -206,6 +207,9 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 
 - `GET /internal/api/v1/calendar-items/{sourceItemId}`: CAL이 채택한 개정 번호, 일정 상태와 원본 수정 시각.
 - `GET /internal/api/v1/subscriptions/{subscriptionId}`: 구독 상태와 현재 인스턴스의 구독 세대 일치 여부.
+- `GET /internal/api/v1/subscriptions/{subscriptionId}/activity`: 현재 세대 자격 증명으로 공개 피드를 마지막으로
+  조회한 UTC 날짜. 공개 GET·HEAD·`304`마다 하루 한 번 앞으로만 기록하고 회전·폐기 때 비운다. 조회 시각·IP·
+  클라이언트 정보는 저장하지 않으며 기록 실패는 `baton.cal.subscription.fetch.record.failures`로 센다.
 - `GET /internal/api/v1/recovery-runs/{recoveryId}`: 저장된 진행·완료 상태, 검증한 시즌 수, 최초 완료
   시각과 이 인스턴스의 복구 모드. 완료 기록은 이후 원본 변경에도 유지한다.
 - `GET /internal/api/v1/seasons/{seasonId}/recovery-state`: 현재 일정 수·다이제스트와 이름 개정·
