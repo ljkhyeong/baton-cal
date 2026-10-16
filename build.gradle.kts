@@ -54,8 +54,8 @@ abstract class VerifyContractsZip : DefaultTask() {
 }
 
 plugins {
-    kotlin("jvm") version "2.4.10"
-    kotlin("plugin.spring") version "2.4.10"
+    kotlin("jvm") version "2.4.20"
+    kotlin("plugin.spring") version "2.4.20"
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -94,8 +94,8 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-    testImplementation("com.tngtech.archunit:archunit:1.5.0")
-    testImplementation("com.networknt:json-schema-validator:3.0.6") {
+    testImplementation("com.tngtech.archunit:archunit:1.5.1")
+    testImplementation("com.networknt:json-schema-validator:3.0.8") {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
     testImplementation("io.micrometer:micrometer-observation-test")

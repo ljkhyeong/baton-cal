@@ -22,7 +22,7 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 애플리케이션 실행 환경
 
-- Kotlin/JVM 2.4.10과 Gradle 9.7.1 Kotlin DSL을 쓴다.
+- Kotlin/JVM 2.4.20과 Gradle 9.8.0 Kotlin DSL을 쓴다.
 - 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수, UUID 문자열 파싱과 파일 편의 기능에는
   Kotlin 표준 라이브러리를 우선한다. 시간, 암호화, URI와 네트워크 등 필요한 JVM 기능은 JDK API를
   사용한다. JDBC·Spring에 전달하는 UUID는 `java.util.UUID` 타입을 유지한다.
@@ -316,7 +316,7 @@ Healthchecks.io의 무료 점검에 연결해 확인할 수 있다. 송신 타�
 ### 검증 전략
 
 - 현재 기본 구성은 Kotlin/JUnit Platform, Spring MVC 테스트와 Testcontainers PostgreSQL을 쓴다.
-- Draft 2020-12 계약 산출물은 테스트 범위의 NetworkNT JSON Schema Validator 3.0.6으로 검증한다.
+- Draft 2020-12 계약 산출물은 테스트 범위의 NetworkNT JSON Schema Validator 3.0.8로 검증한다.
   이는 Jackson 3을 공유하지만 런타임 요청 검증에는 넣지 않는다.
 - PostgreSQL 트랜잭션, 고유성, 중복/구버전/충돌, 회전과 재구축은 실제
   PostgreSQL 통합 테스트로 검증한다.
