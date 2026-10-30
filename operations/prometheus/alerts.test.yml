@@ -106,7 +106,7 @@ tests:
   - interval: 1m
     input_series:
       - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots",status="409"}'
-        values: '0 0 1+0x25'
+        values: '_ _ 1+0x25'
       - series: 'http_server_requests_seconds_count{job="baton-cal",method="PUT",uri="/internal/api/v1/subscriptions/{subscriptionId}",status="409"}'
         values: '0+1x27'
       - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots/batch",status="200"}'
@@ -119,12 +119,12 @@ tests:
           - exp_labels: {severity: warning}
             exp_annotations:
               summary: CAL 일정·시즌 이름 수신 거부
-              description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+              description: BATON이 보낸 일정이나 시즌 이름이 4xx로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
       - {eval_time: 20m, alertname: CalIngestionRejected, exp_alerts: []}
   - interval: 1m
     input_series:
-      - series: 'http_server_requests_seconds_count{job="baton-cal",method="PUT",uri="/internal/api/v1/seasons/{seasonId}/calendar-metadata",status="400"}'
-        values: '0 1+0x5'
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="PUT",uri="/internal/api/v1/seasons/{seasonId}/calendar-metadata",status="415"}'
+        values: '_ 1+0x5'
     alert_rule_test:
       - eval_time: 2m
         alertname: CalIngestionRejected
@@ -132,4 +132,93 @@ tests:
           - exp_labels: {severity: warning}
             exp_annotations:
               summary: CAL 일정·시즌 이름 수신 거부
-              description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+              description: BATON이 보낸 일정이나 시즌 이름이 4xx로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+  - interval: 1m
+    input_series:
+      - series: 'baton_cal_subscription_fetch_record_failures_total{job="baton-cal",instance="app:8081"}'
+        values: '0+1x20 20+0x30'
+    alert_rule_test:
+      - {eval_time: 6m, alertname: CalSubscriptionFetchRecordFailed, exp_alerts: []}
+      - eval_time: 12m
+        alertname: CalSubscriptionFetchRecordFailed
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: CAL 구독 최근 조회일 기록 실패 반복
+              description: 피드는 응답하지만 구독 최근 조회일을 저장하지 못하고 있습니다. PostgreSQL 쓰기 가능 여부와 연결 상태를 확인합니다.
+      - {eval_time: 45m, alertname: CalSubscriptionFetchRecordFailed, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      # 일시적인 실패는 다음 조회가 다시 기록하므로 알리지 않는다.
+      - series: 'baton_cal_subscription_fetch_record_failures_total{job="baton-cal",instance="app:8081"}'
+        values: '0 1 2+0x30'
+    alert_rule_test:
+      - {eval_time: 12m, alertname: CalSubscriptionFetchRecordFailed, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      # 수집이 끊겼다 이어져도 누적값 복귀를 새 거부로 보지 않는다.
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots",status="409"}'
+        values: '7+0x30 _x3 7+0x30'
+    alert_rule_test:
+      - {eval_time: 34m, alertname: CalIngestionRejected, exp_alerts: []}
+      - {eval_time: 40m, alertname: CalIngestionRejected, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'up{job="baton-cal",instance="app:8081"}'
+        values: '0+0x2 1+0x2'
+    alert_rule_test:
+      - {eval_time: 0m, alertname: CalMetricsUnavailable, exp_alerts: []}
+      - eval_time: 2m
+        alertname: CalMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {job: baton-cal, instance: "app:8081", severity: critical}
+            exp_annotations:
+              summary: CAL 메트릭 수집 실패
+              description: 애플리케이션과 관리 포트의 연결 상태를 확인합니다.
+      - {eval_time: 4m, alertname: CalMetricsUnavailable, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="baton-cal-readiness",instance="app:8081"}'
+        values: '0+0x2 1+0x2'
+    alert_rule_test:
+      - {eval_time: 0m, alertname: CalReadinessFailed, exp_alerts: []}
+      - eval_time: 2m
+        alertname: CalReadinessFailed
+        exp_alerts:
+          - exp_labels: {job: baton-cal-readiness, instance: "app:8081", severity: critical}
+            exp_annotations:
+              summary: CAL 준비 상태 확인 실패
+              description: CAL과 PostgreSQL 상태를 확인합니다. 복구 모드는 별도 조회합니다.
+      - {eval_time: 4m, alertname: CalReadinessFailed, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="POST",uri="/internal/api/v1/schedule-snapshots",status="503"}'
+        values: '0+2x6 12+0x15'
+      - series: 'http_server_requests_seconds_count{job="baton-cal",method="GET",uri="/calendars/v1/{token}.ics",status="200"}'
+        values: '0+50x21'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: CalHttpServerErrors, exp_alerts: []}
+      - eval_time: 5m
+        alertname: CalHttpServerErrors
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: CAL 서버 오류 증가
+              description: 최근 5분 동안 5xx가 5회 이상 발생했습니다. 잠금과 DB 상태를 함께 확인합니다.
+      - {eval_time: 20m, alertname: CalHttpServerErrors, exp_alerts: []}
+  - interval: 1m
+    input_series:
+      - series: 'baton_cal_projection_lock_acquire_seconds_sum{job="baton-cal",instance="app:8081"}'
+        values: '0+120x10 1200+6x10'
+      - series: 'baton_cal_projection_lock_acquire_seconds_count{job="baton-cal",instance="app:8081"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: CalProjectionLockSlow, exp_alerts: []}
+      - eval_time: 8m
+        alertname: CalProjectionLockSlow
+        exp_alerts:
+          - exp_labels: {job: baton-cal, instance: "app:8081", severity: warning}
+            exp_annotations:
+              summary: CAL 시즌 잠금 획득 지연
+              description: 최근 5분 평균 잠금 획득 시간이 1초를 넘었습니다. 시즌별 동시 수신량을 확인합니다.
+      - {eval_time: 20m, alertname: CalProjectionLockSlow, exp_alerts: []}
