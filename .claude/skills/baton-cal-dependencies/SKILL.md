@@ -43,7 +43,7 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 | JSON Schema 검증기 | `contract.ContractArtifactsTest`의 `format` 평가와 거부 사례 |
 | Flyway·PostgreSQL 드라이버·Testcontainers | `persistence.PersistenceRepositoryTest` |
 | ArchUnit | `architectureTest` |
-| Spring Boot 이미지 빌더 | `bootBuildImage` 후 `./scripts/smoke-oci-image.sh <이미지>` |
+| Spring Boot 이미지 빌더(`operations/buildpack/Dockerfile`의 태그·digest) | `bootBuildImage` 후 `./scripts/smoke-oci-image.sh <이미지>`. digest는 amd64·arm64를 담은 목록인지 `docker buildx imagetools inspect`로 확인한다 |
 
 ## 골든과 시간대
 

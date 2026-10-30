@@ -363,8 +363,10 @@ BATON `7a064bcd`에 버전·해시를 고정했다. 클라이언트 29개·실�
 ## OCI 이미지 검증
 
 운영 전달 단위는 Spring Boot의 `bootBuildImage`가 Cloud Native Buildpacks로 만드는 OCI 이미지다.
-Spring Boot가 프로젝트의 Java 25 대상 버전을 기본 builder에 전달하고 프로젝트명·버전으로 이미지
-이름을 정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. 로컬 검증 이미지는 다음처럼 만든다.
+Spring Boot가 프로젝트의 Java 25 대상 버전을 builder에 전달하고 프로젝트명·버전으로 이미지 이름을
+정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. builder는 `operations/buildpack/Dockerfile`의
+`FROM` 줄에 태그와 digest로 고정한다. 이 파일로 이미지를 빌드하지는 않으며 Dependabot이 고정값을 갱신한다.
+로컬 검증 이미지는 다음처럼 만든다.
 
 ```shell
 ./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke

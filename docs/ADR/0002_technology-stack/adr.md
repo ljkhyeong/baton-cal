@@ -179,10 +179,15 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 별도 Gradle 모듈은 실제 결합도나 빌드 필요가 확인될 때 ADR로 결정한다.
 
 운영 전달 단위는 Spring Boot Gradle 플러그인의 `bootBuildImage`가 Cloud Native Buildpacks로 만드는
-OCI 이미지다. Spring Boot가 Java 대상 버전을 기본 Paketo builder에 전달하고 프로젝트명·버전으로
+OCI 이미지다. Spring Boot가 Java 대상 버전을 Paketo builder에 전달하고 프로젝트명·버전으로
 이미지 이름을 정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. builder metadata가 호환
 run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpack으로 실행 계약을 만족할 수
 없을 때만 새 결정으로 도입한다.
+
+builder는 기본값 `latest` 대신 `operations/buildpack/Dockerfile`의 `FROM` 줄에 태그와 다중 아키텍처
+digest로 고정한다. 2026-10-24에 `latest`가 arm64 단일 이미지를 가리켜 x86 러너의 `bootBuildImage`가
+`exec format error`로 실패했고, 다른 공급 입력은 모두 해시로 고정돼 있기 때문이다. 이 파일은 이미지를
+빌드하지 않고 Dependabot `docker` 생태계가 갱신할 고정값만 담으며 `build.gradle.kts`가 `FROM` 줄을 읽는다.
 
 이미지 레지스트리는 GitHub Container Registry를 사용한다. GitHub Actions는 풀 리퀘스트에서 이미지를
 로컬 검증만 하고, `main` 푸시에서 스모크를 통과한 같은 이미지를
@@ -408,8 +413,8 @@ Healthchecks.io의 무료 점검에 연결해 확인할 수 있다. 송신 타�
 - 고정된 iCal4j 시간대 데이터나 직렬화기를 올릴 때 캘린더 바이트와 ETag가 바뀌는지 검토하고, 배포 뒤
   전체 재생성을 실행해야 한다. 바뀐 시즌은 캘린더 앱이 다음 조회에서 전체 피드를 다시 받는다.
 - 동기식 재구축이 커지는 시점에는 작업 상태와 일괄 처리 전략을 새 계약으로 도입해야 한다.
-- builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고 공급 이미지 갱신을 별도로
-  검토해야 한다.
+- builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고, 고정한 builder는 Dependabot PR을
+  병합해야 JRE·OS 패치가 반영된다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤
   버전이 일치하는 태그와 검증 가능한 GitHub 릴리스 자산을 별도로 운영해야 한다.
 - CAL은 복구 매니페스트로 BATON이 제시한 최신 상태와 저장 상태의 일치를 확인한다. BATON 원본의

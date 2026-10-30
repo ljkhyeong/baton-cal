@@ -1,3 +1,4 @@
+import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
 import java.util.zip.ZipFile
 
 abstract class VerifyContractsZip : DefaultTask() {
@@ -150,6 +151,19 @@ tasks.register<Test>("ingestionLoadTest") {
     systemProperty("baton.cal.load.item-count", providers.gradleProperty("loadItemCount").getOrElse("1000"))
     systemProperty("baton.cal.load.batch-size", providers.gradleProperty("loadBatchSize").getOrElse("1"))
     shouldRunAfter(tasks.test)
+}
+
+// 빌더의 latest는 배포 중 한 아키텍처만 가리킬 수 있어 태그와 digest로 고정한다. Dependabot이 이 파일을 갱신한다.
+val buildpackBuilder = providers
+    .fileContents(layout.projectDirectory.file("operations/buildpack/Dockerfile"))
+    .asText
+    .map { dockerfile ->
+        val pinned = Regex("""^FROM (\S+:\S+@sha256:[0-9a-f]{64})$""", RegexOption.MULTILINE).find(dockerfile)
+        checkNotNull(pinned) { "operations/buildpack/Dockerfile의 FROM 줄을 태그와 digest로 고정해야 합니다." }.groupValues[1]
+    }
+
+tasks.named<BootBuildImage>("bootBuildImage") {
+    builder.set(buildpackBuilder)
 }
 
 val contractsVersion = providers
