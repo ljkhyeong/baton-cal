@@ -34,9 +34,11 @@ description: BATON CAL의 Compose, Nginx 공개 프록시, Prometheus·Alertmana
 
 ## 변경 원칙
 
-- 구독 토큰·내부 Bearer·웹훅 URL·DB 비밀번호를 Compose·Git·명령 인수·로그·메트릭 라벨에 넣지 않는다.
-  비밀값은 파일 경로(`*_FILE`)나 Spring Boot `configtree`로 전달한다.
-- 공개 프록시는 내부 API·관리 경로를 `404`로 막고 공개 피드만 전달한다. 규칙을 바꾸면 스모크의 차단 검사도 함께 확인한다.
+- 구독 토큰·내부 Bearer·웹훅 URL·DB 비밀번호를 Compose 정의·Git·명령 인수·로그·메트릭 라벨에 넣지 않는다.
+  Compose는 실행 환경 변수로 받아 정의에 값을 남기지 않고, 웹훅은 파일 경로(`*_FILE`), k3s는 Spring Boot `configtree`로
+  전달한다. 수동 호출은 curl `--config`로 헤더를 넘긴다.
+- 공개 프록시는 내부 API·관리 경로를 `404`로 막고 토큰 형식의 공개 피드 경로만 전달한다. Nginx `$uri`는 디코딩된 값이므로
+  허용 목록을 넓히거나 다른 변수를 쓰면 스모크의 인코딩 공격 검사와 `\z` 끝 고정을 함께 확인한다.
 - 재시도·알림 형식·인증서 갱신은 Alertmanager·Spring Boot SSL bundle 같은 기존 도구 기능을 먼저 사용하고
   제품 코드를 추가하지 않는다.
 - 외부 이미지는 버전 태그와 `@sha256` digest로 고정하고, CAL 이미지는 커밋 SHA나 digest로 지정한다.
@@ -50,7 +52,7 @@ description: BATON CAL의 Compose, Nginx 공개 프록시, Prometheus·Alertmana
 | Nginx·Prometheus·Alertmanager·Blackbox·Compose | `./gradlew --no-daemon bootBuildImage --imageName=baton-cal:smoke` 후 `./scripts/smoke-operations.sh baton-cal:smoke` |
 | Alertmanager 채널 조합·모의 수신기 | `bash scripts/smoke-alert-channels.sh` |
 | 이미지·런타임 설정 | `./scripts/smoke-oci-image.sh <이미지>` |
-| `tls`·`prod` 프로필 | `./gradlew --no-daemon test --tests 'io.baton.cal.config.TlsHttpIntegrationTest' --tests 'io.baton.cal.config.ProductionDatasourceConfigurationTest'` |
+| `tls`·`prod` 프로필 | `./gradlew --no-daemon test --tests 'io.baton.cal.config.TlsHttpIntegrationTest' --tests 'io.baton.cal.config.ProductionProfileConfigurationTest'` |
 
 `smoke-operations.sh`는 `promtool check config`·`promtool test rules`·`amtool check-config`·`nginx -t`를 포함한다.
 제품 코드·의존성이 같으면 기존 이미지를 재사용하고 근거를 기록한다. Docker 검증 전에 `docker ps`로 다른 실행과

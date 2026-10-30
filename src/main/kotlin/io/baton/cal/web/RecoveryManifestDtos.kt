@@ -1,5 +1,6 @@
 package io.baton.cal.web
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.baton.cal.recovery.RecoverySeasonState
 import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Min
@@ -22,8 +23,10 @@ data class RecoverySeasonManifestRequest(
     val itemCount: Int,
     @field:Pattern(regexp = SHA256_HEX)
     val itemDigest: String,
+    @param:JsonProperty(required = true)
     @field:Min(0)
     val metadataRevision: Int?,
+    @param:JsonProperty(required = true)
     @field:Pattern(regexp = SHA256_HEX)
     val metadataDigest: String?,
 ) {

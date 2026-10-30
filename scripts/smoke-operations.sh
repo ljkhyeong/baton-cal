@@ -114,9 +114,23 @@ for path in /internal/api/v1/subscriptions /actuator/prometheus /actuator/health
   [[ "$status" == 404 ]]
 done
 [[ "$("${request[@]}" "${tls[@]}" -X POST -o /dev/null -w '%{http_code}' "$public_url$feed_path")" == 405 ]]
+# 프록시는 디코딩된 경로를 CAL 요청줄에 쓰므로 인코딩한 CRLF·개행·물음표·따옴표·경로 이탈은 CAL에 닿지 않아야 한다.
+for path in \
+  '/calendars/v1/x.ics%20HTTP/1.1%0d%0aHost:%20a%0d%0a%0d%0aGET%20/readyz%20HTTP/1.1%0d%0aHost:%20a%0d%0aX-Pad:%20' \
+  '/calendars/v1/%252e%252e/%252e%252e/internal/api/v1/subscriptions' \
+  "$feed_path%0a" "$feed_path%3Fprobe=1" "$feed_path%22"; do
+  status=$("${request[@]}" "${tls[@]}" --path-as-is -o /dev/null -w '%{http_code}' "$public_url$path")
+  [[ "$status" == 404 ]]
+done
+"${request[@]}" --fail "$management_url/actuator/prometheus" > "$scratch/authentication-metrics"
+grep -Eq '^baton_cal_internal_authentication_total\{.*result="unauthorized".*\} 0(\.0)?$' "$scratch/authentication-metrics"
+# Tomcat은 잘못된 요청줄을 거부하며 경로 원문을 INFO로 기록한다. 끝의 비밀값 비노출 검사가 이 로그도 확인한다.
+[[ "$("${request[@]}" --path-as-is -o /dev/null -w '%{http_code}' "$internal_url$feed_path\"")" == 400 ]]
 http_url="http://$(address gateway 80)"
 [[ "$("${request[@]}" "$http_url/.well-known/acme-challenge/smoke")" == acme-smoke ]]
 [[ "$("${request[@]}" -o /dev/null -w '%{http_code}' "$http_url$feed_path")" == 308 ]]
+"${request[@]}" --path-as-is -o /dev/null -D "$scratch/redirect-headers" "$http_url/%0d%0aX-Injected:%201"
+grep -qi '^location: https://cal\.b4ton\.com/%0d%0aX-Injected:%201' "$scratch/redirect-headers"
 
 for ((index=0; index<80; index++)); do
   "${request[@]}" "${tls[@]}" -o /dev/null -w '%{http_code} %header{retry-after} %header{cache-control}\n' \
@@ -125,6 +139,7 @@ done
 wait
 # 요청 초과 응답이 있어야 하고, 모두 같은 재시도 간격과 캐시 금지를 보내야 한다.
 [[ "$(grep -h '^429 ' "$scratch"/rate-* | sort -u)" == '429 1 no-store' ]]
+[[ "$(cut -d ' ' -f 1 "$scratch"/rate-* | sort -u | tr '\n' ' ')" == '200 429 ' ]]
 echo "HTTPS, 피드 200·304, 내부 경로 차단, ACME 경로와 요청 초과 429를 확인했습니다."
 
 # 조건 명령이 성공할 때까지 1초 간격으로 최대 횟수만큼 실행한다. 조건 안에서는 errexit가 꺼지므로
@@ -187,7 +202,8 @@ jq -n '[{labels: {alertname: "CalWatchdog", severity: "none"},
   startsAt: (now - 60 | todate), endsAt: (now | todate)}]' > "$scratch/watchdog-resolved.json"
 "${request[@]}" --fail --json @"$scratch/watchdog-resolved.json" "$alertmanager_url/api/v2/alerts" > /dev/null
 for ((attempt=0; attempt<65; attempt++)); do
-  if (( $(heartbeat_count) != expected )); then
+  count=$(heartbeat_count)
+  if ((count != expected)); then
     echo "정상 신호 해제 후에도 외부 점검 요청이 전송됐습니다." >&2
     exit 1
   fi

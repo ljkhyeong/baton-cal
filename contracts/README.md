@@ -108,8 +108,8 @@ BATON은 직렬화한 UTF-8 크기와 건수를 모두 기준으로 나눈다. `
   초는 00부터 59까지, 소수는 최대 9자리만 허용한다. CAL은 타임스탬프를 마이크로초 정밀도로
   정규화하고 iCalendar DATE-TIME은 초 단위로 내림한다.
 - JSON Schema만으로 표현하지 못하는 구간의 `end > start`, NFC, iCal4j 4.4.0에 내장된 Olson
-  `2025a`의 원본 시간대 식별자,
-  항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
+  `2025a`의 원본 시간대 식별자와 DST 공백, 실제로 존재하는 날짜·시각·오프셋(`2026-02-30T10:00:00`,
+  `25:00:00`, `+19:00` 거부), 항목별 개정 번호·타임스탬프 순서와 자격 증명 응답의 `feedUrl` 경로 토큰 = `token`
   관계는 애플리케이션 검증 대상이다.
 
 ## JSON 요청 크기·구조 제한
@@ -206,8 +206,8 @@ BATON이 사용하는 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](htt
 새 태그·자산·SHA-256을 다시 고정할 예정이다.
 `1.1.0-rc.1`의 게시와 BATON 계약 테스트는 완료했다. `1.1.0-rc.2`는 ID 지정 구독 생성, 중복·시즌 충돌
 응답과 고정된 복원 다이제스트 예시를 추가했고 게시·BATON 고정을 마쳤다. 현재 작업 후보 `1.1.0-rc.3`은
-기존 경로의 계약 의미를 바꾸지 않고 PRD의 구버전 배포 순서 설명을 정리하며 전체 시즌 투영 재생성 경로를
-추가한다. 아직 게시하지 않았다. 기존 안정 기준은 `1.0.0`이다.
+기존 스키마·다이제스트·골든을 유지하고 전체 시즌 투영 재생성과 구독 최근 조회일 경로를 추가하며, DST 공백 판정과
+스키마보다 넓던 입력 허용을 바로잡는다. 아직 게시하지 않았다. 기존 안정 기준은 `1.0.0`이다.
 게시·검증 이력과 절차는
 [계약 릴리스 현황](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-history.md)과
 [계약 릴리스 절차](https://github.com/ljkhyeong/baton-cal/blob/main/docs/contract-release-procedure.md)가 관리한다.
@@ -266,3 +266,4 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 
 저장된 시즌 피드는 만든 시점의 출력이다. 변경을 모든 인스턴스에 배포한 뒤 PRD-0002의
 `POST /internal/api/v1/projections/rebuild`로 모든 시즌을 다시 만들고 `changedSeasonCount`를 기록한다.
+다시 요청하면 값은 그 요청에서 바뀐 시즌만 센다.

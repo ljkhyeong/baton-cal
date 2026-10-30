@@ -80,7 +80,6 @@ class SeasonProjectionServiceTest {
 
         assertThat(savedProjection().lastModified).isEqualTo(existing.lastModified)
         assertThat(meterRegistry.get("baton.cal.projection.rebuild").timer().count()).isEqualTo(1)
-        assertThat(meterRegistry.get("baton.cal.projection.items").summary().totalAmount()).isZero()
         assertThat(meterRegistry.get("baton.cal.projection.bytes").summary().totalAmount())
             .isEqualTo("calendar".encodeToByteArray().size.toDouble())
     }
@@ -134,6 +133,7 @@ class SeasonProjectionServiceTest {
         service.rebuildWhileLocked(SEASON_ID)
 
         assertThat(savedProjection().lastModified).isEqualTo(Instant.parse("2026-08-20T03:00:00Z"))
+        assertThat(meterRegistry.get("baton.cal.projection.items").summary().totalAmount()).isEqualTo(2.0)
     }
 
     @Test

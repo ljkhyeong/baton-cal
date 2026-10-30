@@ -17,7 +17,8 @@ Spring Boot BOM이 관리하는 라이브러리는 Boot 버전을 따른다.
   빈 `GRADLE_USER_HOME`에서 `check bootJar`를 실행해 빠진 검증 항목이 없는지 확인한다.
 - GitHub Actions는 커밋 SHA로 고정하고 뒤에 `# v<주 버전>` 주석을 둔다.
 - Compose 이미지는 버전 태그와 `@sha256` digest를 함께 바꾼다. 알림 채널 스모크는 Compose 정의에서 이미지를
-  읽으므로 따로 고치지 않는다. 테스트 PostgreSQL 이미지(`support/PostgreSqlTestContainer.kt`)는 Compose와 함께 바꾼다.
+  읽으므로 따로 고치지 않는다. 테스트 PostgreSQL 이미지(`support/PostgreSqlTestContainer.kt`)는 Testcontainers 이름 형식에
+  맞춰 태그만 쓰며 Compose와 같은 버전으로 바꾼다.
 - Gradle Wrapper는 `distributionSha256Sum`을 유지하고 배포본·`gradle-wrapper.jar` 해시를 services.gradle.org의
   `.sha256`과 대조한다. Dependabot은 `gradlew.bat`을 CRLF로 올리므로 `git add --renormalize gradlew.bat`으로
   저장소의 `eol=lf` 규칙에 맞춘다. 브랜치 트리에서 파일을 직접 가져오면 정규화되지 않는다.
@@ -39,11 +40,11 @@ git diff -- gradle.lockfile gradle/verification-metadata.xml
 | 변경 | 추가 확인 |
 | --- | --- |
 | Spring Boot·Jackson | `web.SnapshotInputContractTest`의 입력 엄격성, `web.ApiExceptionHandlerTest`의 오류 응답, 설정에 적지 않고 기본값에 맡긴 health probes(`web.OperationalHttpTest`)·TLS 활성화(`config.TlsHttpIntegrationTest`)·`server.shutdown=graceful`(Boot 설정 메타데이터 기본값) |
-| iCal4j | 아래 골든·시간대 검토. 출력이나 허용 TZID가 바뀌면 새 계약 후보가 필요하다 |
+| iCal4j | 아래 골든·시간대 검토. 출력이나 허용 TZID가 바뀌면 새 계약 후보가 필요하다. `calendar.ScheduleWindowTest`의 공백 판정도 확인한다 |
 | JSON Schema 검증기 | `contract.ContractArtifactsTest`의 `format` 평가와 거부 사례 |
 | Flyway·PostgreSQL 드라이버·Testcontainers | `persistence.PersistenceRepositoryTest` |
 | ArchUnit | `architectureTest` |
-| Spring Boot 이미지 빌더 | `bootBuildImage` 후 `./scripts/smoke-oci-image.sh <이미지>` |
+| Spring Boot 이미지 빌더(`operations/buildpack/Dockerfile`의 태그·digest) | `bootBuildImage` 후 `./scripts/smoke-oci-image.sh <이미지>`. digest는 amd64·arm64를 담은 목록인지 `docker buildx imagetools inspect`로 확인한다 |
 
 ## 골든과 시간대
 

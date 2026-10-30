@@ -126,7 +126,7 @@ HTTPS 테스트는 임시 인증서와 격리된 PostgreSQL을 사용해 인증,
 Docker 네트워크에서 채널별 단독·Healthchecks 조합의 장애·복구 메시지와 정상 신호 분리를 확인한다.
 모의 API가 메시지별로 `429`, `503`을 반환한 뒤 성공하게 하여 재전송, 실제 수신 건수와 오류 로그의
 웹훅 주소 비노출도 검사한다. 전송·재시도에는 기존 Alertmanager를 사용한다.
-실행에는 Docker와 Java 25 툴체인이 필요하다.
+실행에는 Docker, Java 25 툴체인과 `curl`·`jq`·`openssl`이 필요하다.
 실행 JAR는 `build/libs/baton-cal-0.0.1-SNAPSHOT.jar`에 생성된다.
 
 로컬 임시값은 Git에서 제외되는 `.env.integration.local`과 `build/local-integration/`에 둔다.

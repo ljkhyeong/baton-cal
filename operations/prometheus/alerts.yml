@@ -42,12 +42,22 @@ groups:
         annotations:
           summary: CAL 내부 API 인증 실패 반복
           description: 내부 API 요청이 Bearer 인증에 계속 실패해 일정 전달이 멈췄을 수 있습니다. BATON의 CAL 토큰과 회전 상태를 확인합니다.
+      - record: uri_status:baton_cal_ingestion_rejections:count
+        expr: sum by (uri, status) (http_server_requests_seconds_count{job="baton-cal",uri=~"/internal/api/v1/(schedule-snapshots(/batch)?|seasons/.+/calendar-metadata)",status=~"4.."})
+      # 라벨 조합의 첫 거부는 새 시계열이라 increase가 0이므로 15분 전에 없던 시계열도 함께 본다.
       - alert: CalIngestionRejected
-        expr: sum(increase(http_server_requests_seconds_count{job="baton-cal",uri=~"/internal/api/v1/(schedule-snapshots(/batch)?|seasons/.+/calendar-metadata)",status=~"400|409|413"}[15m])) > 0
+        expr: sum(increase(uri_status:baton_cal_ingestion_rejections:count[15m])) > 0 or sum(uri_status:baton_cal_ingestion_rejections:count unless uri_status:baton_cal_ingestion_rejections:count offset 15m) > 0
         labels: {severity: warning}
         annotations:
           summary: CAL 일정·시즌 이름 수신 거부
-          description: BATON이 보낸 일정이나 시즌 이름이 400·409·413으로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+          description: BATON이 보낸 일정이나 시즌 이름이 4xx로 거부되어 캘린더에 반영되지 않았습니다. 응답 코드와 BATON 전송 기록을 확인합니다.
+      - alert: CalSubscriptionFetchRecordFailed
+        expr: sum(increase(baton_cal_subscription_fetch_record_failures_total{job="baton-cal"}[15m])) >= 3
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: CAL 구독 최근 조회일 기록 실패 반복
+          description: 피드는 응답하지만 구독 최근 조회일을 저장하지 못하고 있습니다. PostgreSQL 쓰기 가능 여부와 연결 상태를 확인합니다.
       - alert: CalTlsFailed
         expr: probe_success{job="baton-cal-tls"} == 0 or up{job="baton-cal-tls"} == 0
         for: 5m

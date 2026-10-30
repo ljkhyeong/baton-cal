@@ -14,8 +14,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.http.converter.HttpMessageNotWritableException
 import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -99,9 +102,22 @@ class ApiExceptionHandlerTest {
         }
     }
 
+    @Test
+    fun `프레임워크 5xx도 고정 응답을 반환하고 Accept와 무관하게 JSON으로 보낸다`() {
+        val body = mockMvc.perform(get("/internal/api/v1/unwritable").accept("text/calendar"))
+            .andExpect(status().isInternalServerError)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+            .andReturnValid("api-error.v1.schema.json", "프레임워크 5xx 응답")
+        assertThat(body).doesNotContain(SENSITIVE_VALUE)
+    }
+
     @RestController
     private class FailureController {
         private val exceptionTranslator = JdbcConfiguration().jdbcExceptionTranslator()
+
+        @GetMapping("/internal/api/v1/unwritable")
+        fun unwritable(): Nothing = throw HttpMessageNotWritableException(SENSITIVE_VALUE)
 
         @GetMapping("/internal/api/v1/database-failure/{sqlState}")
         fun databaseFailure(@PathVariable sqlState: String): Nothing = throw checkNotNull(

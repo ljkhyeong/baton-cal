@@ -129,7 +129,7 @@ Alertmanager가 처리한다. 새 유료 서비스나 알림 중계 서버가 �
 
 k3s에서도 같은 YAML을 Alertmanager 설정으로 사용하고, 수신 URL은 Secret 파일을
 `/run/secrets/alert-webhook-url`에 마운트하면 된다. 이는 연동에 필요한 값이며 k3s 설치 절차는 아니다.
-[Alertmanager 기본 연동](https://prometheus.io/docs/alerting/latest/configuration/).
+[Alertmanager 기본 연동](https://github.com/prometheus/alertmanager/blob/v0.34.1/docs/configuration.md).
 
 ## 서버와 모니터링 중단 감지
 
@@ -220,8 +220,8 @@ docker compose --project-name baton-cal --file compose.operations.yml exec -T ga
 7. 외부에서 인증서 호스트·체인, `/actuator/prometheus`와 `/internal/api/v1/subscriptions`의 `404`,
    테스트 구독의 `200`·`304`를 확인한다. [앱별 구독 확인](calendar-subscription-guide.md)을 진행한다.
 
-공인 인증서·DNS·방화벽 검증은 로컬 스모크와 별도다. 기존 데이터 마이그레이션, 내부 Bearer 회전과
-과거 백업 복원은 [README](../README.md)의 구버전 종료·구독 세대·복구 완료 절차를 그대로 적용한다.
+공인 인증서·DNS·방화벽 검증은 로컬 스모크와 별도다. 내부 Bearer 회전과 과거 백업 복원은
+[README](../README.md)의 `내부 Bearer 회전`, `과거 DB 백업 복원` 절차를 따른다.
 운영 DB 볼륨에는 스모크의 `down --volumes` 정리 명령을 사용하지 않는다.
 
 ## 요청 제한과 로그
@@ -235,14 +235,17 @@ CAL 내부 API의 JSON 오류 계약과 구분한다.
 Google·Microsoft가 송신 IP를 공유하면 같은 IP의 정상 구독도 함께 제한된다. 이 기본값은 운영
 처리량이나 서비스 수준 목표(SLO)를 보장하지 않으며, 실제 갱신 빈도·429 비율과 DB 부하를 보고 조정한다. 앞단에 CDN·다른 프록시를
 추가하면 실제 송신 IP와 신뢰 프록시 대역을 먼저 구성해야 한다. 사용자 입력 `X-Forwarded-For`를
-그대로 신뢰하지 않는다.
+그대로 신뢰하지 않는다. k3s에서 Nginx 앞에 Traefik을 두면 `$binary_remote_addr`가 프록시 주소가 되어 모든 구독자가
+한 제한을 공유하고, `resolver 127.0.0.11`은 Docker 전용이므로 클러스터 DNS로 바꿔야 한다.
 [Nginx 요청률 제한](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html),
 [Nginx 동시 처리 제한](https://nginx.org/en/docs/http/ngx_http_limit_conn_module.html).
 
 접근 로그에는 상태 코드, 처리 시간, 제한 결과만 기록한다. 요청 경로·쿼리·Cookie·Authorization은
 기록하지 않는다. 요청 오류 메시지에 원문 URL이 들어갈 수 있어 Nginx error log는 비활성화한다.
 시작 설정 오류는 `nginx -t`로 점검하고 요청 장애 원인은 접근 로그·CAL 메트릭으로 확인한다.
-프록시는 조건부 GET 헤더와 고정 Host만 CAL에 전달하고 쿼리와 원문 요청 헤더를 버린다.
+프록시는 `/calendars/v1/<토큰>.ics` 형식(토큰은 영문·숫자·밑줄·하이픈)의 경로만 CAL로 전달한다. Nginx의 `$uri`는 디코딩된 값이라
+인코딩한 CRLF·물음표·경로 이탈이 CAL로 가는 요청줄을 조작할 수 있기 때문이다. 조건부 GET 헤더와 고정 Host만 전달하고
+쿼리와 원문 요청 헤더를 버린다. 형식이 다른 경로는 Nginx의 `404`다.
 
 ## 모니터링과 알림
 
@@ -258,7 +261,8 @@ Prometheus는 10초마다 수집·평가하며 로컬 저장 기간은 15일이�
 | `CalHttpServerErrors` | 최근 5분의 CAL 5xx가 5회 이상인 상태가 1분 지속 | DB·일시적 503·잠금 지연 |
 | `CalProjectionLockSlow` | 최근 5분 평균 잠금 획득 시간이 1초 초과한 상태가 2분 지속 | 같은 시즌의 동시 수신량과 전체 재구축 소요 시간 |
 | `CalInternalAuthenticationFailed` | 최근 5분 내부 API 인증 실패가 3회 이상인 상태가 5분 지속 | BATON의 CAL 토큰과 [내부 Bearer 회전](../README.md#내부-bearer-회전) 순서 |
-| `CalIngestionRejected` | 최근 15분 안에 일정·묶음·시즌 이름 수신이 `400`·`409`·`413`으로 거부됨 | 오류 코드와 BATON 전송 기록. 거부된 변경은 캘린더에 반영되지 않았다 |
+| `CalIngestionRejected` | 최근 15분 안에 일정·묶음·시즌 이름 수신이 `4xx`로 거부됨. 해당 응답의 첫 거부도 포함 | 오류 코드와 BATON 전송 기록. 거부된 변경은 캘린더에 반영되지 않았다 |
+| `CalSubscriptionFetchRecordFailed` | 최근 15분 구독 최근 조회일 기록 실패가 3회 이상인 상태가 5분 지속 | PostgreSQL 쓰기 가능 여부와 연결 상태. 피드 응답은 유지되며 최근 조회일만 갱신되지 않는다 |
 | `CalTlsFailed` | TLS 점검 또는 점검기 수집 실패가 5분 지속 | 인증서 이름·체인·HTTPS 포트 연결 |
 | `CalPublicRouteFailed` | 공개 경로의 상태·본문 확인 실패 또는 점검기 수집 실패가 30초 지속 | 프록시 라우팅·CAL·DB 연결 |
 | `CalCertificateExpiresSoon` | 인증서의 남은 기간이 14일 미만인 상태가 10분 지속 | 기존 인증서 관리 도구의 갱신·적용 상태 |
@@ -277,14 +281,15 @@ Host와 TLS 인증서 이름은 `cal.b4ton.com`을 사용한다. `monitoring-pro
 k3s에서는 위 URL의 `gateway`를 실제 HTTPS 프록시 서비스 주소로 바꾸고 경로는 유지한다.
 이 점검은 프록시→CAL의 거부 응답 경로를 확인한다. 유효한 구독의 `200`·`304`와 일정 내용은
 [캘린더 앱 검증](calendar-subscription-guide.md)에서 확인하며 공인 DNS·외부 인입은 별도로 점검한다.
-[Blackbox HTTP 점검 설정](https://github.com/prometheus/blackbox_exporter/blob/master/CONFIGURATION.md)
+[Blackbox HTTP 점검 설정](https://github.com/prometheus/blackbox_exporter/blob/v0.29.1/CONFIGURATION.md)
 
 알림의 `for`는 조건이 계속 유지돼야 하는 시간이며 실제 도착에는 수집·평가와 Alertmanager의
-그룹 대기 시간이 추가된다. [Prometheus 알림 규칙](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+그룹 대기 시간이 추가된다. [Prometheus 알림 규칙](https://github.com/prometheus/prometheus/blob/v3.15.0/docs/configuration/alerting_rules.md).
 5xx 지표는 CAL에서 처리한 응답만 포함하므로 Nginx에서 발생한 502·429는 Nginx 접근 로그에서 확인한다.
 잘못된 내부 토큰의 `401`과 수신 거부의 `4xx`는 5xx 알림에 잡히지 않아 일정 전달이 조용히 멈출 수 있으므로
 별도 알림으로 둔다. 구독·복구 요청의 `409`는 정상 흐름에서도 발생하므로 수신 거부 알림에서 제외한다.
-알림이 쓰는 지표 이름과 라벨은 `OperationalHttpTest`가 실제 Prometheus 출력으로 확인한다.
+CAL이 내보내는 알림 지표의 이름과 라벨은 `OperationalHttpTest`가 실제 Prometheus 출력으로 확인한다. `up`·`probe_*`는
+Prometheus와 Blackbox가 만들며 운영 스모크가 장애 주입으로 확인한다.
 운영에서는 호스트·인증서 만료·Prometheus 자체 장애를 외부에서 점검하는 경로도 연결한다.
 
 ## 재현 가능한 로컬 검증

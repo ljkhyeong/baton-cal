@@ -12,6 +12,7 @@ import io.baton.cal.web.ApiException
 import io.baton.cal.web.SubscriptionCredential
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
@@ -137,6 +138,24 @@ class SubscriptionConcurrencyTest @Autowired constructor(
             null -> throw AssertionError("subscription disappeared during the race")
         }
         assertThat(service.findFeed(initial.token)).isNull()
+    }
+
+    @Test
+    fun `폐기가 읽은 뒤 회전이 커밋되면 이전 상태로 폐기하지 않고 충돌로 응답한다`() {
+        val initial = service.create(SEASON_ID)
+        lateinit var rotated: SubscriptionCredential
+        doAnswer { invocation ->
+            rotated = Executors.newSingleThreadExecutor().use { executor ->
+                executor.submit<SubscriptionCredential> { service.rotate(initial.subscriptionId) }
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+            invocation.callRealMethod()
+        }.`when`(repository).revoke(initial.subscriptionId, tokenCodec.hash(initial.token))
+
+        assertSubscriptionConflict(runCatching { service.revoke(initial.subscriptionId) }.exceptionOrNull())
+
+        assertThat(repository.findById(initial.subscriptionId)?.status).isEqualTo(CalendarSubscriptionStatus.ACTIVE)
+        assertThat(service.findFeed(rotated.token)).isNotNull()
     }
 
     @Test

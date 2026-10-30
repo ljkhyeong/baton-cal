@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.web.servlet.FilterRegistration
+import org.springframework.http.CacheControl
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
@@ -32,6 +33,8 @@ class InternalApiAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
+        // 인증 실패와 MVC 매핑 전 오류까지 포함한 내부 API 응답 전체가 상태 확인 뒤 재사용되지 않게 한다.
+        response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControl.noStore().headerValue)
         val presented = request.getHeader(HttpHeaders.AUTHORIZATION)
             ?.bearerCredential()
             ?.encodeToByteArray()

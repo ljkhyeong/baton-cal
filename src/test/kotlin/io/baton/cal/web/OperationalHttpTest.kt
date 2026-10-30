@@ -1,11 +1,14 @@
 package io.baton.cal.web
 
+import io.baton.cal.contract.andReturnValid
 import io.baton.cal.contract.contractExample
 import com.jayway.jsonpath.JsonPath
 import com.zaxxer.hikari.HikariDataSource
 import io.baton.cal.support.CalIntegrationTest
 import io.baton.cal.support.SEASON_CALENDAR_METADATA_PATH
 import io.baton.cal.support.SNAPSHOT_PATH
+import io.baton.cal.support.authorizedGet
+import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.authorizedPut
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.ingestSnapshot
@@ -14,6 +17,7 @@ import io.baton.cal.support.postSnapshot
 import io.baton.cal.support.seasonCalendarMetadataRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties
 import org.springframework.boot.transaction.autoconfigure.TransactionProperties
@@ -21,6 +25,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.jdbc.JdbcTestUtils
+import org.springframework.web.filter.FormContentFilter
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -35,6 +40,7 @@ import org.hamcrest.Matchers.containsString
 @CalIntegrationTest
 class OperationalHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
+    private val formContentFilters: ObjectProvider<FormContentFilter>,
     private val tomcatServerProperties: TomcatServerProperties,
     private val jdbcClient: JdbcClient,
     private val transactionProperties: TransactionProperties,
@@ -50,7 +56,8 @@ class OperationalHttpTest @Autowired constructor(
         val heldConnections = mutableListOf<Connection>()
         try {
             repeat(dataSource.maximumPoolSize) { heldConnections += dataSource.connection }
-            for (request in listOf(createRequest(), get("/calendars/v1/{token}.ics", token))) {
+            val calendarClientRequest = get("/calendars/v1/{token}.ics", token).accept("text/calendar")
+            for (request in listOf(createRequest(), get("/calendars/v1/{token}.ics", token), calendarClientRequest)) {
                 mockMvc.perform(request)
                     .andExpect(status().isServiceUnavailable)
                     .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
@@ -102,25 +109,55 @@ class OperationalHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `알림 규칙이 쓰는 내부 인증 실패와 수신 거부 지표를 노출한다`() {
+    fun `알림 규칙이 쓰는 CAL 지표를 노출한다`() {
         mockMvc.perform(post(SNAPSHOT_PATH).jsonContent("{}"))
             .andExpect(status().isUnauthorized)
         mockMvc.postSnapshot("{}")
             .andExpect(status().isBadRequest)
         mockMvc.perform(seasonCalendarMetadataRequest(SEASON_ID, "{}"))
             .andExpect(status().isBadRequest)
+        mockMvc.perform(authorizedPost("$SNAPSHOT_PATH/batch").jsonContent("{}"))
+            .andExpect(status().isBadRequest)
 
-        // operations/prometheus/alerts.yml의 CalInternalAuthenticationFailed·CalIngestionRejected가 쓰는 지표다.
+        // operations/prometheus/alerts.yml의 규칙이 쓰는 CAL 지표다.
         val metrics = mockMvc.perform(get("/actuator/prometheus")).andReturn().response.contentAsString.lines()
         assertThat(metrics).anySatisfy {
             assertThat(it).startsWith("baton_cal_internal_authentication_total{").contains("result=\"unauthorized\"")
         }
-        for (uri in listOf(SNAPSHOT_PATH, SEASON_CALENDAR_METADATA_PATH)) {
+        assertThat(metrics).anySatisfy {
+            assertThat(it).startsWith("baton_cal_subscription_fetch_record_failures_total")
+        }
+        for (timerSample in listOf("sum", "count")) {
+            assertThat(metrics).anySatisfy {
+                assertThat(it).startsWith("baton_cal_projection_lock_acquire_seconds_$timerSample")
+            }
+        }
+        for (uri in listOf(SNAPSHOT_PATH, "$SNAPSHOT_PATH/batch", SEASON_CALENDAR_METADATA_PATH)) {
             assertThat(metrics).anySatisfy {
                 assertThat(it).startsWith("http_server_requests_seconds_count{")
                     .contains("method=\"", "status=\"400\"", "uri=\"$uri\"")
             }
         }
+    }
+
+    @Test
+    fun `내부 API의 인증 실패와 프레임워크 오류 응답도 저장되지 않는다`() {
+        mockMvc.perform(post(SNAPSHOT_PATH).jsonContent("{}"))
+            .andExpect(status().isUnauthorized)
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+        mockMvc.perform(authorizedGet(SNAPSHOT_PATH))
+            .andExpect(status().isMethodNotAllowed)
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturnValid("api-error.v1.schema.json", "허용되지 않은 메서드 응답")
+        mockMvc.perform(authorizedGet("/internal/api/v1/unknown"))
+            .andExpect(status().isNotFound)
+            .andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+            .andReturnValid("api-error.v1.schema.json", "없는 내부 경로 응답")
+        mockMvc.perform(authorizedGet("/internal/api/v1/calendar-items/{id}", SEASON_ID).accept("text/calendar"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
     }
 
     @Test
@@ -132,6 +169,15 @@ class OperationalHttpTest @Autowired constructor(
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
             .andExpect(jsonPath("$.message").value("request body exceeds the maximum size"))
+        val oversizedBatch = """{"snapshots":[${snapshotDocumentOfSize(MAX_JSON_DOCUMENT_LENGTH)}]}"""
+        mockMvc.perform(authorizedPost("$SNAPSHOT_PATH/batch").jsonContent(oversizedBatch))
+            .andExpect(status().isContentTooLarge)
+            .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"))
+    }
+
+    @Test
+    fun `인증 전에 폼 본문을 읽는 필터를 쓰지 않는다`() {
+        assertThat(formContentFilters.stream()).isEmpty()
     }
 
     @Test

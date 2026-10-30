@@ -15,6 +15,10 @@ spring:
           max-token-count: 8192
     mapper:
       allow-coercion-of-scalars: false
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/baton_cal}
     username: ${DATABASE_USERNAME:baton_cal}

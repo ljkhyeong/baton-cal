@@ -163,6 +163,7 @@ class SubscriptionService(
 
     private fun feedUri(token: String): URI = UriComponentsBuilder
         .fromUri(properties.publicBaseUrl)
+        .scheme(properties.publicBaseUrl.scheme.lowercase())
         .pathSegment("calendars", "v1", "$token.ics")
         .build()
         .toUri()

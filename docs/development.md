@@ -109,6 +109,7 @@ Claude Code는 `.codex/hooks.json`을 읽지 않는다. 세 검사 명령은 같
 
 `validate-skill.sh`는 공통 지침의 `~/.codex/venvs/skill-validation/bin/python`을 사용한다.
 검증기 위치는 `${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py`다.
+검증기는 Codex의 기본 스킬에 포함되며 없으면 스크립트가 종료 코드 2로 멈춘다.
 
 공용 환경이나 PyYAML이 없으면 다음 명령으로 준비한다. 이후에는 같은 환경을 재사용하며,
 프로젝트별 가상환경을 만들거나 시스템 Python에 패키지를 설치하지 않는다.

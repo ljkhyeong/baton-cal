@@ -1,3 +1,4 @@
+import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
 import java.util.zip.ZipFile
 
 abstract class VerifyContractsZip : DefaultTask() {
@@ -9,9 +10,12 @@ abstract class VerifyContractsZip : DefaultTask() {
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val archiveFile: RegularFileProperty
 
-    @get:InputDirectory
-    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:Internal
     abstract val contractsDirectory: DirectoryProperty
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val contractsFiles: ConfigurableFileCollection
 
     @TaskAction
     fun verify() {
@@ -22,9 +26,7 @@ abstract class VerifyContractsZip : DefaultTask() {
         }
 
         val contractsRoot = contractsDirectory.get().asFile
-        val expectedFiles = contractsRoot
-            .walkTopDown()
-            .filter { it.isFile }
+        val expectedFiles = contractsFiles.files
             .mapTo(linkedSetOf("LICENSE", "docs/PRD/0002_mvp-contract/spec.md")) {
                 "contracts/${it.relativeTo(contractsRoot).invariantSeparatorsPath}"
             }
@@ -54,8 +56,8 @@ abstract class VerifyContractsZip : DefaultTask() {
 }
 
 plugins {
-    kotlin("jvm") version "2.4.20"
-    kotlin("plugin.spring") version "2.4.20"
+    kotlin("jvm") version "2.4.21"
+    kotlin("plugin.spring") version "2.4.21"
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -106,6 +108,8 @@ dependencies {
 tasks.withType<Test>().configureEach {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
+    // 계약 테스트는 스키마·예시·골든을 실행 시 읽으므로 입력으로 선언해야 변경될 때 다시 실행된다.
+    inputs.dir("contracts").withPropertyName("contracts").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 tasks.named<Test>("test") {
@@ -152,6 +156,19 @@ tasks.register<Test>("ingestionLoadTest") {
     shouldRunAfter(tasks.test)
 }
 
+// 빌더의 latest는 배포 중 한 아키텍처만 가리킬 수 있어 태그와 digest로 고정한다. Dependabot이 이 파일을 갱신한다.
+val buildpackBuilder = providers
+    .fileContents(layout.projectDirectory.file("operations/buildpack/Dockerfile"))
+    .asText
+    .map { dockerfile ->
+        val pinned = Regex("""^FROM (\S+:\S+@sha256:[0-9a-f]{64})$""", RegexOption.MULTILINE).find(dockerfile)
+        checkNotNull(pinned) { "operations/buildpack/Dockerfile의 FROM 줄을 태그와 digest로 고정해야 합니다." }.groupValues[1]
+    }
+
+tasks.named<BootBuildImage>("bootBuildImage") {
+    builder.set(buildpackBuilder)
+}
+
 val contractsVersion = providers
     .fileContents(layout.projectDirectory.file("contracts/VERSION"))
     .asText
@@ -191,6 +208,8 @@ val verifyContractsZip = tasks.register<VerifyContractsZip>("verifyContractsZip"
     expectedVersion.set(contractsVersion)
     archiveFile.set(contractsZip.flatMap { it.archiveFile })
     contractsDirectory.set(contractsSourceDirectory)
+    // Zip과 같은 기본 제외 규칙을 쓰도록 파일 트리로 넘긴다.
+    contractsFiles.from(contractsSourceDirectory.asFileTree)
 }
 
 tasks.named("check") {

@@ -11,7 +11,7 @@ server {
     listen 80;
     server_name cal.b4ton.com;
     location ^~ /.well-known/acme-challenge/ { root /var/www/acme; }
-    location / { return 308 https://cal.b4ton.com$uri; }
+    location / { return 308 https://cal.b4ton.com$request_uri; }
 }
 
 server {
@@ -26,7 +26,8 @@ server {
     client_body_timeout 10s;
     send_timeout 30s;
 
-    location ^~ /calendars/v1/ {
+    # $uri는 디코딩된 값이라 CRLF·공백·물음표를 막지 않으면 CAL로 가는 요청줄이 조작된다.
+    location ~ "^/calendars/v1/[A-Za-z0-9_-]+\.ics\z" {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         limit_req zone=calendar_requests burst=${CAL_REQUEST_BURST} nodelay;
         limit_conn calendar_connections ${CAL_CONNECTION_LIMIT};

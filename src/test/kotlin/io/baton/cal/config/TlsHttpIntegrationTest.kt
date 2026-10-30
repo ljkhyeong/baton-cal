@@ -61,6 +61,8 @@ class TlsHttpIntegrationTest {
             "--BATON_CAL_TLS_PRIVATE_KEY=${directory.resolve("tls.key").toUri()}",
             "--server.port=0",
             "--MANAGEMENT_SERVER_PORT=0",
+            // 기본 대기 10초는 교체 확인 상한 15초의 여유를 줄이므로 파일 감시 대기만 줄인다.
+            "--spring.ssl.bundle.watch.file.quiet-period=1s",
         ).use { context ->
             val baseUrl = "https://localhost:${context.environment.getRequiredProperty("local.server.port")}"
             val managementUrl = "http://localhost:${context.environment.getRequiredProperty("local.management.port")}"

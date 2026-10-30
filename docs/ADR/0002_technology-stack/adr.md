@@ -22,7 +22,7 @@ BATON CAL MVP는 다음 특성을 가진다.
 
 ### 애플리케이션 실행 환경
 
-- Kotlin/JVM 2.4.20과 Gradle 9.8.0 Kotlin DSL을 쓴다.
+- Kotlin/JVM 2.4.21과 Gradle 9.8.2 Kotlin DSL을 쓴다.
 - 컬렉션, 널 처리, 문자열·바이트 인코딩, Base64, 16진수, UUID 문자열 파싱과 파일 편의 기능에는
   Kotlin 표준 라이브러리를 우선한다. 시간, 암호화, URI와 네트워크 등 필요한 JVM 기능은 JDK API를
   사용한다. JDBC·Spring에 전달하는 UUID는 `java.util.UUID` 타입을 유지한다.
@@ -147,10 +147,18 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
   내장 Olson 데이터를 올릴 때는 의존성 잠금과 검증 메타데이터, 캘린더 골든 바이트·ETag를 같은
   변경에서 검토하고 의도하지 않은 표현 변경을 자동 승인하지 않는다. 저장된 투영은 만든 시점의
   출력이므로 모든 인스턴스에 배포한 뒤 전체 재생성으로 바꾼다.
-- iCal4j 4.3.0은 만료된 RRULE의 미래 전이 적용, 비반복 전이 누락과 JVM 기본 시간대에 따라 달라지던
-  `ZoneRulesBuilder` 동작을 수정했다. CAL은 내장 Olson `2025a` 레지스트리가 원문 TZID를 제공하는지
-  한 번 확인하고, 같은 `VTIMEZONE`에서 만든 `ZoneRules`로 DST 공백을 판정한다. Java 런타임 TZDB와
-  별도로 교차 검증하거나 RRULE을 직접 해석하지 않는다. 계산한 규칙은 TZID별로 캐시한다.
+- DST 공백은 피드에 넣는 `VTIMEZONE`의 전환을 직접 평가해 판정한다. 관측마다 `TZOFFSETFROM`보다 `TZOFFSETTO`가
+  큰 전환의 시작 시각을 `DTSTART`·`RDATE`와 iCal4j `Recur.getDates`로 구하고, 현지 시각이
+  `[전환 시각, 전환 시각 + 오프셋 차이)`에 있으면 공백이다. RRULE은 직접 해석하지 않고 Java 런타임 TZDB와 교차
+  검증하지 않는다. 호출 비용이 약 33µs라 캐시하지 않는다.
+- iCal4j `ZoneRulesBuilder`와 `TimeZone.getOffset`은 쓰지 않는다. 빌더는 모든 관측이 만료됐을 때만 미래 규칙을 비워
+  `Europe/Moscow`처럼 표준시 전환이 RDATE인 시간대에 끝난 DST를 영구 적용하고, 전환을 호출 시각까지만 만들어
+  `Africa/Casablanca`처럼 RDATE로 예고된 미래 공백을 빠뜨리며 판정이 프로세스 시작 시각에 따라 달라진다.
+  `getOffset`은 시각을 UTC 벽시계로 옮겨 비교하고 캐시 배열을 채우기 전에 공개한다. 입력 가능한 TZID 339개의
+  1970~2037년 공백 8,786건을 JVM 규칙과 대조해 내장 데이터가 다른 `Europe/Chisinau`·`America/Tijuana`만 다름을
+  확인했다. 기존 빌더는 56개 시간대에서 존재하는 시각을 거부했다.
+- 공백 판정은 수신 입력에서만 한다. 저장된 행 복원은 구조만 확인하므로 내장 시간대 데이터 갱신으로 공백이 된 과거
+  입력 하나가 시즌 전체의 수신과 재구축을 500으로 막지 않는다. 지나간 판정을 되돌리지 않고 피드에 그대로 둔다.
 - 원본 `ZONED_LOCAL`과 `ZONED_LOCAL_POINT` 필드는 iCal4j 내장 Olson `2025a`의 이름 있는 원문
   TZDB ID로 검증하고 원본 로컬 일시를 CAL이 UTC로 변환하지 않는다. 별칭과 숫자 오프셋은 거부한다.
   내장 데이터보다 새로운 TZID와 규칙은 iCal4j 갱신, 의존성 잠금과 골든·ETag 검토를 거친 새 계약
@@ -179,10 +187,15 @@ Redis, 별도 캐시, 메시지 브로커와 BATON 데이터베이스 직접 조
 별도 Gradle 모듈은 실제 결합도나 빌드 필요가 확인될 때 ADR로 결정한다.
 
 운영 전달 단위는 Spring Boot Gradle 플러그인의 `bootBuildImage`가 Cloud Native Buildpacks로 만드는
-OCI 이미지다. Spring Boot가 Java 대상 버전을 기본 Paketo builder에 전달하고 프로젝트명·버전으로
+OCI 이미지다. Spring Boot가 Java 대상 버전을 Paketo builder에 전달하고 프로젝트명·버전으로
 이미지 이름을 정하므로 같은 값을 별도 Gradle 설정으로 반복하지 않는다. builder metadata가 호환
 run image를 선택하게 하고, 별도 Dockerfile이나 JRE 조립은 buildpack으로 실행 계약을 만족할 수
 없을 때만 새 결정으로 도입한다.
+
+builder는 기본값 `latest` 대신 `operations/buildpack/Dockerfile`의 `FROM` 줄에 태그와 다중 아키텍처
+digest로 고정한다. 2026-10-24에 `latest`가 arm64 단일 이미지를 가리켜 x86 러너의 `bootBuildImage`가
+`exec format error`로 실패했고, 다른 공급 입력은 모두 해시로 고정돼 있기 때문이다. 이 파일은 이미지를
+빌드하지 않고 Dependabot `docker` 생태계가 갱신할 고정값만 담으며 `build.gradle.kts`가 `FROM` 줄을 읽는다.
 
 이미지 레지스트리는 GitHub Container Registry를 사용한다. GitHub Actions는 풀 리퀘스트에서 이미지를
 로컬 검증만 하고, `main` 푸시에서 스모크를 통과한 같은 이미지를
@@ -265,8 +278,15 @@ CI 산출물만으로 생산자 연동이 완료됐다고 판단하지 않는다
   서버 내부에서 재시도하지 않는다. 데이터 제약 위반·SQL 오류 등 예상 밖 실패는 기존 `500` 처리를 유지한다.
 - Spring MVC 서버 요청 관측 규약은 표준 관측 규약의 URL 계산 지점만 확장한다. 공개
   `/calendars/v1/**`의 고카디널리티 `http.url`은 정상·실패 여부와 관계없이
-  `/calendars/v1/{token}.ics`로 치환하고, 나머지 표준 관측 태그와 공개 경로가 아닌 URL은 Spring의
-  기본 동작을 유지한다.
+  `/calendars/v1/{token}.ics`로 치환하고, 그 밖의 요청은 핸들러 경로 패턴이나 `UNKNOWN`을 기록한다. 경로 원문은
+  정규화 전 값이라 `//calendars/...`처럼 접두사 비교를 벗어날 수 있으므로 쓰지 않는다.
+- 내부 API의 `Cache-Control: no-store`는 인증 필터에서 설정한다. MVC 인터셉터는 인증 실패 `401`과 핸들러 매핑 단계의
+  `405`를 지나지 않아 응답 일부가 빠지기 때문이다.
+- 오류 본문은 형식을 협상하지 않고 `application/json`으로 지정한다. 캘린더 앱의 `Accept: text/calendar`로 오류 응답
+  협상이 실패하면 예외가 그대로 전파되어 `503` 계약이 `500`으로 바뀌고 컨테이너가 예외 메시지를 기록한다.
+- `FormContentFilter`는 끈다. 인증 필터보다 먼저 실행되어 폼 본문을 크기 제한 없이 읽고 CAL에는 폼 경로가 없다.
+- JDBC 값 바인딩 외에 `org.apache.coyote`를 `WARN`, `org.springframework.web`을 `INFO`로 `prod`에서 제한한다.
+  Tomcat은 잘못된 요청줄을 INFO로, Spring MVC는 경로를 DEBUG로 기록해 구독 토큰이 로그에 남을 수 있다.
 - Micrometer로 일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·캘린더 크기(바이트)와 시즌 잠금
   획득 시간을 기록한다. 태그는 `applied`·`duplicate`·`stale`, `current`·`previous`·`unauthorized`
   처럼 값의 종류가 제한된 결과만 사용하고 토큰·시즌·항목 식별자는 넣지 않는다. 표준 HTTP 서버
@@ -295,7 +315,9 @@ Nginx, Prometheus, Alertmanager와 Blackbox Exporter를 Docker Compose로 조합
 공개 HTTPS 호스트이며 기존 UID 식별자는 유지한다. 런타임 비밀과 인증서는 외부에서 주입한다.
 
 정상 접근 로그는 상태·처리 시간·제한 결과만 남긴다. Nginx 오류 원문은 비밀 URL을 포함할 수 있어
-기록하지 않으며 설정 검증과 안전한 지표로 진단한다. 프록시는 조건부 GET 헤더와 고정 Host만
+기록하지 않으며 설정 검증과 안전한 지표로 진단한다. 프록시는 토큰 형식의 피드 경로만 정규식 허용 목록으로
+전달한다. Nginx `$uri`는 디코딩된 값이라 접두사 경로로 전달하면 인코딩한 CRLF가 CAL 요청줄에 들어가 요청이 분할된다.
+정규식의 끝은 개행 앞에서도 일치하는 `$` 대신 `\z`로 고정한다. 조건부 GET 헤더와 고정 Host만
 CAL에 전달하고 쿼리는 버린다. 공개 프록시를 우회하는 내부·관리 포트는 루프백 또는 내부 네트워크에
 한정한다. 앞단 CDN 추가 시 실제 클라이언트 IP 신뢰 범위는 별도로 정한다.
 
@@ -408,8 +430,8 @@ Healthchecks.io의 무료 점검에 연결해 확인할 수 있다. 송신 타�
 - 고정된 iCal4j 시간대 데이터나 직렬화기를 올릴 때 캘린더 바이트와 ETag가 바뀌는지 검토하고, 배포 뒤
   전체 재생성을 실행해야 한다. 바뀐 시즌은 캘린더 앱이 다음 조회에서 전체 피드를 다시 받는다.
 - 동기식 재구축이 커지는 시점에는 작업 상태와 일괄 처리 전략을 새 계약으로 도입해야 한다.
-- builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고 공급 이미지 갱신을 별도로
-  검토해야 한다.
+- builder와 run image를 내려받는 컨테이너 검증 때문에 CI 시간이 늘고, 고정한 builder는 Dependabot PR을
+  병합해야 JRE·OS 패치가 반영된다.
 - 90일 보존을 요청한 CI 계약 팩은 안정적인 생산자 의존성이 아니므로, 릴리스 불변성을 활성화한 뒤
   버전이 일치하는 태그와 검증 가능한 GitHub 릴리스 자산을 별도로 운영해야 한다.
 - CAL은 복구 매니페스트로 BATON이 제시한 최신 상태와 저장 상태의 일치를 확인한다. BATON 원본의
