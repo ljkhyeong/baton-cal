@@ -10,9 +10,12 @@ abstract class VerifyContractsZip : DefaultTask() {
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val archiveFile: RegularFileProperty
 
-    @get:InputDirectory
-    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:Internal
     abstract val contractsDirectory: DirectoryProperty
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val contractsFiles: ConfigurableFileCollection
 
     @TaskAction
     fun verify() {
@@ -23,9 +26,7 @@ abstract class VerifyContractsZip : DefaultTask() {
         }
 
         val contractsRoot = contractsDirectory.get().asFile
-        val expectedFiles = contractsRoot
-            .walkTopDown()
-            .filter { it.isFile }
+        val expectedFiles = contractsFiles.files
             .mapTo(linkedSetOf("LICENSE", "docs/PRD/0002_mvp-contract/spec.md")) {
                 "contracts/${it.relativeTo(contractsRoot).invariantSeparatorsPath}"
             }
@@ -107,6 +108,8 @@ dependencies {
 tasks.withType<Test>().configureEach {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
+    // 계약 테스트는 스키마·예시·골든을 실행 시 읽으므로 입력으로 선언해야 변경될 때 다시 실행된다.
+    inputs.dir("contracts").withPropertyName("contracts").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 tasks.named<Test>("test") {
@@ -205,6 +208,8 @@ val verifyContractsZip = tasks.register<VerifyContractsZip>("verifyContractsZip"
     expectedVersion.set(contractsVersion)
     archiveFile.set(contractsZip.flatMap { it.archiveFile })
     contractsDirectory.set(contractsSourceDirectory)
+    // Zip과 같은 기본 제외 규칙을 쓰도록 파일 트리로 넘긴다.
+    contractsFiles.from(contractsSourceDirectory.asFileTree)
 }
 
 tasks.named("check") {
