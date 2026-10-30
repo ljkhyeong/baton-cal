@@ -18,8 +18,9 @@
   연결 반환 후 기존 구독 조회와 같은 ID의 발급 재시도가 정상 처리되는지 확인했다.
 - 이미 저장된 구독의 재요청은 캘린더 준비와 토큰 생성을 생략한다. 동시 생성은 DB 기본키로 판정한다.
   구독의 투영 외래키 제약에 따라 캘린더 준비 후 구독을 저장하는 순서는 유지한다.
-- 내부 API 응답은 `/internal/**`의 Spring `WebContentInterceptor`가 성공·오류 모두 `Cache-Control: no-store`로
-  보낸다. 상태가 바뀐 뒤 이전 응답이 재사용되는 것을 막는다. 공개 피드의 `503`은 예외 처리기가 같은 헤더를 붙인다.
+- 내부 API 응답은 인증 필터가 성공·오류와 `401`·`405`까지 모두 `Cache-Control: no-store`로 보낸다. 상태가 바뀐 뒤
+  이전 응답이 재사용되는 것을 막는다. 공개 피드의 `503`은 예외 처리기가 같은 헤더를 붙이고 오류 본문은 `Accept`와
+  관계없이 JSON이다.
 - 보존할 DB 데이터와 운영 배포가 없어 마이그레이션 V1~V8을 최종 스키마의 V1 하나로 합쳤다. 운영 데이터가 생기기
   전까지는 V1을 직접 고친다. 시즌 잠금은 잠금 전용 테이블 대신 복구 실행과 같은 `pg_advisory_xact_lock`을 쓰고,
   경로 UUID는 `@InitBinder` 편집기로 36자 표준 형식만 받는다. 기존 V1~V8을 적용한 로컬 DB는 다시 만들어야 한다.
@@ -54,8 +55,8 @@
   BATON과 공유하는 복구 다이제스트는 계약 예시를 벡터로 삼아 DB 없이 검증한다. 알림 채널 스모크는 이미지 고정값을
   Compose 정의에서 읽고, 이미지 스모크는 Flyway 기대 버전을 마이그레이션 파일에서 만든다.
 - 일정 전달이 조용히 멈추는 경우를 알리는 `CalInternalAuthenticationFailed`(내부 Bearer 인증 실패 반복)와
-  `CalIngestionRejected`(일정·묶음·시즌 이름 수신의 `400`·`409`·`413`)를 추가했다. 4xx는 기존 5xx 알림에 잡히지
-  않는다. 실제 수신 채널 도착은 운영 연결 뒤 확인한다. [알림 표](docs/operations.md#모니터링과-알림)
+  `CalIngestionRejected`(일정·묶음·시즌 이름 수신의 `4xx`, 첫 거부 포함)를 추가했다. 4xx는 기존 5xx 알림에 잡히지
+  않는다. 공개 조회의 최근 조회일 기록 실패가 반복되면 `CalSubscriptionFetchRecordFailed`가 발생한다. 실제 수신 채널 도착은 운영 연결 뒤 확인한다. [알림 표](docs/operations.md#모니터링과-알림)
 - BATON의 개인 구독·내 구독 목록·여러 구독 해제·앱별 등록 안내는 원격 main에 반영됐다.
   실제 캘린더 앱 검증과 운영 활성화는 남아 있다.
 - CAL [PR #20](https://github.com/ljkhyeong/baton-cal/pull/20)은 `118577a`,
@@ -81,11 +82,15 @@
 - iCal4j를 4.4.0으로 올렸다. 내장 Olson `2025a`·`tz.alias`가 같고 골든 바이트·ETag가 유지되며 시간대 외부 갱신은
   계속 꺼져 있다. 위 세 변경은 [PR #40](https://github.com/ljkhyeong/baton-cal/pull/40)으로 `c7370b0`에 병합됐고
   Dependabot #39는 자동으로 닫혔다.
-- 남아 있던 Dependabot 13건을 종류별 커밋으로 반영했다. GitHub Actions 5종(checkout v7·setup-java v6·login-action v4
-  포함)은 태그 커밋 SHA를, Compose 이미지 4종은 레지스트리 digest를, Gradle Wrapper 9.8.0은 공식 해시를 대조했다.
-  Kotlin 2.4.20·ArchUnit 1.5.1·JSON Schema 검증기 3.0.8은 잠금 파일·검증 메타데이터를 다시 쓰고 쓰지 않는 이전 항목을
-  지웠다. Dependabot이 CRLF로 올린 `gradlew.bat`은 저장소 규칙대로 LF로 정규화했다. `docker/login-action` v4는
-  `main` 게시 작업에서만 실행되므로 병합 뒤 `main` CI에서 확인한다.
+- Dependabot PR을 종류별 커밋으로 반영했다. GitHub Actions는 태그 커밋 SHA로, Compose 이미지는 태그와 레지스트리 digest로,
+  Gradle Wrapper 9.8.2는 공식 해시 대조로 고정한다. Kotlin 2.4.21·ArchUnit 1.5.1·JSON Schema 검증기 3.0.8은 잠금 파일·
+  검증 메타데이터를 다시 썼다. `bootBuildImage` 빌더는 `latest`가 단일 아키텍처를 가리켜 PR이 실패한 뒤
+  `operations/buildpack/Dockerfile`의 태그·digest로 고정했고 Dependabot이 갱신한다. PR #41은 `9cafd90`으로 병합됐고
+  `main` CI가 `docker/login-action` v4 로그인과 이미지 게시까지 통과했다.
+- 2026-10-30 전수검토로 공개 프록시 요청 분할, DST 공백 오판, 저장 행 재검증으로 인한 시즌 정지, `status` 숫자 입력,
+  계약 파일 변경 시 테스트 미실행을 포함한 결함을 재현해 고쳤다. DST 공백은 피드에 넣는 `VTIMEZONE`의 전환을 직접 평가해
+  수신 입력에서만 판정한다. 공개 프록시는 토큰 형식 경로만 전달한다. 수정·미수정 판단과 근거는
+  [전수검토](docs/reviews/2026-10-30-full-review.md)에 있다.
 - 기존 Alertmanager에 Slack·Discord 기본 연동을 추가했다. Blackbox Exporter는 `cal.b4ton.com`의
   인증서 이름·체인·만료 시각을 검사하며, 실패와 14일 이내 만료를 알린다.
   [외부 연동 검토](docs/external-api-options.md), [연결 방법](docs/operations.md#운영-알림-채널-연결)
@@ -117,59 +122,27 @@
 
 ## 최근 검증
 
-- 의존성 갱신은 `c9e8db6`(이후 커밋은 문서만 변경)을 빈 `GRADLE_USER_HOME`에서 `./gradlew --no-daemon --max-workers=2 check bootJar`로
-  검증했다. 일반 166개·구조 3개 테스트, 검사 스크립트 회귀 테스트와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 새로 실행돼
-  통과했고 검증 메타데이터 누락은 없었다. 컴파일은 같은 의존성으로 앞선 빈 저장소 실행에서 끝나 `UP-TO-DATE`였다.
-  Gradle 9.8.0·Kotlin 2.4.20·Java 25 toolchain·PostgreSQL 18.6(Testcontainers)·Docker 29.8.2. 같은 커밋으로
-  `bootBuildImage --imageName=baton-cal:deps-c9e8db6`(`sha256:83923485c3e4ee6fce2fc577087a750b2b0de0024e6c072fc4f05890bdbc534d`) 뒤
-  `./scripts/smoke-oci-image.sh`(Flyway 적용 버전 `1`, Java 25·비루트, 백업 복원과 복구 모드 전체 재생성, 매니페스트 완료),
-  `./scripts/smoke-operations.sh`(Nginx 1.31.6·Prometheus 3.15.0·Alertmanager 0.34.1), `bash scripts/smoke-alert-channels.sh`
-  (4개 조합, Python 3.14.8 모의 수신기)가 통과했다. 로그: `/private/tmp/baton-cal-deps-check.log`,
-  `/private/tmp/baton-cal-deps-image.log`, `/private/tmp/baton-cal-deps-oci-smoke.log`, `/private/tmp/baton-cal-deps-operations.log`,
-  `/private/tmp/baton-cal-deps-alert-channels.log`. `docker/login-action` v4는 PR CI에서 실행되지 않으므로 병합 뒤 `main` CI로 확인한다.
-  부하 측정과 BATON 교차 서비스 테스트는 실행하지 않았다.
-- PR #40은 PR CI(`2d80174`)의 테스트·OCI·운영·알림 채널 스모크를 통과한 뒤 `c7370b0`으로 병합됐다. `main` CI
-  ([실행](https://github.com/ljkhyeong/baton-cal/actions/runs/38875933724))가 같은 검증과
-  `ghcr.io/ljkhyeong/baton-cal:c7370b0d814d69d7553cbf07df368c945aaa0872` 게시까지 통과했다. 기능별 검증 근거는
-  [기능 검토](docs/reviews/2026-10-14-feature-review.md#후속-진행--2026-10-16)에 있다.
-- `c4c3055`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37253345856)는 전체 테스트·OCI 이미지·
-  운영 스모크를 통과했지만 알림 채널 스모크 시작에서 실패해 GHCR 게시를 건너뛰었다. 이미지 고정값을 읽던
-  `docker compose config --no-interpolate`가 러너의 Compose에서 `${CAL_TLS_DIRECTORY:?...}` 볼륨 표기를
-  해석하지 못했다(`too many colons`). 로컬 Compose v5.5.1에서는 재현되지 않았다. Compose 해석 없이 서비스의
-  `image` 줄을 읽고 digest 고정 형식이 아니면 실패하도록 고쳤으며 `bash scripts/smoke-alert-channels.sh` 4개 조합이
-  통과했다. 로그: `/private/tmp/baton-cal-ci-c4c3055-failed.log`, `/private/tmp/baton-cal-alert-smoke-fix.log`.
-- 원격 main `a0058f6`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/37212960498)가 통과했다.
-  전체 테스트·계약 ZIP·OCI 이미지 빌드와 실행 스모크·HTTPS 프록시·운영 알림·알림 채널 스모크와 GHCR 이미지 게시를
-  포함한다. 로그: `/private/tmp/baton-cal-main-ci-a0058f6.log`.
-- Claude Code 스킬 추가는 `817720d` 기준 미커밋 상태에서 검증했다. `.claude/skills/`·지시·개발 문서만 바꿨고
-  제품 코드·테스트·의존성·설정은 같아 기존 전체 검증 결과를 재사용한다. Python 3.14.7에서
-  `./scripts/validate-skill.sh`로 스킬 8개, 링크 검사기 회귀 테스트 1개, Git 추적 Markdown 25개와 스킬 문서 9개의
-  링크 검사가 통과했다. 파일·종료 검사는 ArchUnit·검사 스크립트의 기존 성공 결과를 재사용해 통과했다.
-  기록: `build/agent-feedback/f8327a0187405a2d/`.
-- CAL 제품 기준 `81cd46a`에서 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로 실행했다.
-  두 실행 모두 최종 1,000개 UID·개정 2·취소 500개·동일 ETag를 확인했다. 최초 적재는 82.589초와
-  1.843초였다. 로컬 단회 비교이며 운영 성능 보장은 아니다. [측정 조건과 결과](docs/performance-baseline.md)
-  로그와 XML: `/private/tmp/baton-cal-batch-load-single.{log,xml}`, `/private/tmp/baton-cal-batch-load-100.log`.
-- 로컬 `bootBuildImage --imageName=baton-cal:batch-rc2`가 통과했다.
-  이미지 digest는 `sha256:89f514d33792f89595dd7c3d7a1f87f934ac908fa3b826229190b3ebad9c916c`이며
-  로그는 `/private/tmp/baton-cal-batch-image.log`다. 이 이미지와 BATON `6c3e5f5d`에서 다음 명령으로
-  교차 서비스 테스트 5개를 통과했다. 일정·구독·시즌 이름 아웃박스·백업 복원·재전달·완료 확인을 포함한다.
-  최신 main의 Spring 변경을 합친 뒤 다시 실행했으며 실패·제외 없이 통과하고 격리 컨테이너를 정리했다.
-  로그: `/private/tmp/baton-cal-rc2-merged-consumer.log`.
-
-  ```shell
-  BATON_CAL_REPOSITORY_ROOT=/Users/lim/devProject/personal/baton-cal \
-  BATON_CAL_IMAGE=baton-cal:batch-rc2 bash ops/tests/calendar-consumer-contract.sh
-  ```
-
-- BATON `7a064bcd`의 버전·해시 변경 후
-  `./gradlew --no-daemon --max-workers=2 :adapter-out-external:test --tests 'com.personal.baton.adapter.out.external.calendar.*'`
-  테스트 29개가 통과했다. 공식 ZIP과 기존 스키마 9개의 바이트 일치, 스크립트 문법·전체 diff도 확인했다.
-  이후 main 병합에서 관련 변경은 오류 안내·테스트 이름뿐이다. 병합 상태의 전체 회귀는 PR 필수 CI에서 확인한다.
-  로그: `/private/tmp/baton-cal-rc2-pin-tests.log`.
+- 전수검토 변경은 `6f26518` 위의 미커밋 작업 트리를 빈 `GRADLE_USER_HOME`에서
+  `./gradlew --no-daemon --max-workers=2 check bootJar`로 검증했다. 일반 203개·구조 3개 테스트, 검사 스크립트 회귀 테스트
+  18개와 `1.1.0-rc.3` 계약 ZIP 검증이 실패·제외 없이 새로 실행돼 통과했고 검증 메타데이터 누락은 없었다.
+  Gradle 9.8.2·Kotlin 2.4.21·Java 25 toolchain·PostgreSQL 18.6(Testcontainers)·Docker 29.9.2·Compose 5.6.1. 같은 트리로
+  `bootBuildImage --imageName=baton-cal:full-review`(`sha256:2bc42711ee2d902953af762ad5cc0fa44844e9c866ee54021a1400f6cd03c099`)
+  뒤 `./scripts/smoke-oci-image.sh`, `./scripts/smoke-operations.sh`(공개 프록시 인코딩 공격, 리다이렉트 헤더 주입,
+  잘못된 요청줄의 토큰 비노출 포함), `bash scripts/smoke-alert-channels.sh`(4개 조합)가 통과했다.
+  `계약 릴리스 HEAD 검증`의 `workflow_dispatch`는 `actionlint` 1.7.12 정적 검사만 통과했고 실제 실행은 하지 않았다.
+- 같은 이미지로 BATON `06fd981`의 교차 서비스 테스트 5개가 건너뜀 없이 통과했다. BATON 스크립트가 삭제된
+  `compose.smoke.yml`과 `1.1.0-rc.2`만 허용하므로 두 저장소의 임시 복제본에 호환 파일을 넣어 실행했고 실제 저장소는 수정하지
+  않았다. 복구·일정·구독·시즌 이름 아웃박스·백업 복원 뒤 재전달을 포함한다.
+- `6f26518`에서 `ingestionLoadTest -PloadItemCount=1000`을 `-PloadBatchSize=1`과 `100`으로, `projectionLoadTest`를 5회
+  실행했다. 개발 장비의 참고 측정이며 운영 성능 보장은 아니다. [측정 조건과 결과](docs/performance-baseline.md)
+- 공백 판정은 입력 가능한 TZID 339개의 1970~2037년 공백 8,786건을 JVM 규칙과 대조했고, 차이는 내장 데이터가 다른
+  `Europe/Chisinau`·`America/Tijuana`뿐이었다. 32만 회 병렬 호출에서 오판은 없었다. 일회 검증이며 상시 테스트에는
+  대표 시각만 고정했다.
+- PR #41 병합 `9cafd90`의 [main CI](https://github.com/ljkhyeong/baton-cal/actions/runs/38926931261)가 전체 테스트·이미지·
+  스모크와 `docker/login-action` v4 로그인, `ghcr.io/ljkhyeong/baton-cal:9cafd90eb088347921d99f6e133e6a9dd34d3e5a` 게시까지 통과했다.
 - `3ba5889`에서 `verifyContractsZip`을 통과하고 게시 후 `gh release verify`·`gh release verify-asset`으로
   `1.1.0-rc.2`의 릴리스·자산 증명을 검증했다. 태그 커밋과 SHA-256은 [릴리스 현황](docs/contract-release-history.md)에 기록했다.
-- 2026-09-12 `curl -I https://cal.b4ton.com`은 로컬 네트워크에서 DNS 조회에 실패했다.
+- 2026-09-12 `curl -I https://cal.b4ton.com`은 로컬 네트워크의 DNS 조회 실패로 사용자 확인 내용을 직접 검증하지 못했다.
   실제 Google·Outlook 구독과 공개 HTTPS·운영 환경 검증은 실행하지 못했다.
 
 결과를 재사용하기 전에 [개발 검증 절차](docs/development.md)에 따라 소스·테스트·설정·환경 차이를 확인한다.
@@ -184,14 +157,17 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
 남은 후보는 아래 조건이 정해지면 진행한다.
 
 1. 실제 캘린더 앱·운영 연결 검증 후 `1.1.0` 안정 버전 승격을 판단한다. 저장소의 작업 후보 `1.1.0-rc.3`은
-   기존 경로의 계약 의미가 같고 운영자용 전체 재생성 경로만 추가하므로 별도 게시하거나 안정 승격에 포함할지 그때 정한다.
-   `1.0.x` 유지가 필요할 때만 `LICENSE`를 포함한 `1.0.1` 호환 보완판을 게시한다.
+   기존 스키마·다이제스트·골든을 유지하고 전체 재생성·최근 조회일 경로와 DST 공백·입력 검증 정정을 담았다. 별도 게시할지
+   안정 승격에 포함할지 그때 정한다. `1.0.x` 유지가 필요할 때만 `LICENSE`를 포함한 `1.0.1` 호환 보완판을 게시한다.
+   이때 수동 실행으로 바꾼 `계약 릴리스 HEAD 검증`을 함께 확인한다. 이 작업은 main에 병합된 뒤에만 실행할 수 있어
+   실제 실행은 아직 하지 않았다.
 2. 실제 운영 환경에서 준비된 `cal.b4ton.com` DNS·인증서를 연결하고, 선택한 알림 채널의 웹훅을 등록한다.
    BATON에는 공개 구독 주소와 구분되는 사설 HTTPS 연결을 제공한다. CAL `tls` 사용 시 공개 프록시의
    상위 서버 프로토콜도 HTTPS로 맞춘다. 기존 HTTP Compose에 프로필만 추가해서는 연결되지 않는다.
    인증서 갱신·외부 점검·비밀 관리에 사용할 도구를 연결하고 내부 Bearer 회전과 프록시·추적의
    토큰 비노출을 검증한다. Healthchecks를 사용하면 첫 신호 수신과 누락·복구 알림을 실제 계정에서 확인한다.
-   홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다.
+   홈서버 설치·k3s 구축은 이번 연동 작업 범위에 포함하지 않는다. k3s 구성에서는 공개 경로 허용 목록, 실제 송신 IP,
+   클러스터 DNS, 네트워크 분리, 컨테이너 권한 축소, TLS 설정, DB 계정 분리를 함께 정한다.
 3. 실제 캘린더 앱에서 구독·이름 표시·갱신·취소를 확인한 뒤 BATON의 관련 기능과 이름 보정·전달을
    활성화한다. [앱별 확인표](docs/calendar-subscription-guide.md)
 4. 운영 RTO/RPO·백업 저장소·암호화와 실제 복원 훈련을 정한다. 구독 세대 교체, 최신 재전달·완료 확인,
@@ -202,7 +178,9 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
    [전체 재생성](README.md#캘린더-출력-변경-배포)을 실행한다. iCal4j 4.4.0도 내장 데이터는 Olson `2025a`다.
 7. BATON이 `1.1.0-rc.3` 이상을 고정한 뒤 구독 화면에서 최근 조회일 경로를 호출해 앱 등록·갱신 중단 안내를 연결한다.
    날짜가 이어서 갱신되는지로 판단하며 파일 가져오기의 한 번 조회와 구분한다.
-8. 새 Dependabot PR은 [의존성 절차](.claude/skills/baton-cal-dependencies/SKILL.md)로 처리한다. Gradle 생태계 PR은
+8. BATON의 `ops/tests/calendar-consumer-contract.sh`는 CAL에서 삭제된 `compose.smoke.yml`과 `1.1.0-rc.2`만 허용해
+   지금 저장소 그대로는 시작하지 못한다. BATON이 자체 Compose 정의를 갖고 새 버전을 허용하도록 고친다.
+9. 새 Dependabot PR은 [의존성 절차](.claude/skills/baton-cal-dependencies/SKILL.md)로 처리한다. Gradle 생태계 PR은
    잠금 파일·검증 메타데이터를 함께 바꾸지 않아 CI가 실패하므로 깨끗한 Gradle 저장소에서 두 파일을 다시 쓴다.
 
 ## 현재 제한
@@ -220,6 +198,9 @@ CAL의 직접 HTTP 호출 부재와 기존 표준 연동을 유지하고 HTTPS �
 - 시간대 입력과 출력은 iCal4j 4.4.0 내장 Olson `2025a` 기준이다.
 - 전체 재생성은 한 요청에서 동기로 처리하며 처리 시간이 전체 일정 수에 비례한다. 배포 중 이전 버전이 수신한
   시즌은 이전 출력으로 다시 저장될 수 있으므로 모든 인스턴스를 배포한 뒤 호출한다.
-- 공개 조회는 최근 조회일 기록 문장을 한 번 더 실행한다. 같은 날에는 쓰지 않지만 부하 측정은 이 변경 뒤 다시 하지
-  않았다. 날짜는 UTC 기준이므로 화면에 표시할 때 시간대 차이를 고려한다.
+- 공개 조회는 최근 조회일 기록 문장을 한 번 더 실행한다. 같은 날에는 쓰지 않으며 측정한 지연 영향은 편차 안이었다.
+  날짜는 UTC 기준이므로 화면에 표시할 때 시간대 차이를 고려한다.
+- 내장 데이터가 JVM 최신 데이터와 다른 시간대가 있다. 공백 판정과 피드는 내장 `2025a`를 따르며 `Europe/Chisinau`의
+  전환 시각과 `America/Tijuana`의 1970년대 기록이 이에 해당한다.
+- 시간대 데이터 갱신으로 공백이 된 저장 일정은 거부되지 않고 피드에 남는다. 해당 시각의 표시는 캘린더 앱이 정한다.
 - CI 산출물·공식 계약 릴리스·BATON의 계약 채택·운영 배포는 구분한다.

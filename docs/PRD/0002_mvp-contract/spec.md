@@ -158,9 +158,11 @@ CAL은 현지 시각 필드를 UTC 시각으로 바꾸지 않고 동일한 `TZID
 BATON은 시간대의 DST 공백에 들어가지 않는 현지 시각 값을 보내야 한다. 중첩 구간에서 특정 시각이
 중요하면 `ZONED_LOCAL`·`ZONED_LOCAL_POINT`를 쓰지 않고 UTC 형태를 쓴다. CAL은 시간대 정책,
 지속 시간 또는
-오프셋을 다시 선택하지 않는다. CAL은 같은 iCal4j `VTIMEZONE`에서 `ZoneRulesBuilder`로 만든 규칙을
-사용해 DST 공백만 거부한다. Java 런타임의 별도 TZDB 규칙과 교차 비교하거나 RRULE을 직접 해석하지
-않는다. 피드에는 사용하는 시간대마다 iCal4j 4.4.0
+오프셋을 다시 선택하지 않는다. CAL은 피드에 넣는 것과 같은 iCal4j `VTIMEZONE`의 전환(`DTSTART`·`RDATE`·
+`RRULE`)을 평가해 수신한 현지 시각의 DST 공백만 거부한다. 끝난 반복 규칙을 미래에 적용하지 않고 예고된
+일회성 전환은 시각과 관계없이 반영한다. 저장된 일정을 다시 읽을 때는 판정하지 않으므로 내장 시간대 데이터 갱신으로
+공백이 된 과거 입력도 시즌의 수신과 재구축을 막지 않고 피드에 그대로 남는다. Java 런타임의 별도 TZDB 규칙과
+교차 비교하지 않고 반복 계산은 iCal4j에 맡긴다. 피드에는 사용하는 시간대마다 iCal4j 4.4.0
 `TimeZoneRegistryFactory`가 만든 레지스트리의 전체 `VTIMEZONE` 하나를 TZID 오름차순으로
 포함한다. 같은
 채택된 항목 집합과 고정된 iCal4j 시간대 데이터에서는 구성 요소 바이트가 같아야 한다.
@@ -193,7 +195,8 @@ BATON은 시간대의 DST 공백에 들어가지 않는 현지 시각 값을 보
   `STATUS:CANCELLED`로 투영한다.
 - `SUMMARY`, `DESCRIPTION`, `LOCATION`은 iCalendar TEXT 이스케이프 후 투영한다. 값이 없을 수 있는
   속성은 `null`일 때 생략한다.
-- 반복 규칙, 주최자, 참석자, 알람, 제공자 URL과 BATON 비공개 위치 식별자는 만들지 않는다.
+- `VEVENT`에는 반복 규칙, 주최자, 참석자, 알람, 제공자 URL과 BATON 비공개 위치 식별자를 넣지 않는다.
+  `VTIMEZONE`의 `RRULE`·`TZURL`은 iCal4j 시간대 정의에 포함된 값이다.
 - 구간 형태는 `DTSTART`와 `DTEND`, 시점 형태는 `DTSTART`만 사용한다. 종일 형태는 두 속성에
   `VALUE=DATE`를 사용한다.
 
@@ -216,7 +219,7 @@ VCALENDAR의 고정 속성은 아래 순서다.
 - 정규 캘린더 바이트가 같으면 바이트 단위로 같은 응답과 검증 값을 만든다.
 - `ETag`는 정규 UTF-8 바이트의 SHA-256 소문자 16진수 64자리를 따옴표로 감싼 강한
   태그다.
-- `Last-Modified`는 시즌 투영 행에 IMF-fixdate GMT 초 정밀도로 저장한다. 처음 만든 투영은
+- `Last-Modified`는 시즌 투영 행에 초 정밀도로 저장하고 HTTP 헤더에는 IMF-fixdate GMT로 표기한다. 처음 만든 투영은
   일정 항목과 시즌 이름의 가장 큰 CAL `acceptedAt`을 사용한다. 둘 다 없으면 Unix 시간 원점을 쓴다.
   기존 투영과 ETag가 같으면 값을 보존하고 ETag가 바뀌면 현재 UTC 시각의 초 단위 값을 사용한다.
   공개 HTTP 응답은 저장된 값과 요청 처리 시각 중 이른 값을 헤더에 사용하므로 `Last-Modified`는
@@ -226,6 +229,8 @@ VCALENDAR의 고정 속성은 아래 순서다.
   `If-None-Match`가 맡는다.
 - `If-None-Match`가 있으면 이를 먼저 평가하며 일치할 때 본문 없는 `304 Not Modified`를
   반환한다. 이 헤더가 없을 때만 `If-Modified-Since`를 평가한다.
+- `If-Match`, `If-Unmodified-Since`, `If-None-Match: *`는 이 계약의 대상이 아니다. 공개 프록시는
+  `If-None-Match`와 `If-Modified-Since`만 전달한다.
 - `304`에도 `ETag`, `Last-Modified`, `Cache-Control`을 넣고 `Content-Type`과 본문은 넣지 않는다.
 - 재구축, 동일 내용 재전달과 낮은 개정 번호 전달은 캘린더 바이트, ETag와 저장된 Last-Modified를
   바꾸지 않는다. 시계 역행으로 저장값이 요청 처리 시각보다 미래이면 HTTP 헤더만 현재 시각으로 제한한다.
@@ -344,6 +349,11 @@ CAL은 완료 사실을 저장하지만 런타임 설정을 자동 해제하지 
 4바이트 big-endian, nullable 정수는 존재 여부 boolean 뒤에 값, nullable 문자열은 `null`일 때
 길이 `-1`을 쓴다. UUID 정렬은 표준 36자 문자열의 사전순이다.
 
+- `baton-cal-snapshot-v1` 페이로드 다이제스트는 이 문자열 뒤에 `sourceItemId`, `seasonId`, 개정 번호, 상태, 제목,
+  nullable 설명, nullable 장소, `sourceUpdatedAt`, 시간 형태 이름과 형태별 값을 쓴다. 형태별 값은 `UTC_INSTANT`의
+  시작·종료, `UTC_POINT`의 시점, `ZONED_LOCAL`의 시작·종료·시간대, `ZONED_LOCAL_POINT`의 시점·시간대, `ALL_DAY`의
+  시작일·종료일이다. 시각은 마이크로초로 정규화한 뒤 Java `Instant`·`LocalDateTime`·`LocalDate`의 `toString`
+  표기를 문자열로 쓴다. `LocalDateTime` 표기는 0인 초와 소수를 생략한다.
 - 일정 항목 다이제스트는 `baton-cal-recovery-items-v1` 뒤에 `sourceItemId`, 개정 번호,
   기존 `baton-cal-snapshot-v1` 페이로드 다이제스트를 항목 순서대로 쓴다.
 - 시즌 이름 다이제스트는 `baton-cal-recovery-metadata-v1` 뒤에 이름 전용 개정 번호와 표시 이름을 쓴다.
@@ -391,9 +401,10 @@ Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 | --- | --- | --- |
 | `400` | `INVALID_REQUEST` | 잘못된 JSON·경로 UUID, Bean Validation 또는 시간 형식/도메인 검증 실패 |
 | `401` | `UNAUTHORIZED` | 내부 Bearer 자격 증명 누락 또는 불일치 |
-| `404` | `RESOURCE_NOT_FOUND` | 일정·구독·복구 기록이 없거나, 시즌 일정·이름이 모두 미수신이거나, 회전할 구독이 폐기됨 |
+| `404` | `RESOURCE_NOT_FOUND` | 일정·구독·복구 기록이 없거나, 시즌 일정·이름이 모두 미수신이거나, 회전할 구독이 폐기되었거나, 내부 경로가 없음 |
+| `405`·`406`·`415` | `INVALID_REQUEST` | 허용되지 않은 메서드, 제공할 수 없는 `Accept`, 지원하지 않는 `Content-Type` |
 | `409` | `EVENT_ID_CONFLICT` | 같은 이벤트 식별자가 다른 원본 스냅샷을 가리킴 |
-| `409` | `SOURCE_REVISION_CONFLICT` | 같은 항목/개정 번호가 다른 원본 내용을 가리킴 |
+| `409` | `SOURCE_REVISION_CONFLICT` | 같은 항목/개정 번호가 다른 원본 내용을 가리키거나, 더 높은 개정 번호의 `sourceUpdatedAt`이 이전 값보다 늦지 않음 |
 | `409` | `SOURCE_ITEM_SCOPE_CONFLICT` | 같은 원본 항목을 다른 시즌에 재사용함 |
 | `409` | `SEASON_METADATA_REVISION_CONFLICT` | 현재 시즌 정보 개정 번호에 다른 표시 이름을 전달함 |
 | `409` | `RECOVERY_MANIFEST_MISMATCH` | 복구 매니페스트가 현재 CAL 저장 상태 또는 전체 시즌 집합과 다름 |
@@ -407,10 +418,11 @@ Jackson 파서에서 먼저 적용한다. 어느 제한이든 초과하면
 | `503` | `RECOVERY_IN_PROGRESS` | 복구 모드가 켜져 구독 생성·회전을 차단함 |
 | `500` | `INTERNAL_ERROR` | 호출자에게 내부 세부 정보를 노출하지 않는 예상 밖 실패 |
 
-상태 조회의 `404 RESOURCE_NOT_FOUND`, 상태 충돌의 `409`, 복구 중 발급 차단의 `503 RECOVERY_IN_PROGRESS`에는
-`Cache-Control: no-store`를 포함한다. 이후 생성·갱신된 상태를 확인할 때 이전 오류 응답을 재사용하지 않는다.
+`/internal/*`의 모든 응답은 인증 실패와 프레임워크 오류를 포함해 `Cache-Control: no-store`를 포함한다.
+이후 생성·갱신된 상태를 확인할 때 이전 응답을 재사용하지 않는다. 오류 본문은 요청의 `Accept`와 관계없이
+`application/json`이다.
 
-스냅샷 전달은 네트워크 실패나 `5xx`만 재시도 간격을 두고 재시도하며 `4xx`는 계약/설정
+스냅샷 전달은 네트워크 실패와 위 재전송 대상 상태만 재시도 간격을 두고 재시도하며 그 밖의 `4xx`는 계약/설정
 오류로 처리한다. `413`을 받으면 요청 크기나 구조를 제한에 맞게 수정한 뒤 다시 보낸다.
 `503 SERVICE_BUSY`에는 `Retry-After: 1`과 `Cache-Control: no-store`를 포함하며 호출자는 이 값을 지켜 재시도한다.
 동시 트랜잭션의 교착 상태·직렬화 실패도 같은 응답을 사용한다. 데이터 제약 위반과 SQL 오류는 이 재시도 분류에 포함하지 않는다.
@@ -516,7 +528,7 @@ CAL 진단 값을 그대로 기대 매니페스트로 보내면 원본 완전성
 ### `PUT /internal/api/v1/recovery-runs/{recoveryId}/seasons/{seasonId}/manifest`
 
 - 요청: `recovery-season-manifest.v1`의 `{itemCount, itemDigest, metadataRevision, metadataDigest}`.
-- 시즌 이름 개정 번호와 다이제스트는 둘 다 `null`이거나 둘 다 값이어야 한다.
+- 시즌 이름 개정 번호와 다이제스트는 둘 다 `null`이거나 둘 다 값이어야 하며 필드를 생략하지 않는다.
 - 성공: `200 OK`, `Cache-Control: no-store`, `recovery-season-manifest-result.v1`의 `VERIFIED`.
 - CAL의 현재 일정 항목별 채택 개정·페이로드와 시즌 이름이 요청과 정확히 같을 때만 저장한다.
 - 새 검증은 복구 모드에서만 허용한다. 전체 완료 전에는 같은 복구 ID·시즌의 최신 상태로 갱신할 수 있다.
@@ -592,9 +604,9 @@ CAL 진단 값을 그대로 기대 매니페스트로 보내면 원본 완전성
 ### `GET /calendars/v1/{token}.ics`
 
 - `ACTIVE` 상태·토큰 해시·현재 구독 세대가 모두 일치하는 토큰: `200 OK`
-- `Content-Type: text/calendar; charset=utf-8`
+- `Content-Type: text/calendar;charset=UTF-8`
 - `Cache-Control: no-cache, private`
-- `Content-Disposition: inline; filename=\"baton-calendar.ics\"`
+- `Content-Disposition: inline; filename="baton-calendar.ics"`
 - `Content-Length`: 저장된 `.ics`의 UTF-8 바이트 수
 - 정규 `ETag`와 `Last-Modified`
 - 조건부 일치: 본문 없는 `304 Not Modified`
@@ -610,13 +622,14 @@ HEAD는 DB에서 검증 값과 파일 크기만 읽고 캘린더 본문을 애�
 
 관측 시스템의 고카디널리티 `http.url`에는 실제 요청 토큰을 넣지 않는다. 정상 조회뿐 아니라 형식이
 잘못되었거나 알 수 없는 `/calendars/v1/**` 요청도 `/calendars/v1/{token}.ics` 템플릿으로 기록한다.
+그 밖의 요청은 핸들러 경로 패턴이나 `UNKNOWN`을 기록하고 경로 원문을 넣지 않는다.
 
 ## 공개 프록시의 요청 제한
 
-공개 HTTPS 호스트는 `cal.b4ton.com`이며 구독 주소의 기본값은 `https://cal.b4ton.com`이다.
+공개 HTTPS 호스트는 `cal.b4ton.com`이며 운영 구독 주소의 기준 URL은 `BATON_CAL_PUBLIC_BASE_URL`로 지정한다.
 도메인 선택은 기존 iCalendar UID와 JSON Schema 식별자를 바꾸지 않는다.
 
-CAL 앞의 Nginx는 공개 피드 GET·HEAD만 전달하고 내부 API·관리 포트는 공개 라우팅하지 않는다.
+CAL 앞의 Nginx는 토큰 형식의 공개 피드 경로 GET·HEAD만 전달하고 내부 API·관리 포트는 공개 라우팅하지 않는다.
 IP별 요청률 또는 동시 처리 제한을 넘으면 `429`, `Retry-After: 1`, `Cache-Control: no-store`를
 반환한다. 프록시의 오류 본문은 JSON API 계약이 아니며 클라이언트는 상태와 헤더를 따른다.
 공개 프록시의 수치와 공유 송신 IP 처리 기준은 운영 트래픽에 맞춰 조정하며 CAL에 별도 제한
@@ -676,9 +689,10 @@ IP별 요청률 또는 동시 처리 제한을 넘으면 `429`, `Retry-After: 1`
     `Cache-Control: no-store`로 응답한다. 실제 연결 풀 고갈 중 발급·피드 조회의 실패와 연결 반환 후 정상 처리를 확인한다.
     일정 수신 결과, 내부 인증 결과, 투영 재구축 시간·항목 수·바이트와 시즌 잠금 획득
     시간은 식별자나 비밀값이 없는 저카디널리티 Micrometer 지표로 기록한다.
-19. iCal4j 4.4.0 내장 Olson `2025a`의 원문 TZID만 허용하고 같은 `VTIMEZONE`에서 만든 규칙으로
-    DST 공백을 판정한다. 만료된 과거 DST 규칙이 2026년 `Asia/Tokyo` 시각을 거부하지 않는지,
-    실제 DST 공백은 계속 거부하는지 검증한다. 의존성 갱신 뒤 기존 골든 바이트와 ETag가 유지되는지
+19. iCal4j 4.4.0 내장 Olson `2025a`의 원문 TZID만 허용하고 같은 `VTIMEZONE`의 전환으로
+    DST 공백을 판정한다. 끝난 DST 규칙이 2026년 `Asia/Tokyo`·2027년 `Europe/Moscow` 시각을 거부하지 않는지,
+    실제 DST 공백과 `Africa/Casablanca`처럼 일회성으로 예고된 미래 공백은 거부하는지 검증한다.
+    저장된 일정이 공백이 되어도 시즌의 수신과 재구축이 막히지 않는지 확인한다. 의존성 갱신 뒤 기존 골든 바이트와 ETag가 유지되는지
     확인하고 의도하지 않은 변경은 자동 승인하지 않는다.
 20. 복구 모드의 실제 생성·회전 응답을 `api-error.v1`에 대조하고 기존 구독과 투영이 바뀌지 않는지
     확인한다. 수신·재구축·공개 피드·폐기는 계속 허용한다. OCI 복원 훈련은 새 세대와 복구 모드를
@@ -719,7 +733,7 @@ Kotlin/Spring MVC 실행 기반, PostgreSQL/Flyway 영속성 계층, iCal4j 투�
 생명주기를 실제 수신 경로로 실행하고, 같은 UID의 최종 피드가 `SEQUENCE:4`, `STATUS:CONFIRMED`인지
 확인한다. UTC·시간대 지정 시점과 종일 일정도 같은 경로로 수신하고 PostgreSQL 왕복과
 정규 iCalendar 표현을 검증한다. 시간대 지정 입력은 iCal4j 4.4.0 내장 Olson `2025a`의 원문 TZID와
-같은 `VTIMEZONE`에서 만든 DST 규칙을 사용한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의
+같은 `VTIMEZONE`의 전환을 사용한다. TEXT 이스케이프와 4바이트 Unicode 줄 접기 경계의
 정규 `.ics` 골든,
 의존성 잠금과 골든 검토 절차도 갖춘다. JSON 요청 크기·구조 제한과 고정 `413` 오류,
 공개 기준 URL의 HTTPS·루프백 규칙, `prod` 공개 URL 시작 검증, 데이터베이스의 로컬 기본값 상속
@@ -762,8 +776,8 @@ PRD를 같은 입력에서 같은 바이트가 되는 `baton-cal-contracts-1.1.0
 - 현재 BATON의 안정 계약은 `contracts-v1.0.0`이다. 게시한 후보 `1.1.0-rc.2`는 ID 지정 구독 생성과
   고정 복원 다이제스트 예시, 복구 실행·시즌 진단 조회를 제공하며 BATON이 버전·해시를 고정해 실제 CAL
   컨테이너와 교차 검증했다. 작업 후보 `1.1.0-rc.3`은 운영 전 DB 마이그레이션 통합에 맞춰 구버전 배포 순서
-  설명을 지우고 전체 시즌 투영 재생성과 구독 최근 조회일 경로를 추가했다. 기존 경로의 HTTP·스키마·다이제스트·
-  iCalendar 바이트는 바꾸지 않았으며 아직 게시하지 않았다.
+  설명을 지우고 전체 시즌 투영 재생성과 구독 최근 조회일 경로를 추가했다. 기존 스키마·다이제스트·iCalendar 바이트는
+  바꾸지 않았고 DST 공백 오판과 스키마보다 넓던 입력 허용을 바로잡았다. 아직 게시하지 않았다.
 - 후보 계약의 정식 채택과 실제 캘린더 앱의 이름 갱신 검증. BATON 원본 변경의 아웃박스 전달,
   기존 시즌 이름 보정과 최신 이름의 같은 개정 번호 재전달 준비는 기본 비활성 설정으로 구현했다.
   이름 재전달 준비는 전체 일정·취소의 수신 완료나 복구 모드 해제 판단을 대신하지 않는다.

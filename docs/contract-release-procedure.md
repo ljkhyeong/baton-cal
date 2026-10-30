@@ -7,8 +7,8 @@
 
 - ZIP 파일명과 `contracts-v{버전}` 태그는 `contracts/VERSION` 값을 사용한다.
 - 계약 변경을 풀 리퀘스트로 검토해 `main`에 반영한다. 미커밋 변경이 없고 로컬과 원격의 커밋이 같을 때 게시한다.
-- 과거 태그에서 갈라져 `main`에 병합하지 않는 호환 브랜치는 풀 리퀘스트의 `계약 릴리스 HEAD 검증`
-  작업으로 합성 merge commit이 아닌 브랜치의 정확한 커밋과 계약 ZIP을 검증한다.
+- 과거 태그에서 갈라져 `main`에 병합하지 않는 호환 브랜치는 `main`과 충돌해 풀 리퀘스트 CI가 시작되지
+  않는다. `계약 릴리스 HEAD 검증` 작업을 수동 실행해 브랜치의 정확한 커밋과 계약 ZIP을 검증한다.
 - `verifyContractsZip`으로 실제 ZIP의 파일명, 내부 버전과 포함 파일 목록을 검증한다.
 - GitHub 저장소의 릴리스 불변성 설정을 켠 상태에서 초안을 검토한 뒤 게시한다.
 - 게시한 태그와 자산은 교체하지 않는다. 수정이 필요하면 다음 버전을 만든다.
@@ -39,18 +39,21 @@ git restore --source=origin/main -- \
 git diff --exit-code contracts-v1.0.0 -- \
   contracts/examples contracts/golden contracts/schemas docs/PRD/0002_mvp-contract/spec.md
 ./gradlew --no-daemon verifyContractsZip
-git add LICENSE build.gradle.kts contracts gradle gradlew gradlew.bat docs/releases/contracts-v1.0.1.md
+git add LICENSE build.gradle.kts gradle.lockfile contracts gradle gradlew gradlew.bat \
+  docs/releases/contracts-v1.0.1.md
 git commit -m "배포: 계약 1.0.1 호환 보완판 준비"
 git push -u origin release/contracts-v1.0.1
+gh workflow run ci.yml --ref main -f release-sha="$(git rev-parse HEAD)"
 ```
 
-풀 리퀘스트에서 변경 범위, 일반 CI와 `계약 릴리스 HEAD 검증` 작업을 모두 확인한다. 후자는
-`release/contracts-` 브랜치의 정확한 HEAD에서 만든 계약 ZIP을 별도 산출물로 올린다. 이 호환
-브랜치는 과거 안정 태그에서 갈라지므로 `main`에 병합하지 않고 릴리스 태그의 기준 커밋으로만 사용한다.
+풀 리퀘스트에서 변경 범위를 검토하고, 수동 실행한 `계약 릴리스 HEAD 검증` 작업의 성공을 확인한다.
+이 작업은 입력한 커밋에서 만든 계약 ZIP을 별도 산출물로 올린다. 이 호환 브랜치는 과거 안정 태그에서
+갈라지므로 `main`에 병합하지 않고 릴리스 태그의 기준 커밋으로만 사용한다. 복원한 빌드 설정과 태그의
+소스가 섞인 트리라 전체 테스트는 검증 대상이 아니다.
 
 ## `1.0.1` 게시
 
-호환 브랜치의 풀 리퀘스트 검토와 CI가 끝나면 같은 커밋을 로컬에 체크아웃하고 다음 선행 조건을
+호환 브랜치의 풀 리퀘스트 검토와 수동 검증이 끝나면 같은 커밋을 로컬에 체크아웃하고 다음 선행 조건을
 확인한다. `git status --short`는 아무 내용도 출력하지 않아야 한다.
 
 ```shell

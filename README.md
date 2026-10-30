@@ -2,7 +2,7 @@
 
 BATON CAL은 확정된 시즌 일정·회차·마감을 읽기 전용 캘린더 구독(.ics)으로 제공하는 독립 서비스다.
 
-> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 안정 계약 `1.0.0`의
+> 현재 상태: 시즌 단위 MVP 애플리케이션과 계약 테스트가 구현되어 있고 안정 계약 `1.0.0`은
 > BATON의 계약 테스트를 통과했다. 실제 운영 활성화와 공개 배포는 아직 하지 않았다. 공개 저장소는
 > [ljkhyeong/baton-cal](https://github.com/ljkhyeong/baton-cal)이다.
 
@@ -71,9 +71,11 @@ CAL이 담당한다.
   맞게 조정한다. DB 연결·트랜잭션 시작 실패, 교착 상태·직렬화 실패, 잠금·SQL·트랜잭션 시간 초과에는
   `503 SERVICE_BUSY`, `Retry-After: 1`, `Cache-Control: no-store`를 반환한다. 호출자는 헤더에 맞춰 재시도한다.
 - Tomcat 접근 로그는 기본적으로 끄고, 나중에 켜더라도 경로·쿼리·헤더를 기록하지 않는 패턴을
-  기본값으로 둔다. `prod` 프로필에서는 `StatementCreatorUtils` 로그를 끈다.
+  기본값으로 둔다. `prod` 프로필은 `StatementCreatorUtils` 로그를 끄고 `org.apache.coyote`를 `WARN`,
+  `org.springframework.web`을 `INFO`로 제한한다. 잘못된 요청줄이나 DEBUG 요청 로그에 구독 토큰이 남지 않게 하기
+  위해서다. 운영에서 이 로거들의 수준을 올리지 않는다.
 - 공개 `/calendars/v1/**` 요청을 추적할 때 `http.url`에는 실제 토큰 대신
-  `/calendars/v1/{token}.ics`를 기록한다.
+  `/calendars/v1/{token}.ics`를 기록한다. 그 밖의 요청도 경로 패턴이나 `UNKNOWN`만 기록한다.
 - 일정 수신 결과는 `baton.cal.snapshot.ingestion`, 투영 재구축 시간·항목 수·캘린더 크기(바이트)는
   `baton.cal.projection.rebuild`, `baton.cal.projection.items`, `baton.cal.projection.bytes`, 시즌
   잠금 획득 시간은 `baton.cal.projection.lock.acquire`로 기록한다. 내부 인증 결과는
@@ -86,8 +88,8 @@ CAL이 담당한다.
   사용하며 준비 상태에만 DB 점검을 포함한다. [점검 연결 기준](docs/integration-runtime.md#k3s-상태-점검에-사용할-경로)
 - 내부 Bearer는 필수 현재 값 `BATON_CAL_INTERNAL_TOKEN`과 회전할 때만 쓰는 선택적 이전 값
   `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 최대 두 개까지 허용한다. 두 값은 모두 32자 이상이어야
-  하고 RFC 6750 `b64token` 문자 범위와 끝의 `=` 패딩만 사용한다. 선택적 값을 빈 문자열로 설정하면
-  시작에 실패한다. HTTP `Bearer` 스킴은 대소문자를 구분하지 않고 인증 실패 `401`은 고정된
+  하고 RFC 6750 `b64token` 문자 범위와 끝의 `=` 패딩만 사용한다. 선택적 값을 빈 문자열로 설정하거나
+  현재 값과 같게 설정하면 시작에 실패한다. HTTP `Bearer` 스킴은 대소문자를 구분하지 않고 인증 실패 `401`은 고정된
   `WWW-Authenticate` challenge를 반환한다.
 - 공개 구독은 DB 상태가 `ACTIVE`이고 토큰 해시와 저장된 구독 세대가 모두 일치할 때만 조회된다.
   외부 런타임 값 `BATON_CAL_SUBSCRIPTION_GENERATION`은 비밀이 아닌 UUID이며 정상 재시작·일반
@@ -117,7 +119,8 @@ openssl rand -hex 32
 회전할 때는 새 값을 `BATON_CAL_INTERNAL_TOKEN`, 기존 값을
 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`으로 넣어 CAL을 먼저 배포한다. 그다음 BATON 호출자를 새 값으로
 전환하고, 이전 값을 쓰는 요청이 없음을 확인한 즉시 `BATON_CAL_PREVIOUS_INTERNAL_TOKEN`을 제거해
-CAL을 다시 배포한다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
+CAL을 다시 배포한다. Secret 파일로 운영하면 이전 값의 파일 이름은 `baton.cal.previous-internal-token`이다.
+[Secret 파일 이름](docs/operations.md#secret-파일-연결)을 따르며 환경 변수 이름으로 파일을 만들면 이전 값이 적용되지 않는다. 구현은 제시된 자격 증명을 설정된 모든 값과 상수 시간으로 비교한다. 임의 개수의
 토큰 목록을 만들거나 이전 값을 장기간 유지하지 않는다. 외부 메트릭 수집기를 연결한 환경에서는
 `baton.cal.internal.authentication{result="previous"}` 증가가 멈춘 것을 제거 판단의 근거로 쓴다.
 Prometheus에서는 `sum(increase(baton_cal_internal_authentication_total{result="previous"}[1h]))`가 0인지
@@ -128,18 +131,21 @@ Prometheus에서는 `sum(increase(baton_cal_internal_authentication_total{result
 
 저장된 시즌 피드는 만든 시점의 iCal4j 직렬화와 내장 시간대 데이터로 만든 바이트다. 골든 바이트·ETag 검토를
 마친 iCal4j·시간대 데이터 변경은 모든 인스턴스에 배포한 뒤 다음 요청으로 저장된 모든 시즌에 반영한다.
-`CAL_INTERNAL_BASE_URL`은 공개 프록시를 거치지 않는 인증된 내부 연결 주소다.
+`CAL_INTERNAL_BASE_URL`은 공개 프록시를 거치지 않는 인증된 내부 연결 주소로, BATON의 `BATON_CAL_BASE_URL`과
+같은 값이다. `BATON_CAL_INTERNAL_TOKEN`에는 현재 내부 Bearer를 넣는다. Secret 파일로 운영하면 같은 값을 파일에서
+읽어 셸 변수에 담는다. 아래 명령은 값이 프로세스 인수로 드러나지 않도록 curl 설정으로 헤더를 넘긴다.
 
 ```shell
 curl --fail-with-body --silent --show-error -X POST \
-  -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
+  --config <(printf 'header = "Authorization: Bearer %s"\n' "$BATON_CAL_INTERNAL_TOKEN") \
   "$CAL_INTERNAL_BASE_URL/internal/api/v1/projections/rebuild"
 ```
 
 응답의 `changedSeasonCount`는 바이트가 바뀐 시즌 수다. 바뀐 시즌만 ETag와 Last-Modified가 갱신되어 캘린더
 앱이 다음 조회에서 새 피드를 받는다. 출력이 같은 배포는 `0`이며 피드를 다시 쓰지 않는다. 시즌마다 따로
-커밋하므로 `503 SERVICE_BUSY`나 응답 유실 뒤에는 같은 요청을 다시 보낸다. `500`은 같은 요청으로 해결되지 않는
-오류이므로 재요청하지 않고 배포한 변경이 저장된 일정을 렌더링하는지 확인한다. 배포 중 이전 버전이 수신한 시즌은
+커밋하므로 `503 SERVICE_BUSY`나 응답 유실 뒤에는 같은 요청을 다시 보낸다. 이때 `changedSeasonCount`는 그 요청에서
+바뀐 시즌만 센다. `500`은 같은 요청으로 해결되지 않는 오류이므로 재요청하지 않고, 애플리케이션 로그의
+`Projection rebuild stopped at season <시즌 ID>`로 멈춘 시즌을 찾아 배포한 변경이 그 시즌의 일정을 렌더링하는지 확인한다. 배포 중 이전 버전이 수신한 시즌은
 이전 출력으로 저장될 수 있으므로 모든 인스턴스를 바꾼 뒤 호출한다. 처리 시간은 전체 일정 수에 비례하며
 세부 계약은 [MVP 계약](docs/PRD/0002_mvp-contract/spec.md)의 HTTP 경로 절을 따른다.
 
@@ -153,15 +159,16 @@ uuidgen
 ```
 
 1. 생성한 값이 NIL UUID `00000000-0000-0000-0000-000000000000`이 아니고 이전에 사용하지 않은
-   값인지 확인한다.
+   값인지 확인한다. 사용한 세대는 CAL DB에 남지 않으므로 배포 설정 이력에서 확인한다.
 2. DB를 복원하기 전에 모든 인스턴스의 외부 런타임 설정에서 `BATON_CAL_SUBSCRIPTION_GENERATION`을
    새 값으로 바꾸고 `BATON_CAL_RECOVERY_MODE=true`를 설정한다.
-3. CAL이 중지된 상태에서 과거 DB를 복원한다.
+3. CAL이 중지된 상태에서 과거 DB를 복원한다. 백업은 `pg_dump -Fc`, 복원은
+   `pg_restore --clean --create --exit-on-error --dbname=postgres`로 하며 OCI 스모크가 같은 옵션을 훈련한다.
 4. 새 세대와 복구 모드 설정으로 CAL을 시작한다. 구독 생성·회전은 `503 RECOVERY_IN_PROGRESS`로
    차단되며 일정 수신과 재구축은 가능하다. 복원된 피드는 백업 시점 버전의 출력이고 같은 개정의 재전달은
    피드를 다시 만들지 않으므로 [전체 재생성](#캘린더-출력-변경-배포)으로 현재 버전의 출력에 맞춘다.
-5. BATON에서 새 `recoveryId`를 정하고 전달을 끈 상태로 최신 전체 일정·필요한 취소·시즌 이름을
-   재전달 대기에 넣는다. 같은 `recoveryId`로 전달을 켜면 BATON이 모든 최신 아웃박스의 전달 완료를
+5. [BATON 연동 문서](https://github.com/ljkhyeong/baton/blob/main/docs/runbooks/free-integrations.md)에 따라
+   새 `recoveryId`를 정하고 전달을 끈 상태로 최신 전체 일정·필요한 취소·시즌 이름을 재전달 대기에 넣는다. 같은 `recoveryId`로 전달을 켜면 BATON이 모든 최신 아웃박스의 전달 완료를
    확인한 뒤 시즌별 매니페스트와 전체 완료 신호를 보낸다.
 6. `PUT /internal/api/v1/recovery-runs/{recoveryId}/completion`의 `COMPLETED` 응답을 확인한 뒤
    모든 인스턴스에 `BATON_CAL_RECOVERY_MODE=false`를 적용해 재시작한다.
@@ -190,7 +197,7 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 `PUT /internal/api/v1/subscriptions/{subscriptionId}`에 `{seasonId}`를 보낸다. 최초 성공의 `201`만
 토큰·피드 URL을 반환한다. 같은 ID·시즌은 `409 SUBSCRIPTION_ALREADY_EXISTS`, 다른 시즌은
 `409 SUBSCRIPTION_SCOPE_CONFLICT`이며 기존 토큰·상태·세대를 바꾸지 않는다.
-상태 조회의 `404`와 생성 충돌의 `409`에도 `Cache-Control: no-store`를 적용해 이전 오류 응답의 재사용을 막는다.
+내부 API는 인증 실패와 오류를 포함한 모든 응답에 `Cache-Control: no-store`를 적용해 이전 응답의 재사용을 막는다.
 
 응답을 잃으면 같은 ID로 상태를 조회한다. `404`일 때는 같은 ID·시즌으로 PUT을 재전달할 수 있다.
 활성 구독이 있지만 자격 증명을 받지 못했다면 사용자 요청에 따라 rotate로 다시 발급한다. 폐기된
@@ -210,6 +217,7 @@ CAL은 복구 모드에서 시즌별 일정 수·다이제스트와 시즌 이�
 - `GET /internal/api/v1/subscriptions/{subscriptionId}/activity`: 현재 세대 자격 증명으로 공개 피드를 마지막으로
   조회한 UTC 날짜. 공개 GET·HEAD·`304`마다 하루 한 번 앞으로만 기록하고 회전·폐기 때 비운다. 조회 시각·IP·
   클라이언트 정보는 저장하지 않으며 기록 실패는 `baton.cal.subscription.fetch.record.failures`로 센다.
+  실패가 반복되면 `CalSubscriptionFetchRecordFailed` 알림이 발생한다.
 - `GET /internal/api/v1/recovery-runs/{recoveryId}`: 저장된 진행·완료 상태, 검증한 시즌 수, 최초 완료
   시각과 이 인스턴스의 복구 모드. 완료 기록은 이후 원본 변경에도 유지한다.
 - `GET /internal/api/v1/seasons/{seasonId}/recovery-state`: 현재 일정 수·다이제스트와 이름 개정·
@@ -250,15 +258,17 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 - [MVP 실행 계약](docs/PRD/0002_mvp-contract/spec.md)
 - [마이크로서비스 경계](docs/ADR/0001_microservice-boundary/adr.md)
 - [기술 스택 결정](docs/ADR/0002_technology-stack/adr.md)
+- [에이전트 작업 피드백 구조](docs/ADR/0003_agent-feedback/adr.md)
 - [기계 판독형 계약](contracts/README.md)
 - [개발 검증 절차와 스킬 검증 환경](docs/development.md)
-- [계약 릴리스 현황](docs/contract-release-history.md)
+- [계약 릴리스 현황](docs/contract-release-history.md)과 [게시 절차](docs/contract-release-procedure.md)
 - [시즌 투영·실제 HTTP 수신 성능 기준](docs/performance-baseline.md)
 - [cal.b4ton.com HTTPS·프록시·모니터링 운영 구성](docs/operations.md)
 - [캘린더 앱별 구독 안내와 호환성 확인표](docs/calendar-subscription-guide.md)
 - [추가 요금 없는 외부 API 연동 기준](docs/external-api-options.md)
 - [API·웹훅 연동 실행 준비와 환경변수](docs/integration-runtime.md)
-- [기능 추가·개선 검토](docs/reviews/2026-09-05-feature-review.md)
+- [기능 추가·개선 검토](docs/reviews/2026-10-14-feature-review.md)
+- [전수검토](docs/reviews/2026-10-30-full-review.md)
 - [다음 작업](HANDOFF.md)
 
 ## 기술 스택
@@ -271,7 +281,8 @@ BATON에서 종료된 시즌의 원본 이름을 고쳐야 할 때는 운영자 
 
 ## 로컬 실행
 
-Java 25와 Docker가 필요하다. 저장소 루트에서 PostgreSQL을 먼저 시작한다.
+Java 25와 Docker가 필요하다. `check`에는 `python3`, 스모크에는 `jq`·`curl`이 더 필요하고 운영·알림 채널 스모크는
+`openssl`도 쓴다. 저장소 루트에서 PostgreSQL을 먼저 시작한다.
 
 ```shell
 docker compose up -d postgres
@@ -329,8 +340,9 @@ BATON이 검토할 계약 팩은 Gradle 표준 `Zip` 작업으로 만들고 실�
 GitHub Actions는 이 ZIP을 `upload-artifact`로 올리고 `retention-days: 90`으로 보존을 요청한다.
 실제 만료는 저장소·조직 정책을 따르며, 이 파일은 변경 검토와 다운로드 확인을 위한 임시 CI
 산출물이므로 BATON이 고정할 안정적인 의존성이 아니다. 과거 계약 태그에서 갈라져 `main`에
-병합하지 않는 `release/contracts-` 풀 리퀘스트는 일반 merge 검증과 별도로 브랜치의 정확한 HEAD를
-체크아웃해 계약 ZIP을 검증하고 별도 산출물로 올린다.
+병합하지 않는 호환 브랜치는 `main`과 충돌해 풀 리퀘스트 CI가 시작되지 않으므로, 워크플로를 수동 실행해
+입력한 커밋을 체크아웃하고 계약 ZIP을 검증한 뒤 별도 산출물로 올린다.
+[실행 절차](docs/contract-release-procedure.md#101-호환-보완판-준비)
 
 안정 계약은 [불변 릴리스 `contracts-v1.0.0`](https://github.com/ljkhyeong/baton-cal/releases/tag/contracts-v1.0.0)이다.
 태그는 커밋 `fd081a742b7c09a7ace53bb445ce1380c533c19e`를 가리키며, 자산
@@ -355,9 +367,10 @@ ID 지정 구독 생성, 복구 실행·시즌 진단 조회와 입력·응답 �
 BATON `7a064bcd`에 버전·해시를 고정했다. 클라이언트 29개·실제 컨테이너 교차 서비스 5개 테스트가 통과했다.
 실제 캘린더 앱 검증·운영 활성화와 BATON의 묶음 전송은 남아 있다. 게시된 ZIP을 바꾸는 후속 변경은 새 버전으로 만든다.
 
-작업 후보 `1.1.0-rc.3`은 기존 경로의 HTTP 요청·응답, 스키마, 다이제스트와 iCalendar 바이트를 바꾸지 않는다.
-운영 전 DB 마이그레이션을 V1 하나로 합치면서 PRD-0002의 구버전 배포 순서 설명을 지웠고, 출력 변경 배포 뒤
-저장된 피드를 바꾸는 전체 시즌 투영 재생성 경로를 추가했다. 아직 게시하지 않았다.
+작업 후보 `1.1.0-rc.3`은 기존 스키마, 다이제스트와 iCalendar 바이트를 바꾸지 않는다.
+운영 전 DB 마이그레이션을 V1 하나로 합치면서 PRD-0002의 구버전 배포 순서 설명을 지웠고, 전체 시즌 투영 재생성과
+구독 최근 조회일 경로를 추가했으며, iCal4j 4.4.0 기준으로 DST 공백 판정과 스키마보다 넓던 입력 허용을 바로잡았다.
+아직 게시하지 않았다.
 [릴리스 노트 초안](docs/releases/contracts-v1.1.0-rc.3.md)
 
 ## OCI 이미지 검증

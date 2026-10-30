@@ -68,9 +68,8 @@ BATON의 열람자도 열린 시즌의 주소를 발급할 수 있다. **내 계
 [Microsoft 가져오기·구독 안내](https://support.microsoft.com/en-us/outlook/import-or-subscribe-to-a-calendar-in-outlook-com-or-outlook-on-the-web)다.
 이 안내는 실제 CAL 호환성 테스트 통과 기록이 아니다.
 
-BATON 개발 브랜치의 오늘 화면 **내 캘린더에 추가**에서 발급·복사·재발급·해제와 아래 안내를
-제공한다. 계정 구독 목록을 포함한 로컬 화면·서버 검증과 브랜치 통합 상태는 [인수인계](../HANDOFF.md)를
-따른다. 실제 외부 캘린더 앱 검증은 별도다.
+BATON의 오늘 화면 **내 캘린더에 추가**에서 발급·복사·재발급·해제와 아래 안내를 제공한다. 실제 외부 캘린더 앱
+검증은 별도다.
 
 > 캘린더 앱에서 ‘URL로 구독’을 선택해 이 주소를 등록하세요. 일정 변경과 취소는 앱의 갱신 주기에
 > 따라 반영됩니다. 주소는 다시 표시되지 않으니 등록을 마칠 때까지 이 화면을 유지하세요.
@@ -85,19 +84,20 @@ BATON 개발 브랜치의 오늘 화면 **내 캘린더에 추가**에서 발급
 3. `CAL_INTERNAL_BASE_URL`은 인증된 내부 연결 주소로, `BATON_CAL_INTERNAL_TOKEN`은 외부 비밀
    설정에서 주입한다. 관리 API를 공개 프록시에 추가하지 않는다.
 4. 아래 요청은 저장소 루트에서 실행한다. 응답 코드와 `APPLIED`를 확인하고 다음 단계로 넘어간다.
-   구독 URL·토큰은 보고서·스크린샷·공유 터미널 기록에 남기지 않는다.
+   구독 URL·토큰은 보고서·스크린샷·공유 터미널 기록에 남기지 않는다. 내부 Bearer는 프로세스 인수로 드러나지 않도록
+   curl 설정으로 넘긴다.
 5. 앱 등록 뒤 `GET /internal/api/v1/subscriptions/{subscriptionId}/activity`의 `lastFetchedOn`으로 앱이 피드를
    가져간 UTC 날짜를 확인한다. 날짜 단위이므로 반영 지연은 앱 화면의 확인 시각으로 기록한다.
 
 ```shell
 curl --fail-with-body --silent --show-error \
-  -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
+  --config <(printf 'header = "Authorization: Bearer %s"\n' "$BATON_CAL_INTERNAL_TOKEN") \
   -H 'Content-Type: application/json' \
   --data-binary @contracts/examples/schedule-snapshot.zoned-active-r0.json \
   "$CAL_INTERNAL_BASE_URL/internal/api/v1/schedule-snapshots"
 
 curl --fail-with-body --silent --show-error -X PUT \
-  -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" \
+  --config <(printf 'header = "Authorization: Bearer %s"\n' "$BATON_CAL_INTERNAL_TOKEN") \
   -H 'Content-Type: application/json' \
   --data-binary @contracts/examples/season-calendar-metadata.r0.json \
   "$CAL_INTERNAL_BASE_URL/internal/api/v1/seasons/f5316f93-d49e-4230-b1d0-9e9c2d079819/calendar-metadata"
@@ -139,7 +139,7 @@ jq '.eventId="81000000-0000-0000-0000-000000000001"
   | .time.endLocal="2027-03-14T03:30:00"' \
   contracts/examples/schedule-snapshot.zoned-active-r0.json \
   | curl --fail-with-body --silent --show-error \
-    -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" -H 'Content-Type: application/json' \
+    --config <(printf 'header = "Authorization: Bearer %s"\n' "$BATON_CAL_INTERNAL_TOKEN") -H 'Content-Type: application/json' \
     --data-binary @- "$CAL_INTERNAL_BASE_URL/internal/api/v1/schedule-snapshots"
 
 jq '.eventId="81000000-0000-0000-0000-000000000002"
@@ -150,7 +150,7 @@ jq '.eventId="81000000-0000-0000-0000-000000000002"
   | .time.endLocal="2027-11-07T02:30:00"' \
   contracts/examples/schedule-snapshot.zoned-active-r0.json \
   | curl --fail-with-body --silent --show-error \
-    -H "Authorization: Bearer $BATON_CAL_INTERNAL_TOKEN" -H 'Content-Type: application/json' \
+    --config <(printf 'header = "Authorization: Bearer %s"\n' "$BATON_CAL_INTERNAL_TOKEN") -H 'Content-Type: application/json' \
     --data-binary @- "$CAL_INTERNAL_BASE_URL/internal/api/v1/schedule-snapshots"
 ```
 
