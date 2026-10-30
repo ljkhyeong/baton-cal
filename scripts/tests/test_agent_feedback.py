@@ -139,6 +139,73 @@ class FeedbackTest(unittest.TestCase):
         self.assertIn("broken.json", response["reason"])
         self.assertEqual((self.root / "broken.json").read_text(), "{broken")
 
+    def script(self, *args, stdin=""):
+        return subprocess.run(["python3", "-B", str(Path(module.__file__)), *args, "--session", "cli test"],
+                              input=stdin, text=True, capture_output=True, cwd=self.root)
+
+    def test_manual_failure_exits_nonzero_and_malformed_hook_input_blocks(self):
+        self.assertEqual(self.script("start").returncode, 0)
+        (self.root / "broken.json").write_text("{broken")
+        result = self.script("files")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("broken.json", result.stderr)
+
+        result = self.script("hook", stdin="{broken")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["decision"], "block")
+
+    def test_manual_start_recovers_from_unreadable_state(self):
+        self.feedback.state_file.write_text("{broken")
+        with self.assertRaises(ValueError):
+            self.feedback.run("files")
+        self.feedback.run("start")
+        self.assertIn("base", self.state())
+        self.feedback.state_file.write_text("{}")
+        result = subprocess.run(["python3", "-B", str(Path(module.__file__)), "files", "--session", "test"],
+                                text=True, capture_output=True, cwd=self.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("검사 실패", result.stderr)
+
+    def test_state_is_replaced_without_temporary_leftovers(self):
+        self.feedback.run("start")
+        self.assertEqual(sorted(path.name for path in self.feedback.directory.iterdir()), ["lock", "state.json"])
+
+    def test_syntax_and_tracked_whitespace_errors_are_reported(self):
+        cases = {"broken.py": ("def broken(:\n", "broken.py"), "broken.sh": ("if then\n", "shell-syntax")}
+        for name, (content, message) in cases.items():
+            with self.subTest(name=name):
+                path = self.root / name
+                path.write_text(content)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self.feedback.run("files")
+                path.unlink()
+        (self.root / "tracked.json").write_text("{} \n")
+        with self.assertRaisesRegex(RuntimeError, "diff-check"):
+            self.feedback.run("files")
+
+    def test_slow_check_is_reported_as_failure(self):
+        with patch.object(module.subprocess, "run", side_effect=subprocess.TimeoutExpired("git", 180)):
+            with self.assertRaisesRegex(RuntimeError, "180초 초과"):
+                self.feedback.command("slow", ["git", "status"])
+
+    def test_gradle_settings_trigger_compilation(self):
+        for name in ("build.gradle.kts", "gradle/verification-metadata.xml", "gradle.properties", "gradle.lockfile"):
+            with self.subTest(name=name):
+                path = self.root / name
+                path.parent.mkdir(exist_ok=True)
+                path.write_text("변경\n")
+                with patch.object(self.feedback, "gradle") as gradle:
+                    self.feedback.run("files")
+                    gradle.assert_called_once_with("classes")
+
+    def test_completed_final_restarts_baseline_on_next_prompt(self):
+        (self.root / "tracked.json").write_text('{"changed": true}\n')
+        self.git("commit", "-qam", "작업 커밋")
+        with patch.object(self.feedback, "gradle"):
+            self.feedback.run("final")
+        self.feedback.run("start", hook=True)
+        self.assertEqual(self.state()["base"], self.git("rev-parse", "HEAD").decode().strip())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ import subprocess
 import sys
 
 UNTRACKED = ("ls-files", "--others", "--exclude-standard", "-z")
-CHECK_ERRORS = (OSError, ValueError, SyntaxError, RuntimeError, subprocess.CalledProcessError)
+CHECK_ERRORS = (OSError, ValueError, KeyError, SyntaxError, RuntimeError, subprocess.CalledProcessError)
 
 
 def digest(data):
@@ -36,6 +36,12 @@ class Feedback:
     def start(self, base=None):
         revision = self.git("rev-parse", "--verify", f"{base or 'HEAD'}^{{commit}}").decode().strip()
         return {"base": revision}
+
+    def save(self, state):
+        # 쓰는 도중 끊겨도 다음 실행이 깨진 상태 파일을 읽지 않도록 통째로 교체한다.
+        written = self.state_file.with_suffix(".tmp")
+        written.write_text(json.dumps(state, ensure_ascii=False))
+        os.replace(written, self.state_file)
 
     def snapshot(self, state):
         paths = set()
@@ -120,9 +126,12 @@ class Feedback:
     def run(self, phase, base=None, hook=False):
         with (self.directory / "lock").open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            state = json.loads(self.state_file.read_text()) if self.state_file.exists() else self.start(base)
+            # 수동 start는 새 기준을 잡으므로 이전 상태를 읽지 않아 상태 파일이 깨져도 복구할 수 있다.
+            restart = phase == "start" and not hook
+            state = (json.loads(self.state_file.read_text())
+                     if self.state_file.exists() and not restart else self.start(base))
             if phase == "start":
-                if not hook or state.get("completed"):
+                if state.get("completed"):
                     state = self.start(base)
                 message = f"검사 기준: {state['base']}"
             else:
@@ -152,9 +161,9 @@ class Feedback:
                     except CHECK_ERRORS as error:
                         state.pop("final", None)
                         state["failed"] = {"snapshot": snapshot, "error": str(error)}
-                        self.state_file.write_text(json.dumps(state, ensure_ascii=False))
+                        self.save(state)
                         raise
-            self.state_file.write_text(json.dumps(state, ensure_ascii=False))
+            self.save(state)
             return message, hook and phase == "final" and not state.get("completed") and bool(snapshot["files"])
 
 
@@ -164,10 +173,11 @@ def main():
     parser.add_argument("--base", help="작업 시작 커밋. start에서만 사용")
     parser.add_argument("--session", default=os.environ.get("CODEX_THREAD_ID", "manual"))
     args = parser.parse_args()
-    payload = json.load(sys.stdin) if args.phase == "hook" else {}
-    event = payload.get("hook_event_name")
-    phase = {"UserPromptSubmit": "start", "PostToolUse": "files", "Stop": "final"}.get(event, args.phase)
+    payload = {}
     try:
+        payload = json.load(sys.stdin) if args.phase == "hook" else {}
+        event = payload.get("hook_event_name")
+        phase = {"UserPromptSubmit": "start", "PostToolUse": "files", "Stop": "final"}.get(event, args.phase)
         feedback = Feedback(payload.get("cwd", os.getcwd()), payload.get("session_id", args.session))
         message, review = feedback.run(phase, args.base, hook=bool(payload))
         if payload:
@@ -183,7 +193,7 @@ def main():
             print(message or "파일 변경 없음: 검사 생략.")
     except CHECK_ERRORS as error:
         message = f"검사 실패: {error}\n파일 수정은 이미 반영됐을 수 있습니다. 같은 편집을 반복하지 말고 원인을 수정하세요."
-        if payload:
+        if args.phase == "hook":
             print(json.dumps({"decision": "block", "reason": message}, ensure_ascii=False))
         else:
             print(message, file=sys.stderr)
