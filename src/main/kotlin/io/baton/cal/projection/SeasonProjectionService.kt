@@ -13,6 +13,7 @@ import io.baton.cal.web.ProjectionRebuildResponse
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -62,11 +63,17 @@ class SeasonProjectionService(
     fun rebuildAll(): ProjectionRebuildAllResponse {
         val seasonIds = projectionRepository.listSeasonIds()
         val changedSeasonCount = seasonIds.count { seasonId ->
-            transaction.execute {
-                lockRepository.lockSeason(seasonId)
-                val existing = projectionRepository.findHeadersBySeasonId(seasonId)
-                rebuildWhileLocked(seasonId, existing).etag != existing?.etag
-            } == true
+            try {
+                transaction.execute {
+                    lockRepository.lockSeason(seasonId)
+                    val existing = projectionRepository.findHeadersBySeasonId(seasonId)
+                    rebuildWhileLocked(seasonId, existing).etag != existing?.etag
+                } == true
+            } catch (exception: RuntimeException) {
+                // 응답은 고정 오류라 어느 시즌에서 멈췄는지 로그로만 알 수 있다.
+                logger.error("Projection rebuild stopped at season {}: {}", seasonId, exception.javaClass.name)
+                throw exception
+            }
         }
         return ProjectionRebuildAllResponse(seasonCount = seasonIds.size, changedSeasonCount = changedSeasonCount)
     }
@@ -114,4 +121,8 @@ class SeasonProjectionService(
             byteSizeSummary.record(rendered.bytes.size.toDouble())
             ProjectionRebuildResponse(seasonId = seasonId, etag = rendered.etag, itemCount = rows.size)
         })
+
+    private companion object {
+        val logger = LoggerFactory.getLogger(SeasonProjectionService::class.java)
+    }
 }

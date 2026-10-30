@@ -2,6 +2,7 @@ package io.baton.cal.web
 
 import com.jayway.jsonpath.JsonPath
 import io.baton.cal.contract.andReturnValid
+import io.baton.cal.contract.contractExample
 import io.baton.cal.persistence.AdvisoryLockRepository
 import io.baton.cal.persistence.SeasonFeedProjectionRow
 import io.baton.cal.support.CalIntegrationTest
@@ -9,6 +10,7 @@ import io.baton.cal.support.authorizedPost
 import io.baton.cal.support.createSubscription
 import io.baton.cal.support.feedProjection
 import io.baton.cal.support.ingestSnapshot
+import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.snapshotExample
 import java.security.MessageDigest
 import java.time.Instant
@@ -17,9 +19,12 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mockito.doCallRealMethod
 import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.system.CapturedOutput
+import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpHeaders
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -33,6 +38,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 // 렌더러나 내장 시간대 데이터를 바꾼 배포 뒤 이전 출력으로 저장된 시즌 투영을 전체 재생성으로 바꾼다.
 @CalIntegrationTest
+@ExtendWith(OutputCaptureExtension::class)
 class ProjectionRebuildAllHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbc: JdbcClient,
@@ -64,7 +70,7 @@ class ProjectionRebuildAllHttpTest @Autowired constructor(
     }
 
     @Test
-    fun `한 시즌의 잠금 실패는 앞서 바꾼 시즌을 유지하고 재요청이 남은 시즌을 처리한다`() {
+    fun `한 시즌의 잠금 실패는 앞서 바꾼 시즌을 유지하고 재요청이 남은 시즌을 처리한다`(output: CapturedOutput) {
         val current = ingestSeasons()
         current.keys.forEach(::storePreviousOutput)
         val target: AdvisoryLockRepository = AopTestUtils.getUltimateTargetObject(lockRepository)
@@ -74,12 +80,37 @@ class ProjectionRebuildAllHttpTest @Autowired constructor(
             .andExpect(status().isServiceUnavailable)
             .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
             .andExpect(jsonPath("$.code").value("SERVICE_BUSY"))
+        assertThat(output.all).contains("Projection rebuild stopped at season $SECOND_SEASON")
         assertThat(jdbc.feedProjection(FIRST_SEASON).etag).isEqualTo(current.getValue(FIRST_SEASON).etag)
         assertThat(jdbc.feedProjection(SECOND_SEASON).etag).isNotEqualTo(current.getValue(SECOND_SEASON).etag)
 
         doCallRealMethod().`when`(target).lockSeason(SECOND_SEASON)
         rebuildAll(seasonCount = 2, changedSeasonCount = 1)
         assertThat(jdbc.feedProjection(SECOND_SEASON).etag).isEqualTo(current.getValue(SECOND_SEASON).etag)
+    }
+
+    @Test
+    fun `시간대 데이터 갱신으로 공백이 된 저장 일정이 있어도 시즌을 처리한다`() {
+        val season = UUID.fromString(JsonPath.read(contractExample("schedule-snapshot.zoned-point-active.json"), "$.seasonId"))
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-point-active.json")
+        jdbc.sql(
+            """
+            UPDATE calendar_item
+            SET starts_at_local = TIMESTAMP '2026-03-08 02:30:00', zone_id = 'America/New_York'
+            WHERE season_id = :seasonId
+            """.trimIndent(),
+        )
+            .param("seasonId", season)
+            .update()
+
+        mockMvc.perform(authorizedPost("/internal/api/v1/projections/seasons/{seasonId}/rebuild", season))
+            .andExpect(status().isOk)
+        mockMvc.ingestSnapshot(
+            snapshotExample("schedule-snapshot.utc-active.json") { put("seasonId", season.toString()) },
+        )
+        rebuildAll(seasonCount = 1, changedSeasonCount = 0)
+        assertThat(jdbc.feedProjection(season).representation.decodeToString().replace("\r\n ", ""))
+            .contains("DTSTART;TZID=America/New_York:20260308T023000")
     }
 
     /** 두 시즌에 일정을 하나씩 받고 현재 렌더러가 만든 투영을 시즌별로 반환한다. */

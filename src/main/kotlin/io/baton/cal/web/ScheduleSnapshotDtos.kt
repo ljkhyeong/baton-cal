@@ -30,7 +30,9 @@ data class ScheduleSnapshotRequest(
     val seasonId: UUID,
     @field:Min(0)
     val revision: Int,
-    val status: CalendarItemStatus,
+    // Jackson의 enum 변환은 숫자 순번과 앞뒤 공백을 받아들이므로 문자열로 받아 계약 값만 허용한다.
+    @field:Pattern(regexp = "ACTIVE|CANCELLED")
+    val status: String,
     @field:Normalized(form = Normalizer.Form.NFC)
     @field:Pattern(regexp = "$CONTRACT_TEXT_CHARACTER{1,512}")
     val summary: String,
@@ -51,11 +53,11 @@ data class ScheduleSnapshotRequest(
             sourceItemId = sourceItemId,
             seasonId = seasonId,
             revision = revision,
-            status = status,
+            status = CalendarItemStatus.valueOf(status),
             summary = summary,
             description = description,
             location = location,
-            schedule = time.toDomain(),
+            schedule = time.toDomain().apply { requireExistingLocalTime() },
             sourceUpdatedAt = parseInstant(sourceUpdatedAt),
         )
     } catch (exception: DateTimeParseException) {

@@ -31,7 +31,7 @@ class SnapshotInputContractTest @Autowired constructor(
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["0.5", "-0.5", "1e-1", "1.0", "1e0"])
+    @ValueSource(strings = ["-1", "0.5", "-0.5", "1e-1", "1.0", "1e0"])
     fun `개정 번호의 소수와 지수 표기는 저장하지 않고 정수로 수정한 요청은 처리한다`(revision: String) {
         val payload = utcSnapshot()
         assertInvalid(payload.replace("\"revision\": 0", "\"revision\": $revision"))
@@ -48,6 +48,23 @@ class SnapshotInputContractTest @Autowired constructor(
         val payload = utcSnapshot(summary = value, description = value, location = value)
         assertInvalid(payload.replace("\"$field\": \"$value\"", "\"$field\": $value"))
         mockMvc.ingestSnapshot(payload)
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["0", "1", "\"1\"", "\" ACTIVE \"", "\"CANCELLED\\n\"", "\"active\""])
+    fun `상태는 계약의 문자열 값만 허용한다`(status: String) {
+        val payload = utcSnapshot()
+        assertInvalid(payload.replace("\"status\": \"ACTIVE\"", "\"status\": $status"))
+        mockMvc.ingestSnapshot(payload)
+    }
+
+    @Test
+    fun `DST가 폐지된 시간대의 현지 시각은 공백으로 판정하지 않는다`() {
+        mockMvc.ingestSnapshot(
+            snapshotWithTime(
+                """{"type":"ZONED_LOCAL_POINT","atLocal":"2027-03-28T02:30:00","zoneId":"Europe/Moscow"}""",
+            ),
+        )
     }
 
     @Test
@@ -218,8 +235,17 @@ class SnapshotInputContractTest @Autowired constructor(
                         endLocal = "2026-03-08T03:30:00",
                         zoneId = "America/New_York",
                     ),
+                    zonedSnapshot(
+                        startLocal = "2026-03-08T01:30:00",
+                        endLocal = "2026-03-08T02:30:00",
+                        zoneId = "America/New_York",
+                    ),
+                    snapshotWithTime(
+                        """{"type":"ZONED_LOCAL_POINT","atLocal":"2027-03-14T02:30:00","zoneId":"Africa/Casablanca"}""",
+                    ),
                 ),
             ),
+            argumentSet("공백으로만 된 시간대", listOf(zonedSnapshot(zoneId = " ".repeat(1_100)))),
         )
     }
 }
