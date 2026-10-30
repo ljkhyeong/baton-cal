@@ -38,6 +38,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -257,6 +258,11 @@ class PublicCalendarContractTest @Autowired constructor(
 
         assertPublicNotFound(sensitiveToken)
         assertPublicPathNotFound("/calendars/v1/nested/$sensitiveToken.ics")
+        mockMvc.perform(post("/calendars/v1/$sensitiveToken.ics"))
+            .andExpect(status().isMethodNotAllowed)
+        // 핸들러 경로 패턴이 공개 경로와 다르게 잡히는 비정규 경로에서도 원문을 기록하지 않는다.
+        mockMvc.perform(get("/").with { it.apply { requestURI = "//calendars/v1/$sensitiveToken.ics" } })
+            .andExpect(status().isNotFound)
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk)
 
@@ -267,8 +273,9 @@ class PublicCalendarContractTest @Autowired constructor(
                     .mapNotNull { it.getHighCardinalityKeyValue("http.url")?.value }
                 val publicCalendarUrls = observedUrls.filter { it.startsWith("/calendars/v1/") }
                 assertThat(publicCalendarUrls)
-                    .hasSize(4)
+                    .hasSize(9)
                     .containsOnly("/calendars/v1/{token}.ics")
+                assertThat(observedUrls).noneMatch { it.contains(sensitiveToken) }
                 assertThat(observedUrls).anySatisfy { url ->
                     assertThat(url).endsWith("/actuator/health")
                 }
@@ -300,7 +307,14 @@ class PublicCalendarContractTest @Autowired constructor(
     }
 
     private fun assertPublicPathNotFound(path: String) {
-        for (request in listOf(get(path), head(path))) {
+        // 캘린더 앱은 회전·폐기 뒤에도 이전 ETag를 함께 보낸다.
+        val staleEtag = "\"${"0".repeat(64)}\""
+        for (request in listOf(
+            get(path),
+            head(path),
+            get(path).header(HttpHeaders.IF_NONE_MATCH, staleEtag),
+            head(path).header(HttpHeaders.IF_NONE_MATCH, staleEtag),
+        )) {
             mockMvc.perform(request)
                 .andExpect(status().isNotFound)
                 .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))

@@ -11,8 +11,10 @@ import io.baton.cal.recovery.RecoverySeasonState
 import io.baton.cal.support.RecoveryModeIntegrationTest
 import io.baton.cal.support.authorizedGet
 import io.baton.cal.support.authorizedPut
+import io.baton.cal.support.ingestSnapshot
 import io.baton.cal.support.ingestSnapshotExample
 import io.baton.cal.support.jsonContent
+import io.baton.cal.support.snapshotExample
 import io.baton.cal.support.updateSeasonCalendarMetadata
 import io.baton.cal.support.whileLocked
 import org.springframework.test.json.JsonContent
@@ -92,6 +94,19 @@ class RecoveryManifestHttpTest @Autowired constructor(
         verifySeason(state)
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = ["metadataRevision", "metadataDigest"])
+    fun `값이 없는 시즌 이름 필드도 생략하지 않고 null로 보내야 한다`(field: String) {
+        val state = currentState()
+        val payload = JSON.valueToTree<ObjectNode>(state).apply { remove(listOf("seasonId", field)) }
+        mockMvc.perform(manifestRequest(JSON.writeValueAsString(payload)))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andReturnValid("api-error.v1.schema.json", "복구 시즌 이름 필드 누락 응답")
+        assertThat(repository.listVerifiedSeasonStates(UUID.fromString(RECOVERY_ID))).isEmpty()
+        verifySeason(state)
+    }
+
     @Test
     fun `시즌 진단은 복구 실행이 없어도 일정과 이름 불일치를 나누어 확인한다`() {
         mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-cancelled.json")
@@ -121,8 +136,13 @@ class RecoveryManifestHttpTest @Autowired constructor(
         val completion = contractExample("recovery-run-completion.zoned-cancelled.json")
         mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r2.json")
         updateMetadata()
-        mockMvc.perform(manifestRequest(manifest)).andExpect(status().isConflict)
-        mockMvc.perform(completionRequest(completion)).andExpect(status().isConflict)
+        val mismatch = contractExample("api-error.recovery-manifest-mismatch.json")
+        mockMvc.perform(manifestRequest(manifest))
+            .andExpect(status().isConflict)
+            .andExpect(content().json(mismatch))
+        mockMvc.perform(completionRequest(completion))
+            .andExpect(status().isConflict)
+            .andExpect(content().json(mismatch))
         mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-cancelled.json")
         mockMvc.perform(manifestRequest(manifest))
             .andExpect(status().isOk)
@@ -243,6 +263,52 @@ class RecoveryManifestHttpTest @Autowired constructor(
         verifySeason(extra)
 
         assertCompletionMismatch(listOf(extra))
+    }
+
+    @Test
+    fun `현재 데이터에 검증하지 않은 시즌이 남아 있으면 완료하지 않는다`() {
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
+        val otherSeason = UUID.fromString("ea9696eb-4a62-4f37-a11d-9cb040b0fd03")
+        mockMvc.ingestSnapshot(
+            snapshotExample("schedule-snapshot.utc-active.json") { put("seasonId", otherSeason.toString()) },
+        )
+        val verified = currentState()
+        verifySeason(verified)
+        assertCompletionMismatch(listOf(verified))
+
+        val other = currentState(otherSeason)
+        verifySeason(other)
+        complete(completionPayload(listOf(verified, other)))
+    }
+
+    @Test
+    fun `시즌 수가 같아도 전체 다이제스트가 다르면 완료하지 않는다`() {
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
+        val state = currentState()
+        verifySeason(state)
+
+        mockMvc.perform(completionRequest(JSON.writeValueAsString(mapOf("seasonCount" to 1, "seasonDigest" to "0".repeat(64)))))
+            .andExpect(status().isConflict)
+            .andExpect(content().json(contractExample("api-error.recovery-manifest-mismatch.json")))
+        assertThat(JdbcTestUtils.countRowsInTable(jdbcClient, "recovery_run_completion")).isZero()
+        complete(completionPayload(listOf(state)))
+    }
+
+    @Test
+    fun `복구 입력의 형식 오류는 불일치가 아니라 400이다`() {
+        mockMvc.ingestSnapshotExample("schedule-snapshot.zoned-active-r0.json")
+        val state = currentState()
+        val uppercase = state.itemDigest.uppercase().also { check(it != state.itemDigest) }
+        listOf(
+            seasonManifestRequest(state.copy(itemDigest = uppercase)),
+            seasonManifestRequest(state.copy(itemCount = -1)),
+            completionRequest(JSON.writeValueAsString(mapOf("seasonCount" to 1, "seasonDigest" to uppercase))),
+            completionRequest(JSON.writeValueAsString(mapOf("seasonCount" to -1, "seasonDigest" to "0".repeat(64)))),
+        ).forEach { request ->
+            mockMvc.perform(request)
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        }
     }
 
     private fun currentState(seasonId: UUID = SEASON_ID) = RecoveryManifestDigest.seasonState(
