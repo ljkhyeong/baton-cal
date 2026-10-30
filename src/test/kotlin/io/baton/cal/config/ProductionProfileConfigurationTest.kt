@@ -66,6 +66,10 @@ class ProductionProfileConfigurationTest {
                 "${'$'}{BATON_CAL_SUBSCRIPTION_GENERATION}",
             )
             .containsEntry("management.server.port", "${'$'}{MANAGEMENT_SERVER_PORT:8081}")
+            // 요청줄·경로 원문의 구독 토큰과 SQL 바인딩 값을 로그 수준을 올려도 기록하지 않는다.
+            .containsEntry("logging.level.org.apache.coyote", "WARN")
+            .containsEntry("logging.level.org.springframework.web", "INFO")
+            .containsEntry("logging.level.org.springframework.jdbc.core.StatementCreatorUtils", "OFF")
     }
 
     @Test

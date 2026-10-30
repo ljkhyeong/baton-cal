@@ -17,6 +17,9 @@ baton:
     public-base-url: ${BATON_CAL_PUBLIC_BASE_URL}
     subscription-generation: ${BATON_CAL_SUBSCRIPTION_GENERATION}
 
+# 요청줄과 경로 원문에는 구독 토큰이 있다. Tomcat은 잘못된 요청줄을 INFO로, Spring MVC는 경로를 DEBUG로 기록한다.
 logging:
   level:
+    org.apache.coyote: WARN
     org.springframework.jdbc.core.StatementCreatorUtils: "OFF"
+    org.springframework.web: INFO
