@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      release-sha:
+        description: 과거 계약 태그에서 갈라진 호환 브랜치의 전체 커밋 SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,15 +21,15 @@ concurrency:
 jobs:
   verify-contract-release-head:
     name: 계약 릴리스 HEAD 검증
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/contracts-')
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
       - name: 릴리스 기준 커밋 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.release-sha }}
           persist-credentials: false
 
       - &setup-java
@@ -45,7 +51,7 @@ jobs:
       - name: 릴리스 기준 계약 팩 업로드
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: contract-release-head-${{ github.event.pull_request.head.sha }}
+          name: contract-release-head-${{ inputs.release-sha }}
           path: build/distributions/baton-cal-contracts-*.zip
           archive: false
           if-no-files-found: error
@@ -54,7 +60,7 @@ jobs:
   verify:
     name: 테스트와 OCI 이미지 검증
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       BATON_CAL_IMAGE: baton-cal:${{ github.sha }}
@@ -95,7 +101,7 @@ jobs:
   verify-and-publish:
     name: 테스트, OCI 이미지 검증과 게시
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
       contents: read
