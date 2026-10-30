@@ -10,22 +10,27 @@ import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.util.UUID
 
 class RecoveryManifestDigestTest {
+    // 기대값은 PRD-0002 복구 다이제스트 규칙으로 따로 계산한 고정값이다. `f0000000`은 부호 있는 UUID 비교에서는
+    // 앞에 오고 문자열 사전순에서는 뒤에 오므로 BATON과 어긋나는 정렬을 잡아낸다.
     @Test
-    fun `항목과 시즌 다이제스트는 조회 순서와 관계없이 같다`() {
+    fun `항목과 시즌 다이제스트는 조회 순서와 관계없이 문자열 순서의 고정값을 만든다`() {
         val firstId = UUID.fromString("10000000-0000-0000-0000-000000000001")
         val secondId = UUID.fromString("f0000000-0000-0000-0000-000000000002")
         val items = listOf(
             RecoveryItemState(firstId, 1, "a".repeat(64)),
             RecoveryItemState(secondId, 2, "b".repeat(64)),
         )
-        assertThat(RecoveryManifestDigest.items(items.reversed())).isEqualTo(RecoveryManifestDigest.items(items))
+        val itemDigest = "4d783d05370672f27d698fcc6ffddeb3bd82d51c8280616116f7312e95a8f4e5"
+        assertThat(RecoveryManifestDigest.items(items)).isEqualTo(itemDigest)
+        assertThat(RecoveryManifestDigest.items(items.reversed())).isEqualTo(itemDigest)
 
         val seasons = listOf(
-            RecoverySeasonState(firstId, 2, RecoveryManifestDigest.items(items), null, null),
+            RecoverySeasonState(firstId, 2, itemDigest, null, null),
             RecoverySeasonState(secondId, 0, RecoveryManifestDigest.items(emptyList()), 1, "c".repeat(64)),
         )
-        assertThat(RecoveryManifestDigest.seasons(seasons.reversed()))
-            .isEqualTo(RecoveryManifestDigest.seasons(seasons))
+        val seasonDigest = "d44ed0f55620beb8e8f8bc1ac8acc982aa8892c05c00072347b9c7c22762419b"
+        assertThat(RecoveryManifestDigest.seasons(seasons)).isEqualTo(seasonDigest)
+        assertThat(RecoveryManifestDigest.seasons(seasons.reversed())).isEqualTo(seasonDigest)
     }
 
     @Test

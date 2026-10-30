@@ -21,6 +21,7 @@ import io.baton.cal.support.jsonContent
 import io.baton.cal.support.updateSeasonCalendarMetadata
 import net.fortuna.ical4j.model.Property
 import org.assertj.core.api.Assertions.assertThat
+import org.hamcrest.Matchers.oneOf
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
@@ -106,9 +107,11 @@ class RecoveryModeHttpTest @Autowired constructor(
                 .header(HttpHeaders.IF_NONE_MATCH, requireNotNull(feed.getHeader(HttpHeaders.ETAG))),
         )
             .andExpect(status().isNotModified)
+        // 조회 처리와 단언 사이에 UTC 자정을 넘을 수 있다.
+        val today = LocalDate.now(ZoneOffset.UTC)
         mockMvc.perform(authorizedGet("/internal/api/v1/subscriptions/{subscriptionId}/activity", subscription.id))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.lastFetchedOn").value(LocalDate.now(ZoneOffset.UTC).toString()))
+            .andExpect(jsonPath("$.lastFetchedOn", oneOf(today.minusDays(1).toString(), today.toString())))
 
         mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscription.id))
             .andExpect(status().isNoContent)

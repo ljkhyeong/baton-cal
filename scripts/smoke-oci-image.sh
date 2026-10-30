@@ -331,6 +331,9 @@ export BATON_CAL_RECOVERY_MODE=false
 "${compose[@]}" up --detach --force-recreate app
 wait_for_readiness
 assert_public_not_found "$token_t1"
+assert_recovery_result "seasons/$season_id/manifest" recovery-season-manifest.zoned-cancelled.json 200 VERIFIED
+assert_recovery_result completion recovery-run-completion.zoned-cancelled.json 200 COMPLETED
+echo "복구 모드 해제 뒤에도 같은 매니페스트와 완료 요청의 재시도가 최초 결과를 반환합니다."
 
 rotated_credential=$(
   "${http_request[@]}" "${bearer[@]}" --fail --request POST \

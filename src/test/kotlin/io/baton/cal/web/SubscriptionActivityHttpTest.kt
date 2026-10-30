@@ -51,33 +51,37 @@ class SubscriptionActivityHttpTest @Autowired constructor(
         val etag = mockMvc.perform(get(FEED_PATH, token))
             .andExpect(status().isOk)
             .andReturn().response.getHeader(HttpHeaders.ETAG)
-        assertActivity(subscriptionId, today())
+        assertFetchedToday(subscriptionId)
         val written = rowVersion(subscriptionId)
         mockMvc.perform(get(FEED_PATH, token).header(HttpHeaders.IF_NONE_MATCH, checkNotNull(etag)))
             .andExpect(status().isNotModified)
         assertThat(rowVersion(subscriptionId)).isEqualTo(written)
 
-        storeLastFetchedOn(subscriptionId, today().minusDays(1))
+        storeLastFetchedOn(subscriptionId, today().minusDays(2))
         mockMvc.perform(get(FEED_PATH, token).header(HttpHeaders.IF_NONE_MATCH, etag))
             .andExpect(status().isNotModified)
-        assertActivity(subscriptionId, today())
-        storeLastFetchedOn(subscriptionId, today().minusDays(1))
+        assertFetchedToday(subscriptionId)
+        storeLastFetchedOn(subscriptionId, today().minusDays(2))
         mockMvc.perform(head(FEED_PATH, token)).andExpect(status().isOk)
-        assertActivity(subscriptionId, today())
+        assertFetchedToday(subscriptionId)
+        storeLastFetchedOn(subscriptionId, today().minusDays(2))
+        mockMvc.perform(head(FEED_PATH, token).header(HttpHeaders.IF_NONE_MATCH, etag))
+            .andExpect(status().isNotModified)
+        assertFetchedToday(subscriptionId)
     }
 
     @Test
     fun `회전과 폐기는 최근 조회일을 비우고 무효한 토큰의 404는 기록하지 않는다`() {
         val (subscriptionId, token) = createSubscription()
         mockMvc.perform(get(FEED_PATH, token)).andExpect(status().isOk)
-        assertActivity(subscriptionId, today())
+        assertFetchedToday(subscriptionId)
 
         val rotatedToken = JsonPath.read<String>(mockMvc.rotateSubscription(subscriptionId), "$.token")
         assertActivity(subscriptionId, null)
         mockMvc.perform(get(FEED_PATH, token)).andExpect(status().isNotFound)
         assertActivity(subscriptionId, null)
         mockMvc.perform(get(FEED_PATH, rotatedToken)).andExpect(status().isOk)
-        assertActivity(subscriptionId, today())
+        assertFetchedToday(subscriptionId)
 
         mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId))
             .andExpect(status().isNoContent)
@@ -162,6 +166,12 @@ class SubscriptionActivityHttpTest @Autowired constructor(
     }
 
     private fun today(): LocalDate = LocalDate.now(ZoneOffset.UTC)
+
+    /** 조회 처리와 단언 사이에 UTC 자정을 넘을 수 있어 단언 시점의 전날까지 허용한다. 위 시나리오는 그 이전 날짜로 준비한다. */
+    private fun assertFetchedToday(subscriptionId: UUID) {
+        assertThat(subscriptionRepository.findById(subscriptionId)?.lastFetchedOn)
+            .isBetween(today().minusDays(1), today())
+    }
 
     private companion object {
         const val SEASON_ID = "30000000-0000-0000-0000-000000000001"

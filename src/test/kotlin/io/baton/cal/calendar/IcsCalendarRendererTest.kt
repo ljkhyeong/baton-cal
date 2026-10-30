@@ -74,6 +74,26 @@ class IcsCalendarRendererTest {
     }
 
     @Test
+    fun `쓰는 시간대마다 VTIMEZONE 하나를 TZID 오름차순으로 넣는다`() {
+        fun item(number: Long, zoneId: String) = CalendarItem(
+            sourceItemId = UUID(0, number),
+            revision = 0,
+            status = CalendarItemStatus.ACTIVE,
+            summary = "일정",
+            description = null,
+            location = null,
+            schedule = ScheduleWindow.ZonedLocalPoint(LocalDateTime.parse("2026-08-14T12:00:00"), zoneId),
+            sourceUpdatedAt = Instant.parse("2026-08-13T00:00:00Z"),
+        )
+        val items = listOf(item(1, "Europe/Paris"), item(2, "America/New_York"), item(3, "Europe/Paris"))
+
+        val calendar = renderer.render(seasonId, items).bytes.parseIcalendar()
+
+        assertThat(calendar.timeZones().map { it.requiredPropertyValue(Property.TZID) })
+            .containsExactly("America/New_York", "Europe/Paris")
+    }
+
+    @Test
     fun `유니코드 이스케이프와 줄 접기 경계가 골든 바이트와 원문을 보존한다`() {
         val summary = "1234567890123456,접힘 경계"
         val description = "12345678901😀 뒤따르는 설명"

@@ -32,6 +32,7 @@ import org.springframework.test.jdbc.JdbcTestUtils
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import io.micrometer.core.instrument.MeterRegistry
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.ObjectNode
@@ -41,6 +42,7 @@ class SnapshotBatchHttpTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val jdbc: JdbcClient,
     private val projectionService: SeasonProjectionService,
+    private val meterRegistry: MeterRegistry,
 ) {
     @Test
     fun `100건을 한 번에 반영하고 재전달은 캘린더를 다시 만들지 않는다`() {
@@ -64,7 +66,13 @@ class SnapshotBatchHttpTest @Autowired constructor(
         assertResults(batch(listOf(latest)), listOf("APPLIED"), listOf(latest))
         clearInvocations(projectionService)
         val snapshots = listOf(latest, snapshot(1, revision = 1), snapshot(2, OTHER_SEASON), snapshot(1, revision = 3))
+        fun ingested(result: String) =
+            meterRegistry.get("baton.cal.snapshot.ingestion").tag("result", result).counter().count()
+        val results = listOf("applied", "duplicate", "stale")
+        val before = results.associateWith(::ingested)
         assertResults(batch(snapshots), listOf("DUPLICATE", "STALE", "APPLIED", "APPLIED"), snapshots)
+        assertThat(results.associateWith { ingested(it) - before.getValue(it) })
+            .isEqualTo(mapOf("applied" to 2.0, "duplicate" to 1.0, "stale" to 1.0))
         verify(projectionService, times(1)).rebuildWhileLocked(SEASON)
         verify(projectionService, times(1)).rebuildWhileLocked(OTHER_SEASON)
         val event = jdbc.feedProjection(SEASON).representation.parseIcalendar().events().single()

@@ -92,6 +92,16 @@ class CalPropertiesTest {
     fun `공개 기준 URL은 계층형 HTTPS 또는 로컬 개발용 HTTP여야 한다`() {
         val token = "secret-internal-token-that-is-long-enough"
 
+        listOf(
+            "https://calendar.example.test?feed=1" to "쿼리",
+            "https://calendar.example.test#feed" to "프래그먼트",
+            "https://user:secret@calendar.example.test" to "사용자 이름",
+        ).forEach { (invalidUrl, expectedMessage) ->
+            assertThatIllegalArgumentException()
+                .isThrownBy { CalProperties(token, URI.create(invalidUrl)) }
+                .withMessageContaining(expectedMessage)
+        }
+
         listOf("http:opaque", "http:///missing-host").forEach { invalidUrl ->
             assertThatIllegalArgumentException()
                 .isThrownBy { CalProperties(token, URI.create(invalidUrl)) }

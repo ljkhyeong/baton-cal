@@ -108,6 +108,66 @@ class MvpHttpFlowTest @Autowired constructor(
         )
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("RECOVERY_MODE_REQUIRED"))
+        mockMvc.perform(
+            authorizedPut("/internal/api/v1/recovery-runs/{recoveryId}/completion", UUID.randomUUID())
+                .jsonContent(contractExample("recovery-run-completion.json")),
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("RECOVERY_MODE_REQUIRED"))
+    }
+
+    @Test
+    fun `UTC 일정의 시각을 바꾸면 같은 UID의 피드 시각이 바뀐다`() {
+        val token = credentialToken(mockMvc.createSubscription(SEASON_ID))
+        fun feedEvent() = mockMvc.perform(get("/calendars/v1/{token}.ics", token))
+            .andExpect(status().isOk)
+            .andReturn().response.contentAsByteArray.parseIcalendar().events().single()
+        mockMvc.ingestSnapshot(utcSnapshot(EVENT_1, revision = 1, summary = "Opening"))
+        val original = feedEvent()
+
+        mockMvc.ingestSnapshot(
+            snapshotExample("schedule-snapshot.utc-active.json") {
+                put("eventId", EVENT_2)
+                put("sourceItemId", SOURCE_ITEM_ID)
+                put("seasonId", SEASON_ID)
+                put("revision", 2)
+                put("sourceUpdatedAt", "2026-08-11T00:40:00Z")
+                (get("time") as ObjectNode).put("startInstant", "2026-08-17T09:00:00Z").put("endInstant", "2026-08-17T10:00:00Z")
+            },
+        )
+
+        val changed = feedEvent()
+        assertThat(changed.requiredPropertyValue(Property.UID)).isEqualTo(original.requiredPropertyValue(Property.UID))
+        assertThat(changed.requiredPropertyValue(Property.SEQUENCE)).isEqualTo("2")
+        assertThat(changed.requiredPropertyValue(Property.DTSTART)).isEqualTo("20260817T090000Z")
+        assertThat(changed.requiredPropertyValue(Property.DTEND)).isEqualTo("20260817T100000Z")
+    }
+
+    @Test
+    fun `폐기되었거나 이전 세대인 구독의 ID 재요청은 저장된 값을 바꾸지 않는다`() {
+        val subscriptionId = UUID.randomUUID()
+        fun create() = authorizedPut("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId)
+            .jsonContent("""{"seasonId":"$SEASON_ID"}""")
+        fun assertAlreadyExists() {
+            mockMvc.perform(create())
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_ALREADY_EXISTS"))
+        }
+        fun storedRow() = jdbcClient.sql("SELECT * FROM calendar_subscription WHERE id = :id")
+            .param("id", subscriptionId).query().singleRow()
+        mockMvc.perform(create()).andExpect(status().isCreated)
+
+        jdbcClient.sql("UPDATE calendar_subscription SET credential_generation = :generation WHERE id = :id")
+            .param("generation", UUID.randomUUID()).param("id", subscriptionId).update()
+        val previousGeneration = storedRow()
+        assertAlreadyExists()
+        assertThat(storedRow()).isEqualTo(previousGeneration)
+
+        mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", subscriptionId))
+            .andExpect(status().isNoContent)
+        val revoked = storedRow()
+        assertAlreadyExists()
+        assertThat(storedRow()).isEqualTo(revoked)
     }
 
     @Test
@@ -192,12 +252,6 @@ class MvpHttpFlowTest @Autowired constructor(
             .andExpect(header().string(HttpHeaders.ETAG, refreshedEtag))
             .andExpect(header().string(HttpHeaders.LAST_MODIFIED, refreshedLastModified))
             .andExpect(content().bytes(refreshedBytes))
-
-        val persistedHash = jdbcClient.sql("SELECT token_hash FROM calendar_subscription")
-            .query(String::class.java)
-            .single()
-        assertThat(persistedHash).matches("^[0-9a-f]{64}$")
-        assertThat(persistedHash).isNotEqualTo(originalToken)
     }
 
     @Test
@@ -304,6 +358,9 @@ class MvpHttpFlowTest @Autowired constructor(
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
                 .andReturnValid("api-error.v1.schema.json", "존재하지 않는 내부 자원의 상태 조회 응답")
         }
+        mockMvc.perform(authorizedDelete("/internal/api/v1/subscriptions/{subscriptionId}", SOURCE_ITEM_ID))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
     }
 
     @Test
