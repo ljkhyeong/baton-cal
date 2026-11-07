@@ -97,7 +97,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("com.tngtech.archunit:archunit:1.5.1")
-    testImplementation("com.networknt:json-schema-validator:3.0.8") {
+    testImplementation("com.networknt:json-schema-validator:3.0.9") {
         exclude(group = "tools.jackson.dataformat", module = "jackson-dataformat-yaml")
     }
     testImplementation("io.micrometer:micrometer-observation-test")
